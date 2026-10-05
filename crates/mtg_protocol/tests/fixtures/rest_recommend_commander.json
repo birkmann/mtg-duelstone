@@ -1,0 +1,664 @@
+{
+ "format": "commander",
+ "colorIdentity": "WUBG",
+ "commanderDecks": 9674,
+ "themes": [
+  {
+   "key": "proliferate",
+   "label": "Proliferate",
+   "count": 1,
+   "score": 1.0,
+   "active": true
+  },
+  {
+   "key": "counters",
+   "label": "+1/+1 Counters",
+   "count": 1,
+   "score": 0.912,
+   "active": true
+  },
+  {
+   "key": "tribal:Phyrexian",
+   "label": "Phyrexian Synergy",
+   "count": 1,
+   "score": 0.765,
+   "active": false
+  },
+  {
+   "key": "infect",
+   "label": "Infect & Poison",
+   "count": 0,
+   "score": 0.576,
+   "active": false
+  },
+  {
+   "key": "flying",
+   "label": "Flyers",
+   "count": 1,
+   "score": 0.184,
+   "active": false
+  },
+  {
+   "key": "planeswalkers",
+   "label": "Superfriends",
+   "count": 0,
+   "score": 0.097,
+   "active": false
+  }
+ ],
+ "archetypes": [],
+ "sections": [
+  {
+   "key": "synergy",
+   "title": "High Synergy Cards",
+   "cards": [
+    {
+     "card": {
+      "name": "Tekuthal, Inquiry Dominus",
+      "manaCost": "{2}{U}{U}",
+      "cmc": 4,
+      "type": "Legendary Creature - Phyrexian Horror",
+      "colors": "U",
+      "colorIdentity": "U",
+      "oracleText": "Flying\\nIf you would proliferate, proliferate twice instead.\\n{1}{U/P}{U/P}, Remove three counters from among other artifacts, creatures, and planeswalkers you control: Put an indestructible counter on Tekuthal, Inquiry Dominus. ({U/P} can be paid with either {U} or 2 life.)",
+      "power": "3",
+      "toughness": "5",
+      "set": "EOC",
+      "cn": "78",
+      "rarity": "MythicRare",
+      "isLand": false,
+      "isCreature": true,
+      "isBasicLand": false,
+      "canBeCommander": true,
+      "banned": false,
+      "subtypes": [
+       "Phyrexian",
+       "Horror"
+      ],
+      "tags": [
+       "counters",
+       "proliferate",
+       "planeswalkers",
+       "flying"
+      ],
+      "popularity": 0.863
+     },
+     "inclusion": 0.69,
+     "synergy": 0.679,
+     "score": 0.78,
+     "reason": "69% of decks \u00b7 +68% synergy"
+    },
+    {
+     "card": {
+      "name": "Karn's Bastion",
+      "manaCost": null,
+      "cmc": 0,
+      "type": "Land",
+      "colors": "",
+      "colorIdentity": "",
+      "oracleText": "{T}: Add {C}.\\n{4}, {T}: Proliferate. (Choose any number of permanents and/or players, then give each another counter of each kind already there.)",
+      "set": "EOC",
+      "cn": "163",
+      "rarity": "Rare",
+      "isLand": true,
+      "isCreature": false,
+      "isBasicLand": false,
+      "canBeCommander": false,
+      "banned": false,
+      "subtypes": [],
+      "tags": [
+       "counters",
+       "proliferate"
+      ],
+      "popularity": 0.963
+     },
+     "inclusion": 0.622,
+     "synergy": 0.581,
+     "score": 0.724,
+     "reason": "62% of decks \u00b7 +58% synergy"
+    }
+   ]
+  },
+  {
+   "key": "top",
+   "title": "Top Cards",
+   "cards": [
+    {
+     "card": {
+      "name": "Command Tower",
+      "manaCost": null,
+      "cmc": 0,
+      "type": "Land",
+      "colors": "",
+      "colorIdentity": "",
+      "oracleText": "{T}: Add one mana of any color in your commander's color identity.",
+      "set": "MSC",
+      "cn": "233",
+      "rarity": "Common",
+      "isLand": true,
+      "isCreature": false,
+      "isBasicLand": false,
+      "canBeCommander": false,
+      "banned": false,
+      "subtypes": [],
+      "tags": [],
+      "popularity": 1.0
+     },
+     "inclusion": 1.0,
+     "synergy": 0.257,
+     "score": 0.792,
+     "reason": "100% of decks \u00b7 +26% synergy"
+    },
+    {
+     "card": {
+      "name": "Arcane Signet",
+      "manaCost": "{2}",
+      "cmc": 2,
+      "type": "Artifact",
+      "colors": "",
+      "colorIdentity": "",
+      "oracleText": "{T}: Add one mana of any color in your commander's color identity.",
+      "set": "HOC",
+      "cn": "95",
+      "rarity": "MythicRare",
+      "isLand": false,
+      "isCreature": false,
+      "isBasicLand": false,
+      "canBeCommander": false,
+      "banned": false,
+      "subtypes": [],
+      "tags": [
+       "ramp"
+      ],
+      "popularity": 1.0
+     },
+     "inclusion": 0.84,
+     "synergy": 0.125,
+     "score": 0.688,
+     "reason": "84% of decks \u00b7 +13% synergy"
+    }
+   ]
+  },
+  {
+   "key": "theme:proliferate",
+   "title": "Proliferate",
+   "cards": [
+    {
+     "card": {
+      "name": "Tekuthal, Inquiry Dominus",
+      "manaCost": "{2}{U}{U}",
+      "cmc": 4,
+      "type": "Legendary Creature - Phyrexian Horror",
+      "colors": "U",
+      "colorIdentity": "U",
+      "oracleText": "Flying\\nIf you would proliferate, proliferate twice instead.\\n{1}{U/P}{U/P}, Remove three counters from among other artifacts, creatures, and planeswalkers you control: Put an indestructible counter on Tekuthal, Inquiry Dominus. ({U/P} can be paid with either {U} or 2 life.)",
+      "power": "3",
+      "toughness": "5",
+      "set": "EOC",
+      "cn": "78",
+      "rarity": "MythicRare",
+      "isLand": false,
+      "isCreature": true,
+      "isBasicLand": false,
+      "canBeCommander": true,
+      "banned": false,
+      "subtypes": [
+       "Phyrexian",
+       "Horror"
+      ],
+      "tags": [
+       "counters",
+       "proliferate",
+       "planeswalkers",
+       "flying"
+      ],
+      "popularity": 0.863
+     },
+     "inclusion": 0.69,
+     "synergy": 0.679,
+     "score": 0.78,
+     "reason": "69% of decks \u00b7 +68% synergy"
+    },
+    {
+     "card": {
+      "name": "Karn's Bastion",
+      "manaCost": null,
+      "cmc": 0,
+      "type": "Land",
+      "colors": "",
+      "colorIdentity": "",
+      "oracleText": "{T}: Add {C}.\\n{4}, {T}: Proliferate. (Choose any number of permanents and/or players, then give each another counter of each kind already there.)",
+      "set": "EOC",
+      "cn": "163",
+      "rarity": "Rare",
+      "isLand": true,
+      "isCreature": false,
+      "isBasicLand": false,
+      "canBeCommander": false,
+      "banned": false,
+      "subtypes": [],
+      "tags": [
+       "counters",
+       "proliferate"
+      ],
+      "popularity": 0.963
+     },
+     "inclusion": 0.622,
+     "synergy": 0.581,
+     "score": 0.724,
+     "reason": "62% of decks \u00b7 +58% synergy"
+    }
+   ]
+  },
+  {
+   "key": "theme:counters",
+   "title": "+1/+1 Counters",
+   "cards": [
+    {
+     "card": {
+      "name": "Tekuthal, Inquiry Dominus",
+      "manaCost": "{2}{U}{U}",
+      "cmc": 4,
+      "type": "Legendary Creature - Phyrexian Horror",
+      "colors": "U",
+      "colorIdentity": "U",
+      "oracleText": "Flying\\nIf you would proliferate, proliferate twice instead.\\n{1}{U/P}{U/P}, Remove three counters from among other artifacts, creatures, and planeswalkers you control: Put an indestructible counter on Tekuthal, Inquiry Dominus. ({U/P} can be paid with either {U} or 2 life.)",
+      "power": "3",
+      "toughness": "5",
+      "set": "EOC",
+      "cn": "78",
+      "rarity": "MythicRare",
+      "isLand": false,
+      "isCreature": true,
+      "isBasicLand": false,
+      "canBeCommander": true,
+      "banned": false,
+      "subtypes": [
+       "Phyrexian",
+       "Horror"
+      ],
+      "tags": [
+       "counters",
+       "proliferate",
+       "planeswalkers",
+       "flying"
+      ],
+      "popularity": 0.863
+     },
+     "inclusion": 0.69,
+     "synergy": 0.679,
+     "score": 0.78,
+     "reason": "69% of decks \u00b7 +68% synergy"
+    },
+    {
+     "card": {
+      "name": "Karn's Bastion",
+      "manaCost": null,
+      "cmc": 0,
+      "type": "Land",
+      "colors": "",
+      "colorIdentity": "",
+      "oracleText": "{T}: Add {C}.\\n{4}, {T}: Proliferate. (Choose any number of permanents and/or players, then give each another counter of each kind already there.)",
+      "set": "EOC",
+      "cn": "163",
+      "rarity": "Rare",
+      "isLand": true,
+      "isCreature": false,
+      "isBasicLand": false,
+      "canBeCommander": false,
+      "banned": false,
+      "subtypes": [],
+      "tags": [
+       "counters",
+       "proliferate"
+      ],
+      "popularity": 0.963
+     },
+     "inclusion": 0.622,
+     "synergy": 0.581,
+     "score": 0.724,
+     "reason": "62% of decks \u00b7 +58% synergy"
+    }
+   ]
+  },
+  {
+   "key": "role:ramp",
+   "title": "Ramp",
+   "cards": [
+    {
+     "card": {
+      "name": "Arcane Signet",
+      "manaCost": "{2}",
+      "cmc": 2,
+      "type": "Artifact",
+      "colors": "",
+      "colorIdentity": "",
+      "oracleText": "{T}: Add one mana of any color in your commander's color identity.",
+      "set": "HOC",
+      "cn": "95",
+      "rarity": "MythicRare",
+      "isLand": false,
+      "isCreature": false,
+      "isBasicLand": false,
+      "canBeCommander": false,
+      "banned": false,
+      "subtypes": [],
+      "tags": [
+       "ramp"
+      ],
+      "popularity": 1.0
+     },
+     "inclusion": 0.84,
+     "synergy": 0.125,
+     "score": 0.688,
+     "reason": "84% of decks \u00b7 +13% synergy"
+    },
+    {
+     "card": {
+      "name": "Vraska, Betrayal's Sting",
+      "manaCost": "{4}{B}{B/P}",
+      "cmc": 6,
+      "type": "Legendary Planeswalker - Vraska",
+      "colors": "B",
+      "colorIdentity": "B",
+      "oracleText": "Compleated ({B/P} can be paid with {B} or 2 life. If life was paid, this planeswalker enters with two fewer loyalty counters.)\\n[0]: You draw a card and you lose 1 life. Proliferate.\\n[-2]: Target creature becomes a Treasure artifact with \"{T}, Sacrifice this artifact: Add one mana of any color\" and loses all other card types and abilities.\\n[-9]: If target player has fewer than nine poison counters, they get a number of poison counters equal to the difference.",
+      "loyalty": "6",
+      "set": "ECC",
+      "cn": "88",
+      "rarity": "MythicRare",
+      "isLand": false,
+      "isCreature": false,
+      "isBasicLand": false,
+      "canBeCommander": false,
+      "banned": false,
+      "subtypes": [
+       "Vraska"
+      ],
+      "tags": [
+       "ramp",
+       "draw",
+       "counters",
+       "proliferate",
+       "infect",
+       "planeswalkers"
+      ],
+      "popularity": 0.911
+     },
+     "inclusion": 0.54,
+     "synergy": 0.522,
+     "score": 0.673,
+     "reason": "54% of decks \u00b7 +52% synergy"
+    }
+   ]
+  },
+  {
+   "key": "role:draw",
+   "title": "Card Draw",
+   "cards": [
+    {
+     "card": {
+      "name": "Ezuri, Stalker of Spheres",
+      "manaCost": "{2}{G}{U}",
+      "cmc": 4,
+      "type": "Legendary Creature - Phyrexian Elf Warrior",
+      "colors": "UG",
+      "colorIdentity": "UG",
+      "oracleText": "When Ezuri, Stalker of Spheres enters, you may pay {3}. If you do, proliferate twice.\\nWhenever you proliferate, draw a card.",
+      "power": "3",
+      "toughness": "3",
+      "set": "ONE",
+      "cn": "201",
+      "rarity": "Rare",
+      "isLand": false,
+      "isCreature": true,
+      "isBasicLand": false,
+      "canBeCommander": true,
+      "banned": false,
+      "subtypes": [
+       "Phyrexian",
+       "Elf",
+       "Warrior"
+      ],
+      "tags": [
+       "draw",
+       "counters",
+       "proliferate"
+      ],
+      "popularity": 0.841
+     },
+     "inclusion": 0.553,
+     "synergy": 0.543,
+     "score": 0.684,
+     "reason": "55% of decks \u00b7 +54% synergy"
+    },
+    {
+     "card": {
+      "name": "Vraska, Betrayal's Sting",
+      "manaCost": "{4}{B}{B/P}",
+      "cmc": 6,
+      "type": "Legendary Planeswalker - Vraska",
+      "colors": "B",
+      "colorIdentity": "B",
+      "oracleText": "Compleated ({B/P} can be paid with {B} or 2 life. If life was paid, this planeswalker enters with two fewer loyalty counters.)\\n[0]: You draw a card and you lose 1 life. Proliferate.\\n[-2]: Target creature becomes a Treasure artifact with \"{T}, Sacrifice this artifact: Add one mana of any color\" and loses all other card types and abilities.\\n[-9]: If target player has fewer than nine poison counters, they get a number of poison counters equal to the difference.",
+      "loyalty": "6",
+      "set": "ECC",
+      "cn": "88",
+      "rarity": "MythicRare",
+      "isLand": false,
+      "isCreature": false,
+      "isBasicLand": false,
+      "canBeCommander": false,
+      "banned": false,
+      "subtypes": [
+       "Vraska"
+      ],
+      "tags": [
+       "ramp",
+       "draw",
+       "counters",
+       "proliferate",
+       "infect",
+       "planeswalkers"
+      ],
+      "popularity": 0.911
+     },
+     "inclusion": 0.54,
+     "synergy": 0.522,
+     "score": 0.673,
+     "reason": "54% of decks \u00b7 +52% synergy"
+    }
+   ]
+  },
+  {
+   "key": "role:removal",
+   "title": "Removal",
+   "cards": [
+    {
+     "card": {
+      "name": "Vraska's Fall",
+      "manaCost": "{2}{B}",
+      "cmc": 3,
+      "type": "Instant",
+      "colors": "B",
+      "colorIdentity": "B",
+      "oracleText": "Each opponent sacrifices a creature or planeswalker and gets a poison counter.",
+      "set": "ONE",
+      "cn": "116",
+      "rarity": "Common",
+      "isLand": false,
+      "isCreature": false,
+      "isBasicLand": false,
+      "canBeCommander": false,
+      "banned": false,
+      "subtypes": [],
+      "tags": [
+       "removal",
+       "infect"
+      ],
+      "popularity": 0.864
+     },
+     "inclusion": 0.363,
+     "synergy": 0.351,
+     "score": 0.551,
+     "reason": "36% of decks \u00b7 +35% synergy"
+    },
+    {
+     "card": {
+      "name": "Swords to Plowshares",
+      "manaCost": "{W}",
+      "cmc": 1,
+      "type": "Instant",
+      "colors": "W",
+      "colorIdentity": "W",
+      "oracleText": "Exile target creature. Its controller gains life equal to its power.",
+      "set": "MSC",
+      "cn": "143",
+      "rarity": "Uncommon",
+      "isLand": false,
+      "isCreature": false,
+      "isBasicLand": false,
+      "canBeCommander": false,
+      "banned": false,
+      "subtypes": [],
+      "tags": [
+       "removal",
+       "lifegain"
+      ],
+      "popularity": 1.0
+     },
+     "inclusion": 0.57,
+     "synergy": -0.031,
+     "score": 0.54,
+     "reason": "57% of decks \u00b7 -3% synergy"
+    }
+   ]
+  },
+  {
+   "key": "role:wipe",
+   "title": "Board Wipes",
+   "cards": [
+    {
+     "card": {
+      "name": "Farewell",
+      "manaCost": "{4}{W}{W}",
+      "cmc": 6,
+      "type": "Sorcery",
+      "colors": "W",
+      "colorIdentity": "W",
+      "oracleText": "Choose one or more \u2014\\n\u2022 Exile all artifacts.\\n\u2022 Exile all creatures.\\n\u2022 Exile all enchantments.\\n\u2022 Exile all graveyards.",
+      "set": "FIC",
+      "cn": "242",
+      "rarity": "Rare",
+      "isLand": false,
+      "isCreature": false,
+      "isBasicLand": false,
+      "canBeCommander": false,
+      "banned": false,
+      "subtypes": [],
+      "tags": [
+       "wipe"
+      ],
+      "popularity": 0.985
+     },
+     "inclusion": 0.193,
+     "synergy": 0.102,
+     "score": 0.41,
+     "reason": "19% of decks \u00b7 +10% synergy"
+    },
+    {
+     "card": {
+      "name": "White Sun's Twilight",
+      "manaCost": "{X}{W}{W}",
+      "cmc": 2,
+      "type": "Sorcery",
+      "colors": "W",
+      "colorIdentity": "W",
+      "oracleText": "You gain X life. Create X 1/1 colorless Phyrexian Mite artifact creature tokens with toxic 1 and \"This creature can't block.\" If X is 5 or more, destroy all other creatures. (Players dealt combat damage by a creature with toxic 1 also get a poison counter.)",
+      "set": "ONE",
+      "cn": "377",
+      "rarity": "Rare",
+      "isLand": false,
+      "isCreature": false,
+      "isBasicLand": false,
+      "canBeCommander": false,
+      "banned": false,
+      "subtypes": [],
+      "tags": [
+       "wipe",
+       "infect",
+       "tokens",
+       "lifegain"
+      ],
+      "popularity": 0.874
+     },
+     "inclusion": 0.157,
+     "synergy": 0.145,
+     "score": 0.406,
+     "reason": "16% of decks \u00b7 +14% synergy"
+    }
+   ]
+  },
+  {
+   "key": "lands",
+   "title": "Lands",
+   "cards": [
+    {
+     "card": {
+      "name": "Command Tower",
+      "manaCost": null,
+      "cmc": 0,
+      "type": "Land",
+      "colors": "",
+      "colorIdentity": "",
+      "oracleText": "{T}: Add one mana of any color in your commander's color identity.",
+      "set": "MSC",
+      "cn": "233",
+      "rarity": "Common",
+      "isLand": true,
+      "isCreature": false,
+      "isBasicLand": false,
+      "canBeCommander": false,
+      "banned": false,
+      "subtypes": [],
+      "tags": [],
+      "popularity": 1.0
+     },
+     "inclusion": 1.0,
+     "synergy": 0.257,
+     "score": 0.792,
+     "reason": "100% of decks \u00b7 +26% synergy"
+    },
+    {
+     "card": {
+      "name": "Karn's Bastion",
+      "manaCost": null,
+      "cmc": 0,
+      "type": "Land",
+      "colors": "",
+      "colorIdentity": "",
+      "oracleText": "{T}: Add {C}.\\n{4}, {T}: Proliferate. (Choose any number of permanents and/or players, then give each another counter of each kind already there.)",
+      "set": "EOC",
+      "cn": "163",
+      "rarity": "Rare",
+      "isLand": true,
+      "isCreature": false,
+      "isBasicLand": false,
+      "canBeCommander": false,
+      "banned": false,
+      "subtypes": [],
+      "tags": [
+       "counters",
+       "proliferate"
+      ],
+      "popularity": 0.963
+     },
+     "inclusion": 0.622,
+     "synergy": 0.581,
+     "score": 0.724,
+     "reason": "62% of decks \u00b7 +58% synergy"
+    }
+   ]
+  }
+ ],
+ "unresolved": []
+}

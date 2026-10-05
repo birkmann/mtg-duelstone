@@ -260,6 +260,12 @@ fn spawn_screen(mut commands: Commands, fonts: Res<ArenaFonts>) {
             root.spawn(Node { width: Val::Percent(100.0), align_items: AlignItems::Center, column_gap: Val::Px(16.0), ..default() })
                 .with_children(|bar| {
                     bar.spawn((StatusLine, Node { flex_grow: 1.0, ..default() }, ui_text(&fonts.body, "", 17.0, TEXT_DIM)));
+                    let b = spawn_button(bar, &fonts, ButtonKind::Secondary, "CUSTOMIZE", Vec2::new(190.0, 56.0));
+                    bar.commands().entity(b).insert(MenuAction::Customize);
+                    let b = spawn_button(bar, &fonts, ButtonKind::Secondary, "NEW DECK", Vec2::new(180.0, 56.0));
+                    bar.commands().entity(b).insert(MenuAction::NewDeck);
+                    let b = spawn_button(bar, &fonts, ButtonKind::Secondary, "EDIT DECK", Vec2::new(180.0, 56.0));
+                    bar.commands().entity(b).insert(MenuAction::EditDeck);
                     let b = spawn_button(bar, &fonts, ButtonKind::Secondary, "IMPORT DECK", Vec2::new(210.0, 56.0));
                     bar.commands().entity(b).insert(MenuAction::OpenImport);
                     let b = spawn_button(bar, &fonts, ButtonKind::Primary, "PLAY", Vec2::new(280.0, 66.0));
@@ -403,6 +409,8 @@ fn spawn_tile(g: &mut ChildSpawnerCommands, d: &DeckInfo, fonts: &ArenaFonts, as
                         Pickable::IGNORE,
                     ));
                 }
+                // the deck's box, standing in the corner in front of the art
+                a.spawn(super::designer::deckbox_thumb(&d.deck_ref, 112.0));
             });
         // name + meta
         t.spawn(Node { flex_grow: 1.0, flex_direction: FlexDirection::Column, justify_content: JustifyContent::SpaceBetween, padding: UiRect::all(Val::Px(10.0)), ..default() })
@@ -555,7 +563,7 @@ fn sync_import_panel(
     let has = !existing.is_empty();
     if open && !has {
         *import = ImportState::default();
-        import.message = "Paste a decklist (e.g. \"4 Lightning Bolt\"), then press ANALYZE. For Commander put the commander first or under \"Commander\".".into();
+        import.message = "Paste a decklist (e.g. \"4 Lightning Bolt\"), then press ANALYZE. For Commander the commander goes first, last after a blank line, or under \"Commander\". Ctrl+V pastes.".into();
         commands
             .spawn((
                 ImportPanel,

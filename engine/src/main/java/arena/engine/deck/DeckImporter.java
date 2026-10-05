@@ -37,6 +37,11 @@ public final class DeckImporter {
         final List<String> commanders = new ArrayList<>();
         final List<JsonObject> unresolved = new ArrayList<>();
         final List<String> warnings = new ArrayList<>();
+        // Paste order of main-deck cards: most exports carry no "Commander" header and mark the commander
+        // only by position (first line, or a trailing block after a blank line as Moxfield/MTGO do).
+        final List<String> mainOrder = new ArrayList<>();
+        int lastBlock = 0;
+        boolean blockBreak = false;
 
         if (text.contains("[Main]") || text.contains("[metadata]") || text.contains("[Commander]")) {
             return fromDck(text);
@@ -44,7 +49,7 @@ public final class DeckImporter {
         String section = "main";
         for (String raw : text.split("\\r?\\n")) {
             String line = raw.trim();
-            if (line.isEmpty()) { if (section.equals("commander")) section = "main"; continue; } // blank line ends a commander block (Moxfield/Archidekt)
+            if (line.isEmpty()) { if (section.equals("commander")) section = "main"; blockBreak = true; continue; } // blank line ends a commander block (Moxfield/Archidekt)
             if (line.startsWith("#")) continue;
             final Matcher h = HEADER.matcher(line);
             if (h.matches()) {
@@ -90,6 +95,16 @@ public final class DeckImporter {
             }
             if (asCommander) { commanders.add(pc.getName()); continue; }
             (asSide ? side : main).merge(pc.getName(), qty, Integer::sum);
+            if (!asSide) {
+                if (blockBreak) { lastBlock = mainOrder.size(); blockBreak = false; }
+                mainOrder.add(pc.getName());
+            }
+        }
+        if (commanders.isEmpty() && !constructed && unresolved.isEmpty()) {
+            for (final String n : positionalCommanders(mainOrder, lastBlock, main)) {
+                commanders.add(n);
+                main.computeIfPresent(n, (k, v) -> v > 1 ? v - 1 : null);
+            }
         }
         // No explicit commander: suggest legal commanders found in the list (legendary creatures etc.)
         final JsonArray candidates = new JsonArray();
@@ -98,6 +113,28 @@ public final class DeckImporter {
         if (constructed) { if (total < 60 && unresolved.isEmpty()) warnings.add("Deck has " + total + " cards (Constructed needs at least 60)."); }
         else if (total != 100 && unresolved.isEmpty()) warnings.add("Deck has " + total + " cards (Commander needs 100 including the commander).");
         return result(commanders, main, side, unresolved, candidates, warnings);
+    }
+
+    /** A trailing block of 1–2 cards wins (an explicit separation), else the first one or two lines. */
+    private List<String> positionalCommanders(final List<String> order, final int lastBlock, final Map<String, Integer> main) {
+        if (lastBlock > 0) {
+            final List<String> tail = order.subList(lastBlock, order.size());
+            if (commanderGroup(tail, main)) return tail;
+        }
+        if (order.size() >= 2 && commanderGroup(order.subList(0, 2), main)) return order.subList(0, 2);
+        if (!order.isEmpty() && commanderGroup(order.subList(0, 1), main)) return order.subList(0, 1);
+        return List.of();
+    }
+
+    private boolean commanderGroup(final List<String> names, final Map<String, Integer> main) {
+        if (names.isEmpty() || names.size() > 2) return false;
+        final List<PaperCard> pcs = new ArrayList<>();
+        for (final String n : names) {
+            final PaperCard pc = catalog.resolveExact(n);
+            if (pc == null || !catalog.canBeCommander(pc) || main.getOrDefault(n, 0) != 1) return false;
+            pcs.add(pc);
+        }
+        return pcs.size() == 1 || (!pcs.get(0).getName().equals(pcs.get(1).getName()) && pcs.get(0).getRules().canBePartnerCommanders(pcs.get(1).getRules()));
     }
 
     private JsonObject fromDck(final String text) {

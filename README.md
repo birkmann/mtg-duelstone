@@ -56,6 +56,23 @@ Play 1v1 against the Forge AI in **60-card Constructed** or **Commander**.
   matches.
 - **Decks.** Four Constructed and two Commander starter decks, Forge's precon and theme decks, and an importer
   for pasted lists (Arena/MTGO/Moxfield formats) that shows unresolved names with suggestions.
+- **Sleeves, deckboxes and playmats** (CUSTOMIZE in the main menu or on the deck screen). The Design Studio
+  ships presets and lets you design your own from patterns, colours, emblems, frames and finishes, with a live
+  3D preview. Choices can be a default or per deck. Deck tiles show each deck's box, and the AI gets its own
+  sleeve. Designs are painted procedurally and saved to `~/.config/mtg-arena/designs.json`.
+- **Deck builder & tester** (NEW DECK / EDIT DECK on the deck screen).
+  - *Search:* the whole card pool, with filters for name, rules text, colour, type, mana value and commander
+    eligibility.
+  - *Recommendations, EDHREC-style and offline:* built from the deck data Forge ships (`res/deckgendecks`).
+    - Commander decks get "41% of decks · +32% synergy" picks, Top Cards and theme chips (Counters, Tokens,
+      Elf Synergy…).
+    - Constructed decks are matched to known archetypes.
+    - Every deck also gets suggestions for ramp, draw, removal, board wipes and lands.
+  - *Live stats:* mana curve, coloured pips vs. land sources, role counts against the Commander template,
+    Karsten's land-count guideline, opening-hand odds, and a goldfish simulation of which spells you can cast on
+    curve.
+  - *Testing:* sample hands with mulligan and draw. PLAY saves the deck and starts a match with it; the engine
+    validates the deck after every edit.
 
 ## Quick start
 

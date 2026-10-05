@@ -11,7 +11,9 @@
 mod actions;
 mod backdrop;
 mod boot;
+mod builder;
 mod deck_select;
+mod designer;
 mod game_over;
 mod loading;
 mod main_menu;
@@ -45,6 +47,10 @@ pub enum MenuAction {
     /// `None` = Random
     SelectAi(Option<String>),
     OpenImport,
+    /// Open the deck builder on an empty deck of the current format.
+    NewDeck,
+    /// Open the deck builder on the selected deck (non-user decks are saved as a copy).
+    EditDeck,
     // import panel
     ImportAnalyze,
     ImportSave,
@@ -54,6 +60,9 @@ pub enum MenuAction {
     ToggleFullscreen,
     ToggleAutolaunch,
     SetTheme(&'static str),
+    // design studio
+    Customize,
+    CloseDesigner,
     // game over
     Rematch,
     ToMainMenu,
@@ -64,6 +73,8 @@ pub enum MenuAction {
 pub struct MenuState {
     pub settings_open: bool,
     pub import_open: bool,
+    /// Where the design studio returns to (it opens from the main menu and deck select).
+    pub designer_return: Option<AppState>,
 }
 
 pub struct MenusPlugin;
@@ -86,11 +97,13 @@ impl Plugin for MenusPlugin {
                 showcase::ShowcasePlugin,
                 stage::StagePlugin,
             ))
+            .add_plugins(builder::BuilderPlugin)
+            .add_plugins(designer::DesignerPlugin)
             .add_systems(Update, (actions::handle_actions, actions::debug_jump));
     }
 }
 
 /// Menu-ish states where the animated 2D backdrop is visible. The main menu has its own 3D stage.
 pub(crate) fn backdrop_state(s: AppState) -> bool {
-    matches!(s, AppState::Boot | AppState::DeckSelect | AppState::Loading)
+    matches!(s, AppState::Boot | AppState::DeckSelect | AppState::Loading | AppState::DeckBuilder)
 }

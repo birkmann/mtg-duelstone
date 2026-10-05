@@ -125,7 +125,7 @@ fn spawn_main_menu(mut commands: Commands, fonts: Res<ArenaFonts>, settings: Res
                 ));
                 let p = spawn_button(col, &fonts, ButtonKind::Primary, "PLAY", Vec2::new(340.0, 72.0));
                 col.commands().entity(p).insert((MenuAction::Play, anim(2.55, 0.75, Fx::SlideX(-640.0))));
-                for (i, (label, act)) in [("DECKS", MenuAction::Decks), ("SETTINGS", MenuAction::OpenSettings), ("QUIT", MenuAction::Quit)].into_iter().enumerate() {
+                for (i, (label, act)) in [("DECKS", MenuAction::Decks), ("CUSTOMIZE", MenuAction::Customize), ("SETTINGS", MenuAction::OpenSettings), ("QUIT", MenuAction::Quit)].into_iter().enumerate() {
                     let kind = if act == MenuAction::Quit { ButtonKind::Ghost } else { ButtonKind::Secondary };
                     let b = spawn_button(col, &fonts, kind, label, Vec2::new(340.0, 54.0));
                     col.commands().entity(b).insert((act, anim(2.65 + i as f32 * 0.09, 0.75, Fx::SlideX(-640.0))));

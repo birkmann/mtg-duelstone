@@ -57,7 +57,7 @@ fn sync_panel(mut commands: Commands, menu: Res<MenuState>, fonts: Res<ArenaFont
                         spawn_slider(p, &fonts, SliderKey::Sfx, "Effects volume");
                         spawn_slider(p, &fonts, SliderKey::Music, "Music volume");
                         p.spawn(divider());
-                        row(p, &fonts, "Battlefield", |r| {
+                        row(p, &fonts, "Playmat", |r| {
                             for (id, label) in THEMES {
                                 let b = spawn_button(r, &fonts, ButtonKind::Secondary, label, Vec2::new(116.0, 38.0));
                                 r.commands().entity(b).insert((MenuAction::SetTheme(id), ThemeButton(id)));

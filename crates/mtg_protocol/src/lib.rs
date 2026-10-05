@@ -7,12 +7,14 @@
 
 mod card;
 mod cmd;
+mod deck;
 mod frames;
 mod game;
 mod prompt;
 
 pub use card::*;
 pub use cmd::*;
+pub use deck::*;
 pub use frames::*;
 pub use game::*;
 pub use prompt::*;

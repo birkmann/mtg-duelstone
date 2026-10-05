@@ -1,18 +1,17 @@
 //! The 3D table: playmat, ornate frame, lights and the fixed perspective camera.
 //!
+//! The playmat's texture comes from `Cosmetics` (the equipped playmat: shipped art or a painted
+//! design); until it lands the mat shows a plain dark felt.
+//!
 //! The camera pitch is fixed (~57°) like Arena's; only the distance changes so the whole mat fits
 //! any window aspect (`fit_distance`). A hair of cursor parallax makes the scene feel alive.
 
-use std::f32::consts::{FRAC_PI_2, TAU};
-
-use bevy::asset::RenderAssetUsages;
 use bevy::camera::visibility::RenderLayers;
 use bevy::camera::{ClearColorConfig, Hdr};
 use bevy::core_pipeline::tonemapping::Tonemapping;
 use bevy::light::{CascadeShadowConfigBuilder, GlobalAmbientLight, NotShadowCaster, NotShadowReceiver};
 use bevy::post_process::bloom::Bloom;
 use bevy::prelude::*;
-use bevy::render::render_resource::{Extent3d, TextureDimension, TextureFormat};
 use bevy::window::PrimaryWindow;
 
 use crate::layout::{TABLE_HALF_D, TABLE_HALF_W};
@@ -35,15 +34,12 @@ impl Plugin for TablePlugin {
             .insert_resource(ClearColor(Color::srgb(0.02, 0.015, 0.012)))
             .add_systems(Startup, spawn_table)
             .add_systems(Update, unify_hdr)
-            .add_systems(Update, (fit_camera, rebuild_mat_on_theme).chain());
+            .add_systems(Update, (fit_camera, apply_playmat).chain());
     }
 }
 
 #[derive(Component)]
 struct PlayMat;
-
-#[derive(Resource, Default)]
-struct MatTheme(String);
 
 /// Smallest camera distance such that every point projects inside the viewport (`margin` of NDC).
 pub fn fit_distance(aspect: f32, fov_deg: f32, pitch_deg: f32, target: Vec3, points: &[Vec3], margin: f32) -> f32 {
@@ -94,9 +90,6 @@ fn spawn_table(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut mats: ResMut<Assets<StandardMaterial>>,
-    mut images: ResMut<Assets<Image>>,
-    asset_server: Res<AssetServer>,
-    settings: Res<Settings>,
 ) {
     // ---- camera ----
     let aspect = 16.0 / 9.0;
@@ -148,13 +141,11 @@ fn spawn_table(
     ));
 
     // ---- mat ----
-    let theme = settings.theme.clone();
-    let tex = mat_texture(&theme, &mut images, &asset_server);
     commands.spawn((
         PlayMat,
         Mesh3d(meshes.add(Plane3d::default().mesh().size(MAT_HALF_W * 2.0, MAT_HALF_D * 2.0))),
         MeshMaterial3d(mats.add(StandardMaterial {
-            base_color_texture: Some(tex),
+            base_color: Color::srgb(0.12, 0.08, 0.05),
             perceptual_roughness: 0.62,
             reflectance: 0.18,
             ..default()
@@ -164,7 +155,6 @@ fn spawn_table(
         NotShadowCaster,
         Name::new("playmat"),
     ));
-    commands.insert_resource(MatTheme(theme));
 
     // ---- frame: dark gilded rails + glowing corner orbs ----
     let rail_mat = mats.add(StandardMaterial {
@@ -244,32 +234,26 @@ fn unify_hdr(mut commands: Commands, cams: Query<Entity, (With<Camera>, Without<
     }
 }
 
-fn mat_texture(theme: &str, images: &mut Assets<Image>, asset_server: &AssetServer) -> Handle<Image> {
-    let rel = format!("textures/playmat_{theme}.png");
-    if crate::images::assets_dir().join(&rel).exists() {
-        return asset_server.load(rel);
-    }
-    images.add(procedural_mat(theme))
-}
-
-fn rebuild_mat_on_theme(
-    settings: Res<Settings>,
-    mut theme: ResMut<MatTheme>,
-    mut images: ResMut<Assets<Image>>,
-    asset_server: Res<AssetServer>,
+fn apply_playmat(
+    cosmetics: Res<Cosmetics>,
     mut mats: ResMut<Assets<StandardMaterial>>,
     mat: Query<&MeshMaterial3d<StandardMaterial>, With<PlayMat>>,
+    mut applied: Local<Option<Handle<Image>>>,
 ) {
-    if settings.theme == theme.0 {
+    let Some(tex) = cosmetics.playmat.clone() else { return };
+    if applied.as_ref() == Some(&tex) {
         return;
     }
-    theme.0 = settings.theme.clone();
-    let tex = mat_texture(&theme.0, &mut images, &asset_server);
-    if let Ok(m) = mat.single() {
-        if let Some(mut m) = mats.get_mut(&m.0) {
-            m.base_color_texture = Some(tex);
-        }
-    }
+    let Ok(m) = mat.single() else { return };
+    let Some(mut m) = mats.get_mut(&m.0) else { return };
+    m.base_color = Color::WHITE;
+    m.base_color_texture = Some(tex.clone());
+    // a playmat is cloth: the finish only nudges its sheen
+    m.reflectance = match cosmetics.playmat_finish {
+        crate::cosmetics::Finish::Matte => 0.18,
+        _ => 0.3,
+    };
+    *applied = Some(tex);
 }
 
 fn fit_camera(
@@ -288,124 +272,6 @@ fn fit_camera(
         .clamp(Vec2::splat(-1.0), Vec2::splat(1.0));
     *smoothed = smoothed.lerp(want, 0.06);
     *tf = camera_transform(aspect, *smoothed);
-}
-
-// ---- procedural playmat ---------------------------------------------------------------------
-
-fn hash(x: i32, y: i32) -> f32 {
-    let mut h = (x as u32).wrapping_mul(374761393).wrapping_add((y as u32).wrapping_mul(668265263));
-    h = (h ^ (h >> 13)).wrapping_mul(1274126177);
-    ((h ^ (h >> 16)) & 0xffff) as f32 / 65535.0
-}
-
-fn vnoise(x: f32, y: f32) -> f32 {
-    let (xi, yi) = (x.floor() as i32, y.floor() as i32);
-    let (fx, fy) = (x - x.floor(), y - y.floor());
-    let (sx, sy) = (fx * fx * (3.0 - 2.0 * fx), fy * fy * (3.0 - 2.0 * fy));
-    let a = hash(xi, yi);
-    let b = hash(xi + 1, yi);
-    let c = hash(xi, yi + 1);
-    let d = hash(xi + 1, yi + 1);
-    (a + (b - a) * sx) + ((c + (d - c) * sx) - (a + (b - a) * sx)) * sy
-}
-
-fn fbm(x: f32, y: f32) -> f32 {
-    vnoise(x, y) * 0.5 + vnoise(x * 2.0, y * 2.0) * 0.25 + vnoise(x * 4.0, y * 4.0) * 0.125 + vnoise(x * 8.0, y * 8.0) * 0.0625
-}
-
-struct Palette {
-    dark: [f32; 3],
-    mid: [f32; 3],
-    light: [f32; 3],
-    line: [f32; 3],
-}
-
-fn palette(theme: &str) -> Palette {
-    match theme {
-        "storm" => Palette {
-            dark: [0.04, 0.06, 0.07],
-            mid: [0.12, 0.17, 0.17],
-            light: [0.22, 0.29, 0.28],
-            line: [0.45, 0.55, 0.6],
-        },
-        "grove" => Palette {
-            dark: [0.03, 0.07, 0.04],
-            mid: [0.10, 0.20, 0.08],
-            light: [0.22, 0.36, 0.14],
-            line: [0.65, 0.75, 0.35],
-        },
-        _ => Palette {
-            dark: [0.20, 0.10, 0.03],
-            mid: [0.55, 0.32, 0.08],
-            light: [0.80, 0.55, 0.16],
-            line: [0.95, 0.76, 0.35],
-        },
-    }
-}
-
-/// Arena-ish engraved playmat: warm vignette, flowing lobes, a central medallion and a centre line.
-pub fn procedural_mat(theme: &str) -> Image {
-    let (w, h) = (1536usize, 990usize);
-    let pal = palette(theme);
-    let mut data = vec![255u8; w * h * 4];
-    let lerp = |a: [f32; 3], b: [f32; 3], t: f32| [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t];
-    for y in 0..h {
-        for x in 0..w {
-            // u,v in table-ish units: u∈[-1,1] across, v∈[-1,1] depth
-            let u = x as f32 / w as f32 * 2.0 - 1.0;
-            let v = y as f32 / h as f32 * 2.0 - 1.0;
-            let (ax, ay) = (u * MAT_HALF_W, v * MAT_HALF_D);
-            let r = (u * u * 0.8 + v * v * 1.1).sqrt();
-            let grain = fbm(ax * 3.0, ay * 3.0);
-            let fine = (hash(x as i32, y as i32) - 0.5) * 0.035;
-            // base: lighter toward the middle, darker toward the rim
-            let t = (1.0 - r * 0.85).clamp(0.0, 1.0);
-            let mut col = lerp(pal.dark, pal.mid, (t * 1.2 + grain * 0.35).clamp(0.0, 1.0));
-            col = lerp(col, pal.light, ((t - 0.35) * 1.4 * (0.6 + grain)).clamp(0.0, 0.8));
-            // flowing lobes (the big swooping ribbons in the Arena mat)
-            let lobe = ((ay * 1.1 + (ax * 0.55).sin() * 1.2).abs() - 1.55).abs();
-            let lobe2 = ((ay * 1.1 - (ax * 0.55).sin() * 1.2).abs() - 1.55).abs();
-            let ribbon = (1.0 - (lobe.min(lobe2) * 9.0)).clamp(0.0, 1.0);
-            col = lerp(col, pal.line, ribbon * 0.26);
-            let ribbon_soft = (1.0 - (lobe.min(lobe2) * 2.2)).clamp(0.0, 1.0);
-            col = lerp(col, pal.light, ribbon_soft * 0.10);
-            // central medallion rings
-            let mr = ((ax * ax) / 1.0 + (ay * ay) / 1.0).sqrt();
-            for rad in [1.15_f32, 1.45, 2.4] {
-                let d = (mr - rad).abs();
-                col = lerp(col, pal.line, (1.0 - d * 24.0).clamp(0.0, 1.0) * 0.30);
-            }
-            // centre line + outer inset line
-            col = lerp(col, pal.line, (1.0 - ay.abs() * 22.0).clamp(0.0, 1.0) * 0.22);
-            let inset = (MAT_HALF_W - 0.35 - ax.abs()).min(MAT_HALF_D - 0.35 - ay.abs());
-            col = lerp(col, pal.line, (1.0 - inset.abs() * 20.0).clamp(0.0, 1.0) * 0.35);
-            // vignette
-            let vig = (1.0 - (r - 0.55).max(0.0) * 0.55).clamp(0.35, 1.0);
-            let i = (y * w + x) * 4;
-            for c in 0..3 {
-                let lin = ((col[c] * vig) + fine).clamp(0.0, 1.0);
-                data[i + c] = (lin.powf(1.0 / 2.2) * 255.0) as u8;
-            }
-        }
-    }
-    let mut img = Image::new(
-        Extent3d { width: w as u32, height: h as u32, depth_or_array_layers: 1 },
-        TextureDimension::D2,
-        data,
-        TextureFormat::Rgba8UnormSrgb,
-        RenderAssetUsages::default(),
-    );
-    crate::images::with_mips(&mut img);
-    img.sampler = bevy::image::ImageSampler::Descriptor(bevy::image::ImageSamplerDescriptor {
-        mag_filter: bevy::image::ImageFilterMode::Linear,
-        min_filter: bevy::image::ImageFilterMode::Linear,
-        mipmap_filter: bevy::image::ImageFilterMode::Linear,
-        anisotropy_clamp: 8,
-        ..default()
-    });
-    img.asset_usage = RenderAssetUsages::RENDER_WORLD;
-    let _ = (FRAC_PI_2, TAU);
-    img
 }
 
 #[cfg(test)]

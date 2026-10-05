@@ -1,0 +1,572 @@
+{
+ "format": "constructed",
+ "colorIdentity": "R",
+ "themes": [
+  {
+   "key": "spells",
+   "label": "Spellslinger",
+   "count": 0,
+   "score": 1.0,
+   "active": true
+  }
+ ],
+ "archetypes": [
+  {
+   "name": "Rakdos Burn Boros",
+   "format": "Modern",
+   "similarity": 0.376,
+   "decks": 19
+  },
+  {
+   "name": "Mono Vintage Burn",
+   "format": "Vintage",
+   "similarity": 0.357,
+   "decks": 36
+  },
+  {
+   "name": "Naya Zoo Modern",
+   "format": "Legacy",
+   "similarity": 0.351,
+   "decks": 55
+  },
+  {
+   "name": "Grixis Control Izzet",
+   "format": "Modern",
+   "similarity": 0.351,
+   "decks": 100
+  },
+  {
+   "name": "Rakdos Midrange Combocory",
+   "format": "Modern",
+   "similarity": 0.345,
+   "decks": 13
+  }
+ ],
+ "sections": [
+  {
+   "key": "synergy",
+   "title": "High Synergy Cards",
+   "cards": [
+    {
+     "card": {
+      "name": "Scalding Tarn",
+      "manaCost": null,
+      "cmc": 0,
+      "type": "Land",
+      "colors": "",
+      "colorIdentity": "",
+      "oracleText": "{T}, Pay 1 life, Sacrifice Scalding Tarn: Search your library for an Island or Mountain card, put it onto the battlefield, then shuffle.",
+      "set": "SPG",
+      "cn": "112",
+      "rarity": "MythicRare",
+      "isLand": true,
+      "isCreature": false,
+      "isBasicLand": false,
+      "canBeCommander": false,
+      "banned": false,
+      "subtypes": [],
+      "tags": [],
+      "popularity": 0.992
+     },
+     "inclusion": 0.392,
+     "synergy": 0.373,
+     "score": 0.569,
+     "reason": "39% of similar decks \u00b7 +37% synergy"
+    },
+    {
+     "card": {
+      "name": "Polluted Delta",
+      "manaCost": null,
+      "cmc": 0,
+      "type": "Land",
+      "colors": "",
+      "colorIdentity": "",
+      "oracleText": "{T}, Pay 1 life, Sacrifice Polluted Delta: Search your library for an Island or Swamp card, put it onto the battlefield, then shuffle.",
+      "set": "MH3",
+      "cn": "224",
+      "rarity": "Rare",
+      "isLand": true,
+      "isCreature": false,
+      "isBasicLand": false,
+      "canBeCommander": false,
+      "banned": false,
+      "subtypes": [],
+      "tags": [],
+      "popularity": 0.999
+     },
+     "inclusion": 0.211,
+     "synergy": 0.171,
+     "score": 0.436,
+     "reason": "21% of similar decks \u00b7 +17% synergy"
+    }
+   ]
+  },
+  {
+   "key": "top",
+   "title": "Top Cards",
+   "cards": [
+    {
+     "card": {
+      "name": "Bonecrusher Giant",
+      "manaCost": "{2}{R}",
+      "cmc": 3,
+      "type": "Creature - Giant",
+      "colors": "R",
+      "colorIdentity": "R",
+      "oracleText": "Whenever Bonecrusher Giant becomes the target of a spell, Bonecrusher Giant deals 2 damage to that spell's controller.",
+      "power": "4",
+      "toughness": "3",
+      "set": "CLB",
+      "cn": "781",
+      "rarity": "Rare",
+      "isLand": false,
+      "isCreature": true,
+      "isBasicLand": false,
+      "canBeCommander": false,
+      "banned": false,
+      "subtypes": [
+       "Giant"
+      ],
+      "tags": [
+       "removal"
+      ],
+      "popularity": 1.0
+     },
+     "inclusion": 0.0,
+     "synergy": -0.045,
+     "score": 0.3,
+     "reason": "0% of similar decks \u00b7 -4% synergy"
+    },
+    {
+     "card": {
+      "name": "Galvanic Blast",
+      "manaCost": "{R}",
+      "cmc": 1,
+      "type": "Instant",
+      "colors": "R",
+      "colorIdentity": "R",
+      "oracleText": "Galvanic Blast deals 2 damage to any target.\\nMetalcraft \u2014 Galvanic Blast deals 4 damage instead if you control three or more artifacts.",
+      "set": "SPG",
+      "cn": "100",
+      "rarity": "MythicRare",
+      "isLand": false,
+      "isCreature": false,
+      "isBasicLand": false,
+      "canBeCommander": false,
+      "banned": false,
+      "subtypes": [],
+      "tags": [
+       "removal",
+       "artifacts"
+      ],
+      "popularity": 0.999
+     },
+     "inclusion": 0.001,
+     "synergy": -0.041,
+     "score": 0.301,
+     "reason": "0% of similar decks \u00b7 -4% synergy"
+    }
+   ]
+  },
+  {
+   "key": "theme:spells",
+   "title": "Spellslinger",
+   "cards": [
+    {
+     "card": {
+      "name": "Monastery Swiftspear",
+      "manaCost": "{R}",
+      "cmc": 1,
+      "type": "Creature - Human Monk",
+      "colors": "R",
+      "colorIdentity": "R",
+      "oracleText": "Haste\\nProwess (Whenever you cast a noncreature spell, this creature gets +1/+1 until end of turn.)",
+      "power": "1",
+      "toughness": "2",
+      "set": "PIO",
+      "cn": "147",
+      "rarity": "Uncommon",
+      "isLand": false,
+      "isCreature": true,
+      "isBasicLand": false,
+      "canBeCommander": false,
+      "banned": false,
+      "subtypes": [
+       "Human",
+       "Monk"
+      ],
+      "tags": [
+       "spells"
+      ],
+      "popularity": 0.992
+     },
+     "inclusion": 0.126,
+     "synergy": 0.107,
+     "score": 0.383,
+     "reason": "13% of similar decks \u00b7 +11% synergy"
+    },
+    {
+     "card": {
+      "name": "Young Pyromancer",
+      "manaCost": "{1}{R}",
+      "cmc": 2,
+      "type": "Creature - Human Shaman",
+      "colors": "R",
+      "colorIdentity": "R",
+      "oracleText": "Whenever you cast an instant or sorcery spell, create a 1/1 red Elemental creature token.",
+      "power": "2",
+      "toughness": "1",
+      "set": "TDC",
+      "cn": "95",
+      "rarity": "Uncommon",
+      "isLand": false,
+      "isCreature": true,
+      "isBasicLand": false,
+      "canBeCommander": false,
+      "banned": false,
+      "subtypes": [
+       "Human",
+       "Shaman"
+      ],
+      "tags": [
+       "tokens",
+       "spells"
+      ],
+      "popularity": 0.966
+     },
+     "inclusion": 0.102,
+     "synergy": 0.094,
+     "score": 0.369,
+     "reason": "10% of similar decks \u00b7 +9% synergy"
+    }
+   ]
+  },
+  {
+   "key": "role:ramp",
+   "title": "Ramp",
+   "cards": [
+    {
+     "card": {
+      "name": "Ragavan, Nimble Pilferer",
+      "manaCost": "{R}",
+      "cmc": 1,
+      "type": "Legendary Creature - Monkey Pirate",
+      "colors": "R",
+      "colorIdentity": "R",
+      "oracleText": "Whenever Ragavan, Nimble Pilferer deals combat damage to a player, create a Treasure token and exile the top card of that player's library. Until end of turn, you may cast that card.\\nDash {1}{R} (You may cast this spell for its dash cost. If you do, it gains haste, and it's returned from the battlefield to its owner's hand at the beginning of the next end step.)",
+      "power": "2",
+      "toughness": "1",
+      "set": "FCA",
+      "cn": "43",
+      "rarity": "MythicRare",
+      "isLand": false,
+      "isCreature": true,
+      "isBasicLand": false,
+      "canBeCommander": true,
+      "banned": false,
+      "subtypes": [
+       "Monkey",
+       "Pirate"
+      ],
+      "tags": [
+       "ramp",
+       "draw"
+      ],
+      "popularity": 0.97
+     },
+     "inclusion": 0.048,
+     "synergy": 0.048,
+     "score": 0.334,
+     "reason": "5% of similar decks \u00b7 +5% synergy"
+    },
+    {
+     "card": {
+      "name": "Mox Ruby",
+      "manaCost": "{0}",
+      "cmc": 0,
+      "type": "Artifact",
+      "colors": "",
+      "colorIdentity": "R",
+      "oracleText": "{T}: Add {R}.",
+      "set": "30A",
+      "cn": "261",
+      "rarity": "Rare",
+      "isLand": false,
+      "isCreature": false,
+      "isBasicLand": false,
+      "canBeCommander": false,
+      "banned": true,
+      "subtypes": [],
+      "tags": [
+       "ramp"
+      ],
+      "popularity": 0.942
+     },
+     "inclusion": 0.022,
+     "synergy": 0.018,
+     "score": 0.314,
+     "reason": "2% of similar decks \u00b7 +2% synergy"
+    }
+   ]
+  },
+  {
+   "key": "role:draw",
+   "title": "Card Draw",
+   "cards": [
+    {
+     "card": {
+      "name": "Ragavan, Nimble Pilferer",
+      "manaCost": "{R}",
+      "cmc": 1,
+      "type": "Legendary Creature - Monkey Pirate",
+      "colors": "R",
+      "colorIdentity": "R",
+      "oracleText": "Whenever Ragavan, Nimble Pilferer deals combat damage to a player, create a Treasure token and exile the top card of that player's library. Until end of turn, you may cast that card.\\nDash {1}{R} (You may cast this spell for its dash cost. If you do, it gains haste, and it's returned from the battlefield to its owner's hand at the beginning of the next end step.)",
+      "power": "2",
+      "toughness": "1",
+      "set": "FCA",
+      "cn": "43",
+      "rarity": "MythicRare",
+      "isLand": false,
+      "isCreature": true,
+      "isBasicLand": false,
+      "canBeCommander": true,
+      "banned": false,
+      "subtypes": [
+       "Monkey",
+       "Pirate"
+      ],
+      "tags": [
+       "ramp",
+       "draw"
+      ],
+      "popularity": 0.97
+     },
+     "inclusion": 0.048,
+     "synergy": 0.048,
+     "score": 0.334,
+     "reason": "5% of similar decks \u00b7 +5% synergy"
+    },
+    {
+     "card": {
+      "name": "Seasoned Pyromancer",
+      "manaCost": "{1}{R}{R}",
+      "cmc": 3,
+      "type": "Creature - Human Shaman",
+      "colors": "R",
+      "colorIdentity": "R",
+      "oracleText": "When Seasoned Pyromancer enters, discard two cards, then draw two cards. For each nonland card discarded this way, create a 1/1 red Elemental creature token.\\n{3}{R}{R}, Exile Seasoned Pyromancer from your graveyard: Create two 1/1 red Elemental creature tokens.",
+      "power": "2",
+      "toughness": "2",
+      "set": "SLP",
+      "cn": "24",
+      "rarity": "MythicRare",
+      "isLand": false,
+      "isCreature": true,
+      "isBasicLand": false,
+      "canBeCommander": false,
+      "banned": false,
+      "subtypes": [
+       "Human",
+       "Shaman"
+      ],
+      "tags": [
+       "draw",
+       "tokens",
+       "graveyard"
+      ],
+      "popularity": 0.821
+     },
+     "inclusion": 0.023,
+     "synergy": 0.022,
+     "score": 0.316,
+     "reason": "2% of similar decks \u00b7 +2% synergy"
+    }
+   ]
+  },
+  {
+   "key": "role:removal",
+   "title": "Removal",
+   "cards": [
+    {
+     "card": {
+      "name": "Wasteland",
+      "manaCost": null,
+      "cmc": 0,
+      "type": "Land",
+      "colors": "",
+      "colorIdentity": "",
+      "oracleText": "{T}: Add {C}.\\n{T}, Sacrifice Wasteland: Destroy target nonbasic land.",
+      "set": "MB2",
+      "cn": "115",
+      "rarity": "Uncommon",
+      "isLand": true,
+      "isCreature": false,
+      "isBasicLand": false,
+      "canBeCommander": false,
+      "banned": false,
+      "subtypes": [],
+      "tags": [
+       "removal"
+      ],
+      "popularity": 0.996
+     },
+     "inclusion": 0.125,
+     "synergy": 0.099,
+     "score": 0.38,
+     "reason": "13% of similar decks \u00b7 +10% synergy"
+    },
+    {
+     "card": {
+      "name": "Chain Lightning",
+      "manaCost": "{R}",
+      "cmc": 1,
+      "type": "Sorcery",
+      "colors": "R",
+      "colorIdentity": "R",
+      "oracleText": "Chain Lightning deals 3 damage to any target. Then that player or that permanent's controller may pay {R}{R}. If the player does, they may copy this spell and may choose a new target for that copy.",
+      "set": "AA3",
+      "cn": "12",
+      "rarity": "Common",
+      "isLand": false,
+      "isCreature": false,
+      "isBasicLand": false,
+      "canBeCommander": false,
+      "banned": false,
+      "subtypes": [],
+      "tags": [
+       "removal"
+      ],
+      "popularity": 0.998
+     },
+     "inclusion": 0.107,
+     "synergy": 0.073,
+     "score": 0.365,
+     "reason": "11% of similar decks \u00b7 +7% synergy"
+    }
+   ]
+  },
+  {
+   "key": "role:wipe",
+   "title": "Board Wipes",
+   "cards": [
+    {
+     "card": {
+      "name": "Boom // Bust",
+      "manaCost": "{6}{R}{R}",
+      "cmc": 8,
+      "type": "Sorcery",
+      "colors": "R",
+      "colorIdentity": "R",
+      "oracleText": "Destroy target land you control and target land you don't control.\r\n\r\nDestroy all lands.",
+      "set": "TSR",
+      "cn": "156",
+      "rarity": "Rare",
+      "isLand": false,
+      "isCreature": false,
+      "isBasicLand": false,
+      "canBeCommander": false,
+      "banned": false,
+      "subtypes": [],
+      "tags": [
+       "removal",
+       "wipe"
+      ],
+      "popularity": 0.714
+     },
+     "inclusion": 0.017,
+     "synergy": 0.017,
+     "score": 0.312,
+     "reason": "2% of similar decks \u00b7 +2% synergy"
+    },
+    {
+     "card": {
+      "name": "Earthquake",
+      "manaCost": "{X}{R}",
+      "cmc": 1,
+      "type": "Sorcery",
+      "colors": "R",
+      "colorIdentity": "R",
+      "oracleText": "Earthquake deals X damage to each creature without flying and each player.",
+      "set": "PMDA",
+      "cn": "4",
+      "rarity": "Rare",
+      "isLand": false,
+      "isCreature": false,
+      "isBasicLand": false,
+      "canBeCommander": false,
+      "banned": false,
+      "subtypes": [],
+      "tags": [
+       "wipe"
+      ],
+      "popularity": 0.786
+     },
+     "inclusion": 0.008,
+     "synergy": 0.008,
+     "score": 0.305,
+     "reason": "1% of similar decks \u00b7 +1% synergy"
+    }
+   ]
+  },
+  {
+   "key": "lands",
+   "title": "Lands",
+   "cards": [
+    {
+     "card": {
+      "name": "Scalding Tarn",
+      "manaCost": null,
+      "cmc": 0,
+      "type": "Land",
+      "colors": "",
+      "colorIdentity": "",
+      "oracleText": "{T}, Pay 1 life, Sacrifice Scalding Tarn: Search your library for an Island or Mountain card, put it onto the battlefield, then shuffle.",
+      "set": "SPG",
+      "cn": "112",
+      "rarity": "MythicRare",
+      "isLand": true,
+      "isCreature": false,
+      "isBasicLand": false,
+      "canBeCommander": false,
+      "banned": false,
+      "subtypes": [],
+      "tags": [],
+      "popularity": 0.992
+     },
+     "inclusion": 0.392,
+     "synergy": 0.373,
+     "score": 0.569,
+     "reason": "39% of similar decks \u00b7 +37% synergy"
+    },
+    {
+     "card": {
+      "name": "Polluted Delta",
+      "manaCost": null,
+      "cmc": 0,
+      "type": "Land",
+      "colors": "",
+      "colorIdentity": "",
+      "oracleText": "{T}, Pay 1 life, Sacrifice Polluted Delta: Search your library for an Island or Swamp card, put it onto the battlefield, then shuffle.",
+      "set": "MH3",
+      "cn": "224",
+      "rarity": "Rare",
+      "isLand": true,
+      "isCreature": false,
+      "isBasicLand": false,
+      "canBeCommander": false,
+      "banned": false,
+      "subtypes": [],
+      "tags": [],
+      "popularity": 0.999
+     },
+     "inclusion": 0.211,
+     "synergy": 0.171,
+     "score": 0.436,
+     "reason": "21% of similar decks \u00b7 +17% synergy"
+    }
+   ]
+  }
+ ],
+ "unresolved": []
+}

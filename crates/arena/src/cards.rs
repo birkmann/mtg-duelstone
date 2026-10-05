@@ -4,6 +4,9 @@
 //! Meshes are shared (one rounded-rect mesh for every card); materials are cached per image handle.
 //! Until a card's real image has arrived the front shows a neutral blank face, because Bevy
 //! doesn't draw a mesh whose texture isn't ready.
+//!
+//! Backs wear their owner's sleeve (`Cosmetics`): one back material per side, retextured in place
+//! when the equipped sleeve changes, so every card follows without touching the entities.
 
 use std::collections::{HashMap, HashSet};
 use std::f32::consts::PI;
@@ -31,7 +34,7 @@ impl Plugin for CardsPlugin {
             .add_systems(Startup, setup_card_assets)
             .add_systems(
                 Update,
-                (sync_cards.run_if(in_match.clone()).after(crate::view::ViewSet), update_faces, fade_out).chain(),
+                (sync_cards.run_if(in_match.clone()).after(crate::view::ViewSet), update_faces, fade_out, apply_sleeves).chain(),
             )
             .add_systems(PostUpdate, orient_shadows);
     }
@@ -43,7 +46,10 @@ pub struct CardAssets {
     pub quad: Handle<Mesh>,
     pub shadow_quad: Handle<Mesh>,
     pub shadow_mat: Handle<StandardMaterial>,
+    /// Your sleeve.
     pub back_mat: Handle<StandardMaterial>,
+    /// The opponent's sleeve.
+    pub opp_back_mat: Handle<StandardMaterial>,
     pub blank_mat: Handle<StandardMaterial>,
     by_image: HashMap<AssetId<Image>, Handle<StandardMaterial>>,
 }
@@ -124,10 +130,15 @@ fn setup_card_assets(
         ..default()
     });
     assets.back_mat = mats.add(card_material(imgs.card_back.clone()));
+    assets.opp_back_mat = mats.add(card_material(imgs.card_back.clone()));
     assets.blank_mat = mats.add(card_material(imgs.card_blank.clone()));
 }
 
 impl CardAssets {
+    fn back_for(&self, owner: Option<mtg_protocol::PlayerId>, you: Option<mtg_protocol::PlayerId>) -> Handle<StandardMaterial> {
+        if owner.is_some() && owner != you { self.opp_back_mat.clone() } else { self.back_mat.clone() }
+    }
+
     fn material_for(&mut self, mats: &mut Assets<StandardMaterial>, image: &Handle<Image>) -> Handle<StandardMaterial> {
         self.by_image.entry(image.id()).or_insert_with(|| mats.add(card_material(image.clone()))).clone()
     }
@@ -301,13 +312,16 @@ fn update_faces(
     mut assets: ResMut<CardAssets>,
     images: Res<Assets<Image>>,
     mut mats: ResMut<Assets<StandardMaterial>>,
-    mut cards: Query<(&mut CardFace, &Children), Without<Despawning>>,
-    mut fronts: Query<&mut MeshMaterial3d<StandardMaterial>, With<CardFront>>,
+    view: Res<GameView>,
+    mut cards: Query<(&mut CardFace, &CardLocation, &Children), Without<Despawning>>,
+    mut fronts: Query<&mut MeshMaterial3d<StandardMaterial>, (With<CardFront>, Without<CardBack>)>,
+    mut backs: Query<&mut MeshMaterial3d<StandardMaterial>, (With<CardBack>, Without<CardFront>)>,
 ) {
-    for (mut face, children) in &mut cards {
+    for (mut face, loc, children) in &mut cards {
         let ready = images.contains(face.image.id());
+        let back = assets.back_for(loc.owner, view.you);
         let m = if face.hidden {
-            assets.back_mat.clone()
+            back.clone()
         } else if ready {
             assets.material_for(&mut mats, &face.image)
         } else {
@@ -321,6 +335,10 @@ fn update_faces(
                 if fm.0 != m {
                     fm.0 = m.clone();
                 }
+            } else if let Ok(mut bm) = backs.get_mut(ch)
+                && bm.0 != back
+            {
+                bm.0 = back.clone();
             }
         }
     }
@@ -334,5 +352,17 @@ fn fade_out(mut commands: Commands, time: Res<Time>, mut q: Query<(Entity, &mut 
         if d.0 >= 0.35 {
             commands.entity(e).despawn();
         }
+    }
+}
+
+/// Retexture the two back materials when the equipped sleeves change (or finish painting).
+fn apply_sleeves(cosmetics: Res<Cosmetics>, assets: Res<CardAssets>, mut mats: ResMut<Assets<StandardMaterial>>) {
+    if !cosmetics.is_changed() {
+        return;
+    }
+    for (mat, tex, finish) in [(&assets.back_mat, &cosmetics.my_sleeve, cosmetics.my_finish), (&assets.opp_back_mat, &cosmetics.opp_sleeve, cosmetics.opp_finish)] {
+        let (Some(tex), Some(mut m)) = (tex, mats.get_mut(mat)) else { continue };
+        m.base_color_texture = Some(tex.clone());
+        crate::cosmetics::apply_finish(&mut m, finish);
     }
 }

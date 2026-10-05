@@ -53,7 +53,7 @@ impl Plugin for StagePlugin {
             .add_systems(Update, toggle_stage)
             .add_systems(
                 Update,
-                (tick_intro, (animate_camera, animate_portal, animate_cards, animate_orbs, animate_embers, animate_haze, swap_in_card_faces))
+                (tick_intro, (animate_camera, animate_portal, animate_cards, animate_orbs, animate_embers, animate_haze, swap_in_card_faces, sleeve_carousel))
                     .chain()
                     .run_if(in_state(AppState::MainMenu)),
             );
@@ -293,6 +293,7 @@ fn spawn_stage(
         // ---- card carousel: iconic printings, fetched through the engine's image proxy ----
         let front_mesh = meshes.add(card_mesh(CARD_W, CARD_H, 0.034));
         let back_mat = mats.add(StandardMaterial { base_color_texture: Some(card_images.card_back.clone()), perceptual_roughness: 0.6, reflectance: 0.2, ..default() });
+        s.commands().insert_resource(CarouselBack(back_mat.clone()));
         let seed = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.subsec_nanos()).unwrap_or(1);
         let mut pick = Lcg(seed);
         let mut pool: Vec<_> = CURATED.iter().filter(|c| c.name != "Island").collect();
@@ -431,14 +432,16 @@ fn toggle_stage(
     mut root: Query<&mut Visibility, With<StageRoot>>,
 ) {
     let on = *state.get() == AppState::MainMenu;
+    // the design studio has its own preview camera, so the table stays off there too
+    let table_on = !on && *state.get() != AppState::Designer;
     for mut c in &mut menu_cam {
         if c.is_active != on {
             c.is_active = on;
         }
     }
     for mut c in &mut table_cam {
-        if c.is_active == on {
-            c.is_active = !on;
+        if c.is_active != table_on {
+            c.is_active = table_on;
         }
     }
     let want = if on { Visibility::Inherited } else { Visibility::Hidden };
@@ -608,4 +611,20 @@ fn swap_in_card_faces(images: Res<Assets<Image>>, mut mats: ResMut<Assets<Standa
             c.loaded = true;
         }
     }
+}
+
+/// Back material shared by the carousel cards: they wear your equipped sleeve.
+#[derive(Resource)]
+struct CarouselBack(Handle<StandardMaterial>);
+
+fn sleeve_carousel(cosmetics: Res<Cosmetics>, back: Option<Res<CarouselBack>>, mut mats: ResMut<Assets<StandardMaterial>>, mut applied: Local<Option<Handle<Image>>>) {
+    let (Some(back), Some(tex)) = (back, cosmetics.my_sleeve.clone()) else { return };
+    if applied.as_ref() == Some(&tex) {
+        return;
+    }
+    if let Some(mut m) = mats.get_mut(&back.0) {
+        m.base_color_texture = Some(tex.clone());
+        crate::cosmetics::apply_finish(&mut m, cosmetics.my_finish);
+    }
+    *applied = Some(tex);
 }

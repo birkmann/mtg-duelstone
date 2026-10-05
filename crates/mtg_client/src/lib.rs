@@ -7,9 +7,11 @@
 //! - [`Rest`] — blocking REST helpers (call from a task pool / thread, never the main schedule).
 //! - [`autoplay::AutoPolicy`] — decide a reply to an input/prompt (autopilot bin + arena `--autoplay`).
 //! - [`launcher::ensure_engine`] — start the Java engine if `/api/health` doesn't answer.
+//! - [`deckstats`] — pure deck analysis for the builder (curve, colours, roles, odds, goldfish).
 //! - [`scryfall::Showcase`] — curated card artworks + artist facts for the splash screens (cached).
 
 pub mod autoplay;
+pub mod deckstats;
 pub mod launcher;
 pub mod record;
 pub mod rest;

@@ -25,6 +25,7 @@ pub mod targeting;
 // meta & polish
 pub mod audio;
 pub mod card_material;
+pub mod cosmetics;
 pub mod fx;
 pub mod menus;
 pub mod settings;
@@ -43,6 +44,7 @@ impl Plugin for ArenaPlugin {
             net::NetPlugin,
             view::ViewPlugin,
             images::ImagesPlugin,
+            cosmetics::CosmeticsPlugin,
             cards::CardsPlugin,
             layout::LayoutPlugin,
             motion::MotionPlugin,

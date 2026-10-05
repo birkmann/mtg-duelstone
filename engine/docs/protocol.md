@@ -22,6 +22,64 @@ decisions arrive as `prompt` frames listing the legal options; the client answer
 | GET | `/api/match/{id}` | | `matchInfo` |
 | DELETE | `/api/match/{id}` | | |
 | GET | `/api/engine/cards?names=a|b|c` | | `{name: bool}` — can Forge play this card? |
+| GET | `/api/cards/search` | `?q=&ci=WUBG&type=&text=&commander=1&cmc=&tag=&sort=name\|popular&offset=0&limit=60` (limit ≤ 200). `cmc` = exact mana value, `7` means 7+. `tag` = one [card tag](#card-tags) key (unknown → 400). `sort` defaults to `name` (prefix matches first) when `q` is non-empty and to `popular` when it is empty | `[ card ]` (see `card` below) |
+| GET | `/api/cards/get` | `?name=` | `card` |
+| POST | `/api/deck/recommend` | see [Deck-builder recommendations](#deck-builder-recommendations) | `{format, colorIdentity, commanderDecks?, themes[], archetypes[], sections[], unresolved[]}` |
+
+## Deck-builder recommendations
+
+Offline, EDHREC-style suggestions built from data Forge ships in `res/deckgendecks/` (loaded once in the
+background at server start, ~1 s; a missing file only degrades suggestions to tag + popularity based ones).
+
+### `card` (REST card object)
+`{name, manaCost, cmc, type, colors, colorIdentity, oracleText, power?, toughness?, loyalty?, set, cn, rarity,
+isLand, isCreature, isBasicLand, canBeCommander, banned, subtypes: ["Elf","Druid"], tags: ["ramp", …], popularity}` —
+`popularity` is 0..1 (rank percentile over Commander inclusion and constructed archetype presence, the max of the
+two; 0 until the data has loaded).
+
+### Card tags
+Heuristic keyword tags from oracle text / type line (`arena.engine.deck.CardTags`); keys are stable.
+- Roles: `ramp` (non-land mana / land fetch / extra land drops / Treasures), `draw`, `removal` (targeted), `wipe`,
+  `counter`, `tutor` (non-land search), `protection` (grants hexproof/indestructible/shroud, phasing).
+- Themes: `counters` (+1/+1, includes all `proliferate`), `proliferate`, `infect` (infect/toxic/poison), `tokens`
+  (creature tokens), `sacrifice`, `lifegain`, `graveyard`, `spells`, `artifacts`, `enchantments` (not Auras alone),
+  `voltron` (Equipment, own-creature Auras), `landfall`, `blink`, `mill` (opponent), `discard`, `planeswalkers`, `flying`.
+- Tribal themes are `tribal:<CreatureType>` (e.g. `tribal:Goblin`): cards with the type or naming it in their text.
+
+### `POST /api/deck/recommend`
+```jsonc
+{ "format": "commander" | "constructed",          // default commander
+  "commanders": ["Atraxa, Praetors' Voice"],        // commander only; partners allowed
+  "main": [{"name": "Sol Ring", "qty": 1}],         // or plain strings
+  "themes": ["counters", "tribal:Elf"],             // optional: force these themes active
+  "colors": "WUBG",                                  // optional colour filter (ignored when commanders are given)
+  "limit": 24 }                                      // per section, max 60
+```
+Colour filter: the commanders' combined identity; else `colors`; else the union identity of the main deck's
+non-land cards; else none. Never recommended: cards already in the deck, basic lands, cards outside the filter,
+cards Forge can't play, and (commander) banned cards.
+
+```jsonc
+{ "format": "commander", "colorIdentity": "WUBG",   // "" = no filter, "C" = colourless only
+  "commanderDecks": 9674,                           // commander only: decks behind the data, 0 = commander not in the data
+  "themes": [ {"key":"proliferate","label":"Proliferate","count":1,"score":1.0,"active":true}, … ],   // ≤ 8
+  "archetypes": [ {"name":"Burn Red Deck","format":"Pauper","similarity":0.366,"decks":2717}, … ], // constructed, ≤ 5
+  "sections": [ {"key":"synergy","title":"High Synergy Cards","cards":[
+        {"card": card, "inclusion":0.69, "synergy":0.679, "score":0.78, "reason":"69% of decks · +68% synergy"} ]}, … ],
+  "unresolved": ["Sol Rign"] }                      // input names that matched no card
+```
+- Section keys, in order (empty sections are omitted): `synergy`, `top`, `theme:<key>` / `tribal:<Type>` for each
+  active theme, `role:ramp`, `role:draw`, `role:removal`, `role:wipe`, `lands`.
+- Commander: `inclusion` = share of the commander's decks running the card (partners: max of the two);
+  `synergy` = inclusion − the card's mean inclusion over all commanders whose identity could run it. `synergy` ranks
+  by synergy, `top` by inclusion, the rest by `score`. A commander missing from the data falls back to popularity.
+- Constructed: the deck is matched to LDA archetypes of Standard/Pioneer/Historic/Modern/Pauper/Legacy/Vintage by
+  cosine similarity (weighted by archetype size); `inclusion` = share of similar decks running the card,
+  `synergy` = inclusion − its presence across all archetypes. `top` = popularity within the colours.
+- `score` (0..1): data-backed cards score 0.3–1.0, popularity-only cards 0–0.3.
+- `themes`: non-role tags and tribes over-represented in deck + commander (+ the data's top synergy cards) versus
+  the whole card pool; `score` is relative to the strongest theme, `count` = deck cards (incl. commanders) carrying it.
+  `active` = requested themes, else the top two.
 
 ## Server → client frames
 

@@ -1,0 +1,360 @@
+{
+ "ref": "starter:mono-red-aggro",
+ "name": "Mono-Red Aggro",
+ "commanders": [],
+ "mainCount": 60,
+ "colorIdentity": "R",
+ "format": "constructed",
+ "problem": null,
+ "main": [
+  {
+   "card": {
+    "name": "Monastery Swiftspear",
+    "manaCost": "{R}",
+    "cmc": 1,
+    "type": "Creature - Human Monk",
+    "colors": "R",
+    "colorIdentity": "R",
+    "oracleText": "Haste\\nProwess (Whenever you cast a noncreature spell, this creature gets +1/+1 until end of turn.)",
+    "power": "1",
+    "toughness": "2",
+    "set": "PIO",
+    "cn": "147",
+    "rarity": "Uncommon",
+    "isLand": false,
+    "isCreature": true,
+    "isBasicLand": false,
+    "canBeCommander": false,
+    "banned": false,
+    "subtypes": [
+     "Human",
+     "Monk"
+    ],
+    "tags": [
+     "spells"
+    ],
+    "popularity": 0.992
+   },
+   "qty": 4
+  },
+  {
+   "card": {
+    "name": "Goblin Guide",
+    "manaCost": "{R}",
+    "cmc": 1,
+    "type": "Creature - Goblin Scout",
+    "colors": "R",
+    "colorIdentity": "R",
+    "oracleText": "Haste\\nWhenever Goblin Guide attacks, defending player reveals the top card of their library. If it's a land card, that player puts it into their hand.",
+    "power": "2",
+    "toughness": "2",
+    "set": "MB2",
+    "cn": "58",
+    "rarity": "Rare",
+    "isLand": false,
+    "isCreature": true,
+    "isBasicLand": false,
+    "canBeCommander": false,
+    "banned": false,
+    "subtypes": [
+     "Goblin",
+     "Scout"
+    ],
+    "tags": [],
+    "popularity": 0.84
+   },
+   "qty": 4
+  },
+  {
+   "card": {
+    "name": "Glorybringer",
+    "manaCost": "{3}{R}{R}",
+    "cmc": 5,
+    "type": "Creature - Dragon",
+    "colors": "R",
+    "colorIdentity": "R",
+    "oracleText": "Flying, haste\\nYou may exert Glorybringer as it attacks. When you do, it deals 4 damage to target non-Dragon creature an opponent controls. (An exerted creature won't untap during your next untap step.)",
+    "power": "4",
+    "toughness": "4",
+    "set": "TDC",
+    "cn": "215",
+    "rarity": "Rare",
+    "isLand": false,
+    "isCreature": true,
+    "isBasicLand": false,
+    "canBeCommander": false,
+    "banned": false,
+    "subtypes": [
+     "Dragon"
+    ],
+    "tags": [
+     "flying"
+    ],
+    "popularity": 0.82
+   },
+   "qty": 2
+  },
+  {
+   "card": {
+    "name": "Play with Fire",
+    "manaCost": "{R}",
+    "cmc": 1,
+    "type": "Instant",
+    "colors": "R",
+    "colorIdentity": "R",
+    "oracleText": "Play with Fire deals 2 damage to any target. If a player is dealt damage this way, scry 1.",
+    "set": "J25",
+    "cn": "586",
+    "rarity": "Uncommon",
+    "isLand": false,
+    "isCreature": false,
+    "isBasicLand": false,
+    "canBeCommander": false,
+    "banned": false,
+    "subtypes": [],
+    "tags": [
+     "removal"
+    ],
+    "popularity": 0.949
+   },
+   "qty": 4
+  },
+  {
+   "card": {
+    "name": "Lightning Strike",
+    "manaCost": "{1}{R}",
+    "cmc": 2,
+    "type": "Instant",
+    "colors": "R",
+    "colorIdentity": "R",
+    "oracleText": "Lightning Strike deals 3 damage to any target.",
+    "set": "MSH",
+    "cn": "142",
+    "rarity": "Common",
+    "isLand": false,
+    "isCreature": false,
+    "isBasicLand": false,
+    "canBeCommander": false,
+    "banned": false,
+    "subtypes": [],
+    "tags": [
+     "removal"
+    ],
+    "popularity": 0.931
+   },
+   "qty": 3
+  },
+  {
+   "card": {
+    "name": "Embercleave",
+    "manaCost": "{4}{R}{R}",
+    "cmc": 6,
+    "type": "Legendary Artifact - Equipment",
+    "colors": "R",
+    "colorIdentity": "R",
+    "oracleText": "Flash\\nThis spell costs {1} less to cast for each attacking creature you control.\\nWhen Embercleave enters, attach it to target creature you control.\\nEquipped creature gets +1/+1 and has double strike and trample.\\nEquip {3}",
+    "set": "SPG",
+    "cn": "77",
+    "rarity": "MythicRare",
+    "isLand": false,
+    "isCreature": false,
+    "isBasicLand": false,
+    "canBeCommander": false,
+    "banned": false,
+    "subtypes": [
+     "Equipment"
+    ],
+    "tags": [
+     "voltron"
+    ],
+    "popularity": 0.913
+   },
+   "qty": 2
+  },
+  {
+   "card": {
+    "name": "Goblin Chainwhirler",
+    "manaCost": "{R}{R}{R}",
+    "cmc": 3,
+    "type": "Creature - Goblin Warrior",
+    "colors": "R",
+    "colorIdentity": "R",
+    "oracleText": "First strike\\nWhen Goblin Chainwhirler enters, it deals 1 damage to each opponent and each creature and planeswalker they control.",
+    "power": "3",
+    "toughness": "3",
+    "set": "PLST",
+    "cn": "DOM-129",
+    "rarity": "Rare",
+    "isLand": false,
+    "isCreature": true,
+    "isBasicLand": false,
+    "canBeCommander": false,
+    "banned": false,
+    "subtypes": [
+     "Goblin",
+     "Warrior"
+    ],
+    "tags": [],
+    "popularity": 0.864
+   },
+   "qty": 4
+  },
+  {
+   "card": {
+    "name": "Mountain",
+    "manaCost": null,
+    "cmc": 0,
+    "type": "Basic Land - Mountain",
+    "colors": "",
+    "colorIdentity": "R",
+    "oracleText": "({T}: Add {R}.)",
+    "set": "TRK",
+    "cn": "323",
+    "rarity": "BasicLand",
+    "isLand": true,
+    "isCreature": false,
+    "isBasicLand": true,
+    "canBeCommander": false,
+    "banned": false,
+    "subtypes": [
+     "Mountain"
+    ],
+    "tags": [],
+    "popularity": 0.0
+   },
+   "qty": 20
+  },
+  {
+   "card": {
+    "name": "Lightning Bolt",
+    "manaCost": "{R}",
+    "cmc": 1,
+    "type": "Instant",
+    "colors": "R",
+    "colorIdentity": "R",
+    "oracleText": "Lightning Bolt deals 3 damage to any target.",
+    "set": "MSC",
+    "cn": "806",
+    "rarity": "Uncommon",
+    "isLand": false,
+    "isCreature": false,
+    "isBasicLand": false,
+    "canBeCommander": false,
+    "banned": false,
+    "subtypes": [],
+    "tags": [
+     "removal"
+    ],
+    "popularity": 0.991
+   },
+   "qty": 4
+  },
+  {
+   "card": {
+    "name": "Burst Lightning",
+    "manaCost": "{R}",
+    "cmc": 1,
+    "type": "Instant",
+    "colors": "R",
+    "colorIdentity": "R",
+    "oracleText": "Kicker {4} (You may pay an additional {4} as you cast this spell.)\\nBurst Lightning deals 2 damage to any target. If this spell was kicked, it deals 4 damage instead.",
+    "set": "SOA",
+    "cn": "41",
+    "rarity": "Uncommon",
+    "isLand": false,
+    "isCreature": false,
+    "isBasicLand": false,
+    "canBeCommander": false,
+    "banned": false,
+    "subtypes": [],
+    "tags": [
+     "removal"
+    ],
+    "popularity": 0.994
+   },
+   "qty": 4
+  },
+  {
+   "card": {
+    "name": "Hellrider",
+    "manaCost": "{2}{R}{R}",
+    "cmc": 4,
+    "type": "Creature - Devil",
+    "colors": "R",
+    "colorIdentity": "R",
+    "oracleText": "Haste\\nWhenever a creature you control attacks, Hellrider deals 1 damage to the player or planeswalker it's attacking.",
+    "power": "3",
+    "toughness": "3",
+    "set": "JMP",
+    "cn": "334",
+    "rarity": "Rare",
+    "isLand": false,
+    "isCreature": true,
+    "isBasicLand": false,
+    "canBeCommander": false,
+    "banned": false,
+    "subtypes": [
+     "Devil"
+    ],
+    "tags": [],
+    "popularity": 0.673
+   },
+   "qty": 3
+  },
+  {
+   "card": {
+    "name": "Bonecrusher Giant",
+    "manaCost": "{2}{R}",
+    "cmc": 3,
+    "type": "Creature - Giant",
+    "colors": "R",
+    "colorIdentity": "R",
+    "oracleText": "Whenever Bonecrusher Giant becomes the target of a spell, Bonecrusher Giant deals 2 damage to that spell's controller.",
+    "power": "4",
+    "toughness": "3",
+    "set": "CLB",
+    "cn": "781",
+    "rarity": "Rare",
+    "isLand": false,
+    "isCreature": true,
+    "isBasicLand": false,
+    "canBeCommander": false,
+    "banned": false,
+    "subtypes": [
+     "Giant"
+    ],
+    "tags": [
+     "removal"
+    ],
+    "popularity": 1.0
+   },
+   "qty": 3
+  },
+  {
+   "card": {
+    "name": "Skewer the Critics",
+    "manaCost": "{2}{R}",
+    "cmc": 3,
+    "type": "Sorcery",
+    "colors": "R",
+    "colorIdentity": "R",
+    "oracleText": "Spectacle {R} (You may cast this spell for its spectacle cost rather than its mana cost if an opponent lost life this turn.)\\nSkewer the Critics deals 3 damage to any target.",
+    "set": "OTP",
+    "cn": "26",
+    "rarity": "Uncommon",
+    "isLand": false,
+    "isCreature": false,
+    "isBasicLand": false,
+    "canBeCommander": false,
+    "banned": false,
+    "subtypes": [],
+    "tags": [
+     "removal"
+    ],
+    "popularity": 0.993
+   },
+   "qty": 3
+  }
+ ],
+ "sideboard": []
+}

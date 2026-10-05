@@ -62,6 +62,8 @@ pub(super) fn handle_actions(
             MenuAction::SelectDeck(r) => sel.human = Some(r.clone()),
             MenuAction::SelectAi(r) => sel.ai = r.clone(),
             MenuAction::OpenImport => menu.import_open = true,
+            // handled by `builder::open_from_menu` (this system is at Bevy's 16-parameter limit)
+            MenuAction::NewDeck | MenuAction::EditDeck => {}
             MenuAction::ImportClose => menu.import_open = false,
             MenuAction::ImportAnalyze => {
                 let text = field_text(&fields, Field::ImportText);
@@ -87,6 +89,11 @@ pub(super) fn handle_actions(
             MenuAction::ToggleFullscreen => settings.fullscreen = !settings.fullscreen,
             MenuAction::ToggleAutolaunch => settings.autolaunch = !settings.autolaunch,
             MenuAction::SetTheme(t) => settings.theme = (*t).to_string(),
+            MenuAction::Customize => {
+                menu.designer_return = Some(*state.get());
+                next.set(AppState::Designer);
+            }
+            MenuAction::CloseDesigner => next.set(menu.designer_return.take().unwrap_or(AppState::MainMenu)),
             MenuAction::Rematch => next.set(AppState::Loading),
             MenuAction::ToMainMenu => next.set(AppState::MainMenu),
         }
@@ -135,6 +142,7 @@ pub(super) fn debug_jump(
             next.set(AppState::DeckSelect);
         }
         "settings" => menu.settings_open = true,
+        "designer" | "designer-box" | "designer-mat" => next.set(AppState::Designer),
         _ => {}
     }
 }

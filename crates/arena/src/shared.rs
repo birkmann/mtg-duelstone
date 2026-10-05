@@ -30,6 +30,11 @@ pub enum AppState {
     InMatch,
     /// Overlay over the final board; InMatch entities are despawned when leaving this state.
     GameOver,
+    /// Deck builder / tester (search, recommendations, stats, sample hands). Owner: menus.
+    DeckBuilder,
+    /// Design studio: sleeves, deckboxes and playmats with a live 3D preview. Entered from the
+    /// main menu or deck select; leaves back to where it came from. Owner: menus.
+    Designer,
 }
 
 /// Parsed command line. Owner: main.rs (inserted before the app runs).
@@ -248,6 +253,8 @@ pub const TABLE_LAYER: usize = 0;
 pub const HAND_LAYER: usize = 1;
 /// Render layer for the main menu's 3D stage (portal + card carousel). Owner: menus.
 pub const MENU_LAYER: usize = 2;
+/// Render layer for the design studio's 3D preview. Owner: menus.
+pub const DESIGNER_LAYER: usize = 3;
 
 /// Root entity of a card. Owner: cards. Children: a front quad (`CardFront`) and a back quad (`CardBack`).
 #[derive(Component, Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -398,6 +405,20 @@ pub struct Settings {
     pub player_name: String,
     pub last_format: Format,
     pub last_deck: HashMap<String, String>,
+    /// Default sleeve design id (see `cosmetics`).
+    pub sleeve: String,
+    /// Default deckbox design id.
+    pub deckbox: String,
+    /// Per-deck sleeve/deckbox choices, keyed by deck ref. The playmat is `theme`.
+    pub deck_looks: HashMap<String, DeckLook>,
+}
+
+/// Cosmetics chosen for one deck; `None` = use the default from `Settings`.
+#[derive(Debug, Clone, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(default)]
+pub struct DeckLook {
+    pub sleeve: Option<String>,
+    pub deckbox: Option<String>,
 }
 
 impl Default for Settings {
@@ -414,6 +435,9 @@ impl Default for Settings {
             player_name: "You".into(),
             last_format: Format::Constructed,
             last_deck: HashMap::new(),
+            sleeve: "classic".into(),
+            deckbox: "leather-tome".into(),
+            deck_looks: HashMap::new(),
         }
     }
 }
@@ -510,3 +534,12 @@ pub enum Sfx {
 /// Play a sound (rate-limited per kind by audio). Owner: audio (reader).
 #[derive(Message, Debug, Clone, Copy)]
 pub struct PlaySfx(pub Sfx);
+
+// =============================================================================================
+// Cosmetics (owner: cosmetics)
+// =============================================================================================
+
+/// `DesignLibrary`: every sleeve/deckbox/playmat design. Owner: cosmetics (load/save); menus'
+/// design studio edits it. `Paints`: painted textures per design (anyone may call `get`).
+/// `Cosmetics`: textures of what's equipped right now (readers: cards, table, menus).
+pub use crate::cosmetics::{Cosmetics, DesignLibrary, Paints};

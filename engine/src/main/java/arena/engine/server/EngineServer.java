@@ -53,6 +53,7 @@ public final class EngineServer {
         final HandlerList handlers = new HandlerList();
         handlers.addHandler(ctx);
         server.setHandler(handlers);
+        arena.engine.deck.Recommender.warmUpAsync();   // ~3 s of data/tag loading off the first deck-builder request
     }
 
     public void start() throws Exception { server.start(); }
@@ -155,9 +156,12 @@ public final class EngineServer {
                 }
                 // ---- cards ----------------------------------------------------------------------------
                 case "GET /cards/search" -> {
-                    final var found = catalog.search(req.getParameter("q") == null ? "" : req.getParameter("q"), req.getParameter("ci"), req.getParameter("type"), req.getParameter("text"), "1".equals(req.getParameter("commander")), Math.min(200, intParam(req, "limit", 60)));
+                    final Integer cmc = req.getParameter("cmc") == null || req.getParameter("cmc").isBlank() ? null : intParam(req, "cmc", 0);
+                    final var found = catalog.search(req.getParameter("q") == null ? "" : req.getParameter("q"), req.getParameter("ci"), req.getParameter("type"), req.getParameter("text"), "1".equals(req.getParameter("commander")),
+                            cmc, req.getParameter("tag"), req.getParameter("sort"), Math.max(0, intParam(req, "offset", 0)), Math.min(200, intParam(req, "limit", 60)));
                     json(resp, 200, catalog.cardsJson(found));
                 }
+                case "POST /deck/recommend" -> json(resp, 200, arena.engine.deck.Recommender.get().recommend(body(req)));
                 case "GET /cards/get" -> {
                     final PaperCard pc = catalog.resolveExact(req.getParameter("name"));
                     if (pc == null) json(resp, 404, err("unknown card")); else json(resp, 200, catalog.cardJson(pc));

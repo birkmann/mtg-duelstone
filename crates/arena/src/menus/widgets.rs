@@ -15,6 +15,12 @@ pub enum Field {
     PlayerName,
     ImportText,
     ImportName,
+    /// Design studio: name of the design being edited.
+    DesignName,
+    /// Deck builder: deck name, card-name search, rules-text search.
+    BuilderName,
+    BuilderSearch,
+    BuilderText,
 }
 
 pub struct WidgetsPlugin;

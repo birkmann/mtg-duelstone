@@ -3,7 +3,7 @@
 use std::time::Duration;
 
 use anyhow::{Context, Result, anyhow};
-use mtg_protocol::{CreateMatch, DeckInfo, Format, MatchInfo};
+use mtg_protocol::{CardQuery, CatalogCard, CreateMatch, DeckBody, DeckFull, DeckInfo, Format, MatchInfo, RecommendRequest, Recommendations};
 use ureq::Agent;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
@@ -131,5 +131,54 @@ impl Rest {
         }
         let resp = agent(Duration::from_secs(30)).post(self.url("/api/deck")).send_json(&body).context("POST deck")?;
         check(resp, "save deck")?.body_mut().read_json().context("parse save result")
+    }
+
+    // ---- deck builder ------------------------------------------------------------------------
+
+    /// `GET /api/cards/search` — catalog search; empty `q` lists cards (popular first on new engines).
+    pub fn search_cards(&self, q: &CardQuery) -> Result<Vec<CatalogCard>> {
+        let mut r = agent(Duration::from_secs(20)).get(self.url("/api/cards/search")).query("q", &q.q).query("limit", q.limit.max(1).to_string());
+        let opt = |r: ureq::RequestBuilder<ureq::typestate::WithoutBody>, k: &str, v: Option<&str>| match v.filter(|v| !v.is_empty()) {
+            Some(v) => r.query(k, v),
+            None => r,
+        };
+        r = opt(r, "ci", q.ci.as_deref());
+        r = opt(r, "type", q.type_line.as_deref());
+        r = opt(r, "text", q.text.as_deref());
+        r = opt(r, "tag", q.tag.as_deref());
+        r = opt(r, "sort", q.sort.as_deref());
+        if let Some(c) = q.cmc {
+            r = r.query("cmc", c.to_string());
+        }
+        if q.commander_only {
+            r = r.query("commander", "1");
+        }
+        if q.offset > 0 {
+            r = r.query("offset", q.offset.to_string());
+        }
+        let mut resp = check(r.call().context("GET /api/cards/search")?, "card search")?;
+        resp.body_mut().with_config().limit(16 * 1024 * 1024).read_json().context("parse card search")
+    }
+    /// `GET /api/deck?ref=` — a deck with full card details.
+    pub fn deck(&self, deck_ref: &str, format: Format) -> Result<DeckFull> {
+        let r = agent(Duration::from_secs(20)).get(self.url("/api/deck")).query("ref", deck_ref).query("format", format.as_str());
+        let mut resp = check(r.call().context("GET /api/deck")?, "load deck")?;
+        resp.body_mut().with_config().limit(16 * 1024 * 1024).read_json().context("parse deck")
+    }
+    /// `POST /api/deck` with a typed body; returns the saved deck.
+    pub fn save_deck_body(&self, body: &DeckBody) -> Result<DeckFull> {
+        let resp = agent(Duration::from_secs(30)).post(self.url("/api/deck")).send_json(body).context("POST deck")?;
+        check(resp, "save deck")?.body_mut().with_config().limit(16 * 1024 * 1024).read_json().context("parse saved deck")
+    }
+    /// `POST /api/deck/validate` → the engine's conformance problem, None when legal.
+    pub fn validate_deck(&self, body: &DeckBody) -> Result<Option<String>> {
+        let resp = agent(Duration::from_secs(30)).post(self.url("/api/deck/validate")).send_json(body).context("POST deck/validate")?;
+        let v: serde_json::Value = check(resp, "validate deck")?.body_mut().read_json().context("parse validate")?;
+        Ok(v.get("problem").and_then(|p| p.as_str()).map(str::to_owned))
+    }
+    /// `POST /api/deck/recommend` — EDHREC-style suggestions for a deck in progress.
+    pub fn recommend(&self, req: &RecommendRequest) -> Result<Recommendations> {
+        let resp = agent(Duration::from_secs(60)).post(self.url("/api/deck/recommend")).send_json(req).context("POST deck/recommend")?;
+        check(resp, "recommend")?.body_mut().with_config().limit(32 * 1024 * 1024).read_json().context("parse recommendations")
     }
 }

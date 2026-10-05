@@ -15,6 +15,7 @@ import forge.model.FModel;
 import java.text.Normalizer;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -125,18 +126,37 @@ public final class CardCatalog {
 
     // ---- search ---------------------------------------------------------------------------------
 
+    /** Every playable (supported) card, one printing per name, sorted by name. */
+    public List<PaperCard> all() { return Collections.unmodifiableList(unique); }
+
+    /** Original signature: name-sorted, no paging (kept for existing callers). */
+    public List<PaperCard> search(final String q, final String ci, final String type, final String text, final boolean commanderOnly, final int limit) {
+        return search(q, ci, type, text, commanderOnly, null, null, "name", 0, limit);
+    }
+
     /**
      * @param q     name substring (or empty)
      * @param ci    color identity the card must fit within, e.g. "WUB" ("C" = colorless only), or null
      * @param type  type line substring, or null
      * @param text  oracle text substring, or null
      * @param commanderOnly only cards that can be a commander
+     * @param cmc   exact mana value, 7 meaning 7+; null = any
+     * @param tag   a {@link CardTags} key the card must carry, or null
+     * @param sort  "name" (prefix matches first, then contains) or "popular" ({@link Recommender#popularity} desc);
+     *              null = "name" when q is non-empty, else "popular" — browsing an empty query by name is useless
+     * @param offset results to skip (paging)
      */
-    public List<PaperCard> search(final String q, final String ci, final String type, final String text, final boolean commanderOnly, final int limit) {
+    public List<PaperCard> search(final String q, final String ci, final String type, final String text, final boolean commanderOnly,
+                                  final Integer cmc, final String tag, final String sort, final int offset, final int limit) {
         final String n = norm(q);
         final byte ciMask = ci == null || ci.isBlank() ? -1 : colorMask(ci);
         final String typeN = type == null ? null : type.toLowerCase(Locale.ROOT).trim();
         final String textN = text == null ? null : text.toLowerCase(Locale.ROOT).trim();
+        final int tagBit = tag == null || tag.isBlank() ? 0 : CardTags.bit(tag.trim().toLowerCase(Locale.ROOT));
+        if (tag != null && !tag.isBlank() && tagBit == 0) throw new IllegalArgumentException("unknown tag: " + tag);
+        final boolean popular = sort == null || sort.isBlank() ? n.isEmpty() : "popular".equalsIgnoreCase(sort.trim());
+        if (popular) Recommender.get();   // popularity needs the data; normally already warm from server start
+        final int want = Math.max(0, offset) + limit;
         final Predicate<PaperCard> cmd = PaperCardPredicates.CAN_BE_COMMANDER;
         final List<PaperCard> prefix = new ArrayList<>(), contains = new ArrayList<>();
         for (final PaperCard pc : unique) {
@@ -144,17 +164,21 @@ public final class CardCatalog {
             if (ciMask >= 0 && (r.getColorIdentity().getColor() & ~ciMask) != 0) continue;
             if (typeN != null && !typeN.isEmpty() && !r.getType().toString().toLowerCase(Locale.ROOT).contains(typeN)) continue;
             if (textN != null && !textN.isEmpty() && (r.getOracleText() == null || !r.getOracleText().toLowerCase(Locale.ROOT).contains(textN))) continue;
+            if (cmc != null) { final int v = r.getManaCost() == null ? 0 : r.getManaCost().getCMC(); if (cmc >= 7 ? v < 7 : v != cmc) continue; }
+            if (tagBit != 0 && (CardTags.mask(pc) & tagBit) == 0) continue;
             if (commanderOnly && !cmd.test(pc)) continue;
             if (n.isEmpty()) { prefix.add(pc); }
             else {
                 final String m = norm(pc.getName());
                 if (m.startsWith(n)) prefix.add(pc); else if (m.contains(n)) contains.add(pc);
             }
-            if (prefix.size() >= limit) break;
+            if (!popular && prefix.size() >= want) break;
         }
-        final List<PaperCard> out = new ArrayList<>(prefix);
-        for (final PaperCard pc : contains) { if (out.size() >= limit) break; out.add(pc); }
-        return out;
+        final List<PaperCard> all = new ArrayList<>(prefix);
+        all.addAll(contains);
+        if (popular) all.sort(Comparator.comparingDouble((PaperCard pc) -> -Recommender.popularity(pc.getName())));   // stable: ties stay name-sorted
+        final int from = Math.min(Math.max(0, offset), all.size());
+        return new ArrayList<>(all.subList(from, Math.min(all.size(), from + limit)));
     }
 
     public static byte colorMask(final String ci) {
@@ -194,6 +218,13 @@ public final class CardCatalog {
         o.addProperty("isBasicLand", t != null && t.isBasicLand());
         o.addProperty("canBeCommander", canBeCommander(pc));
         o.addProperty("banned", isBanned(pc));
+        final JsonArray sub = new JsonArray();
+        if (t != null) for (final String st : t.getSubtypes()) sub.add(st);
+        o.add("subtypes", sub);
+        final JsonArray tags = new JsonArray();
+        for (final String tg : CardTags.tags(pc)) tags.add(tg);
+        o.add("tags", tags);
+        o.addProperty("popularity", Math.round(Recommender.popularity(pc.getName()) * 1000) / 1000.0);   // 0 until the data is warm
         return o;
     }
 
