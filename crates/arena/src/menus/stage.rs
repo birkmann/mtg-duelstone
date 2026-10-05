@@ -23,7 +23,7 @@ use bevy::prelude::*;
 use bevy::render::render_resource::{AsBindGroup, Extent3d, ShaderType, TextureDimension, TextureFormat};
 use bevy::shader::ShaderRef;
 use bevy::window::PrimaryWindow;
-use mtg_client::scryfall::CURATED;
+use mtg_client::curated::CURATED;
 use mtg_client::{ImageRequest, ImageVersion};
 
 use crate::cards::card_mesh;
@@ -293,7 +293,7 @@ fn spawn_stage(
         // ---- card carousel: iconic printings, fetched through the engine's image proxy ----
         let front_mesh = meshes.add(card_mesh(CARD_W, CARD_H, 0.034));
         let back_mat = mats.add(StandardMaterial { base_color_texture: Some(card_images.card_back.clone()), perceptual_roughness: 0.6, reflectance: 0.2, ..default() });
-        let seed = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.subsec_nanos()).unwrap_or(1);
+        let seed = (mtg_client::now_millis() as u32).wrapping_mul(2_654_435_761) | 1;
         let mut pick = Lcg(seed);
         let mut pool: Vec<_> = CURATED.iter().filter(|c| c.name != "Island").collect();
         for i in (1..pool.len()).rev() {

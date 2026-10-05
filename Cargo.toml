@@ -19,7 +19,14 @@ crossbeam-channel = "0.5"
 tungstenite = "0.29"
 ureq = { version = "3", features = ["json"] }
 directories = "6"
-bevy = { version = "0.19", features = ["jpeg", "png", "mesh_picking", "vorbis"] }
+# browser (wasm32) transport: fetch + WebSocket via web-sys, same versions Bevy already pulls in
+wasm-bindgen = "0.2"
+wasm-bindgen-futures = "0.4"
+js-sys = "0.3"
+web-sys = "0.3"
+web-time = "1"
+# system_clipboard: without it EditableText pastes from an in-process buffer, not the OS clipboard.
+bevy = { version = "0.19", features = ["jpeg", "png", "mesh_picking", "vorbis", "system_clipboard"] }
 
 # Bevy's recommended dev setup: our code lightly optimised, dependencies fully.
 [profile.dev]

@@ -120,12 +120,17 @@ fn spawn_main_menu(mut commands: Commands, fonts: Res<ArenaFonts>, settings: Res
                 col.spawn((
                     anim(2.4, 0.7, Fx::Fade(TEXT_DIM)),
                     Node { margin: UiRect::new(Val::Px(0.0), Val::Px(0.0), Val::Px(4.0), Val::Px(30.0)), ..default() },
-                    ui_text(&fonts.body, "Constructed  ·  Commander  ·  vs the Forge AI", 16.0, Color::NONE),
+                    ui_text(&fonts.body, "Constructed  ·  Commander  ·  vs the Forge AI or up to 3 friends", 16.0, Color::NONE),
                     TextShadow { offset: Vec2::new(0.0, 1.0), color: Color::srgba(0.0, 0.0, 0.0, 0.9) },
                 ));
                 let p = spawn_button(col, &fonts, ButtonKind::Primary, "PLAY", Vec2::new(340.0, 72.0));
                 col.commands().entity(p).insert((MenuAction::Play, anim(2.55, 0.75, Fx::SlideX(-640.0))));
-                for (i, (label, act)) in [("DECKS", MenuAction::Decks), ("SETTINGS", MenuAction::OpenSettings), ("QUIT", MenuAction::Quit)].into_iter().enumerate() {
+                for (i, (label, act)) in [("MULTIPLAYER", MenuAction::Multiplayer), ("DECKS", MenuAction::Decks), ("SETTINGS", MenuAction::OpenSettings), ("QUIT", MenuAction::Quit)]
+                    .into_iter()
+                    // a browser tab can't quit itself
+                    .filter(|(_, a)| !(crate::platform::WEB && *a == MenuAction::Quit))
+                    .enumerate()
+                {
                     let kind = if act == MenuAction::Quit { ButtonKind::Ghost } else { ButtonKind::Secondary };
                     let b = spawn_button(col, &fonts, kind, label, Vec2::new(340.0, 54.0));
                     col.commands().entity(b).insert((act, anim(2.65 + i as f32 * 0.09, 0.75, Fx::SlideX(-640.0))));

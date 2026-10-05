@@ -229,6 +229,8 @@ dependencies = [
  "mtg_protocol",
  "serde",
  "serde_json",
+ "wasm-bindgen",
+ "web-sys",
 ]
 
 [[package]]
@@ -3637,6 +3639,7 @@ dependencies = [
  "anyhow",
  "crossbeam-channel",
  "directories",
+ "js-sys",
  "libc",
  "mtg_protocol",
  "serde",
@@ -3644,6 +3647,9 @@ dependencies = [
  "thiserror 2.0.21",
  "tungstenite",
  "ureq",
+ "wasm-bindgen",
+ "wasm-bindgen-futures",
+ "web-sys",
 ]
 
 [[package]]

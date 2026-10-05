@@ -4,6 +4,8 @@
 
 pub mod shared;
 
+pub mod platform;
+
 // board core
 pub mod app_state;
 pub mod cards;

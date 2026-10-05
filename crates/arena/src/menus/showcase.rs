@@ -7,9 +7,8 @@
 //! thread + bounded(1) channel: `mtg_client::scryfall::Showcase` blocks on disk/network and JPEG
 //! decoding is CPU work. The thread stays one image ahead and then waits, so only what's on screen
 //! (plus the next one) is held in memory. If nothing is cached and Scryfall can't be reached, the
-//! layer never appears and the animated backdrop shows as before.
-
-use std::time::{SystemTime, UNIX_EPOCH};
+//! layer never appears and the animated backdrop shows as before — which is also what the browser
+//! build does (no disk cache, and the page should not hammer Scryfall from every visitor).
 
 use bevy::asset::RenderAssetUsages;
 use bevy::image::{CompressedImageFormats, ImageSampler, ImageType};
@@ -17,8 +16,8 @@ use bevy::prelude::*;
 use bevy::render::render_resource::TextureFormat;
 use bevy::ui::{BackgroundGradient, ColorStop, LinearGradient};
 use bevy::window::PrimaryWindow;
-use crossbeam_channel::{Receiver, bounded};
-use mtg_client::scryfall::{Showcase, Showpiece};
+use crossbeam_channel::Receiver;
+use mtg_client::curated::Showpiece;
 
 use crate::shared::{AppState, ArenaFonts};
 use crate::style::*;
@@ -90,9 +89,14 @@ enum Part {
 #[derive(Component)]
 struct Caption(Option<Part>, Color);
 
+#[cfg(target_arch = "wasm32")]
+fn start_feed() {}
+
+#[cfg(not(target_arch = "wasm32"))]
 fn start_feed(mut commands: Commands) {
-    let (tx, rx) = bounded(1);
-    let seed = SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_nanos() as u64).unwrap_or(7);
+    use mtg_client::scryfall::Showcase;
+    let (tx, rx) = crossbeam_channel::bounded(1);
+    let seed = mtg_client::now_millis().wrapping_mul(1_000_003) | 7;
     std::thread::Builder::new()
         .name("showcase".into())
         .spawn(move || {
@@ -117,6 +121,7 @@ fn start_feed(mut commands: Commands) {
     commands.insert_resource(Feed(rx));
 }
 
+#[cfg_attr(target_arch = "wasm32", allow(dead_code))]
 fn decode(bytes: &[u8], descreen: bool) -> Result<Image, String> {
     let mut img = Image::from_buffer(bytes, ImageType::MimeType("image/jpeg"), CompressedImageFormats::NONE, true, ImageSampler::linear(), RenderAssetUsages::RENDER_WORLD)
         .map_err(|e| e.to_string())?;

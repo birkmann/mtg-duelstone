@@ -6,35 +6,7 @@ use anyhow::{Context, Result, anyhow};
 use mtg_protocol::{CreateMatch, DeckInfo, Format, MatchInfo};
 use ureq::Agent;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
-pub enum ImageVersion {
-    /// ~488×680 full card
-    #[default]
-    Normal,
-    /// ~672×936 full card (hover preview)
-    Large,
-    /// art only (Arena-style battlefield frames)
-    ArtCrop,
-}
-
-impl ImageVersion {
-    pub fn as_str(self) -> &'static str {
-        match self {
-            Self::Normal => "normal",
-            Self::Large => "large",
-            Self::ArtCrop => "art_crop",
-        }
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct ImageRequest {
-    pub name: String,
-    pub set: Option<String>,
-    /// back face of a double-faced card
-    pub back: bool,
-    pub version: ImageVersion,
-}
+pub use crate::api::{ImageRequest, ImageVersion};
 
 #[derive(Debug, Clone)]
 pub struct Rest {
@@ -67,6 +39,16 @@ impl Rest {
     /// `ws://…/ws/match/{id}` for this server.
     pub fn ws_url(&self, match_id: &str) -> String {
         format!("{}/ws/match/{match_id}", self.base.replacen("http", "ws", 1))
+    }
+    /// `POST /api/lobby` — open a multiplayer table (host = seat 0).
+    pub fn create_lobby(&self, req: &mtg_protocol::CreateLobby) -> Result<mtg_protocol::SeatTicket> {
+        let resp = agent(Duration::from_secs(30)).post(self.url("/api/lobby")).send_json(req).context("POST /api/lobby")?;
+        check(resp, "create lobby")?.body_mut().read_json().context("parse lobby ticket")
+    }
+    /// `POST /api/lobby/{code}/join`.
+    pub fn join_lobby(&self, code: &str, req: &mtg_protocol::JoinLobby) -> Result<mtg_protocol::SeatTicket> {
+        let resp = agent(Duration::from_secs(30)).post(self.url(&format!("/api/lobby/{code}/join"))).send_json(req).context("POST join")?;
+        check(resp, "join lobby")?.body_mut().read_json().context("parse seat ticket")
     }
     fn url(&self, path: &str) -> String {
         format!("{}{path}", self.base)

@@ -3,6 +3,12 @@
 Server: `forge-ws-server` (Java, wraps Forge). One match = one WebSocket endpoint `ws://host/ws/match/{id}`.
 Any number of sockets may attach to a match (reconnects/tabs); every one gets a full snapshot on connect.
 
+Multiplayer (up to 4 seats, humans and/or Forge AI): a **lobby** match is opened with `POST /api/lobby`; every human
+seat has a secret **token** and its sockets connect with `ws://host/ws/match/{id}?token={token}`. Each human seat is
+its own Forge GUI, so `state`/`input`/`prompt`/`log`/`events` frames are per seat (hidden info redacted for *that*
+player) and only reach that seat's sockets. A socket without a token is accepted only by classic (`POST /api/match`)
+matches, where it is the human. See [Multiplayer](#multiplayer).
+
 Design rule: **the client never computes legality**. Cards are clickable when the engine says so
 (`input.selectable`, or the engine accepts/rejects a click and answers with `flash`), and blocking
 decisions arrive as `prompt` frames listing the legal options; the client answers by index.
@@ -11,7 +17,7 @@ decisions arrive as `prompt` frames listing the legal options; the client answer
 
 | Method | Path | Body / params | Returns |
 |---|---|---|---|
-| GET | `/api/health` | | `{ok, cards, protocol: 2}` |
+| GET | `/api/health` | | `{ok, cards, protocol: 2, publicUrl, web, maxPlayers}` — `publicUrl` = base other machines reach this engine at (invite links: `--public-url`, `$ARENA_PUBLIC_URL`, else the first LAN IPv4); `web` = the browser client is served at `/` |
 | GET | `/api/decks` | `?format=constructed\|commander` (default `commander`), `?kind=user` | `[ {ref, name, commanders[], mainCount, colorIdentity, format, problem} ]` — `ref` = `starter:<name>` (repo `decks/<format>/*.dck`) / `precon:<name>` (commander) / `theme:<name>` (Forge's bundled 60-card constructed decks) / `user:<name>` / `file:<path>`; `problem` is null for legal decks (Forge `DeckFormat` check). The special ref `random` (in `POST /api/match`) picks a legal deck of the match format (starters favoured). |
 | GET | `/api/deck`, `/api/deck/export` | `?ref=…&format=?` | full deck / `.dck` text |
 | POST | `/api/deck`, `/api/deck/validate`, `/api/deck/import` | body gains `format?` (default commander); constructed decks save to `~/.forge/decks/constructed` and need no `commanders` | as before |
@@ -22,6 +28,9 @@ decisions arrive as `prompt` frames listing the legal options; the client answer
 | GET | `/api/match/{id}` | | `matchInfo` |
 | DELETE | `/api/match/{id}` | | |
 | GET | `/api/engine/cards?names=a|b|c` | | `{name: bool}` — can Forge play this card? |
+| POST | `/api/lobby` | `{format, players: 2..4, name, deck}` | **seat ticket** for the host (seat 0): `{id, seat: 0, token, name, invite, …lobby}` — `id` is the 6-letter table code, `invite` = `publicUrl + "/?join=" + id` |
+| GET | `/api/lobby/{code}` | | lobby info (the `lobby` frame body without `you`); code is case-insensitive; 404 = no such table |
+| POST | `/api/lobby/{code}/join` | `{name, deck}` | seat ticket `{id, seat, token, name, format}`; 409 when full / started. Names are made unique at the table; `file:` deck refs are refused |
 
 ## Server → client frames
 
@@ -113,6 +122,12 @@ then see the new state. Ids are the same trackable card/player ids as in `state`
 | `destroyed` / `sacrificed` | `card` (battlefield → graveyard; derived from the zone change, `sacrificed` when Forge announced a sacrifice; tokens excluded) |
 | `turnBegan` | `targetPlayer`, `amount` = turn number |
 
+### `lobby` — a multiplayer table before the start (multiplayer)
+`{t:"lobby", id, format, maxPlayers, host: 0, started, invite, you: <your seat>, canStart, seats: [ {seat, kind: "human"|"ai"|"open", name, deck, deckName, connected, you} ]}`
+— sent to every socket of the table on every change (join, seat edit, a player's socket opening/closing). `canStart` =
+≥ 2 filled seats and every seated human connected. When the host starts, each socket receives `hello` (with `seat`
+and `players`) followed by its seat's normal snapshot; open seats are left out of the game.
+
 ### Others
 `{t:"log", entries:[{i, type, text}]}` (incremental) · `{t:"message", title, text, error}` · `{t:"gameOver", winner, youWon}` ·
 `{t:"flash"}` (rejected action) · `{t:"alert"}` (your attention needed) · `{t:"error", text}` · `{t:"pong"}`.
@@ -122,7 +137,21 @@ then see the new state. Ids are the same trackable card/player ids as in `state`
 - `{t:"click", action:"card", id}` · `{t:"click", action:"player", id}`
 - `{t:"answer", id, value}` — reply to a `prompt`
 - `{t:"settings", stops: { myTurn?: [PhaseType...], oppTurn?: [PhaseType...] }}` — PhaseType = UNTAP, UPKEEP, DRAW, MAIN1, COMBAT_BEGIN, COMBAT_DECLARE_ATTACKERS, COMBAT_DECLARE_BLOCKERS, COMBAT_FIRST_STRIKE_DAMAGE, COMBAT_DAMAGE, COMBAT_END, MAIN2, END_OF_TURN, CLEANUP
-- `{t:"concede"}` · `{t:"resync"}` (re-send snapshot) · `{t:"ping"}`
+- `{t:"concede"}` — takes effect at your seat's next input (conceding while rules resolve would race Forge's game thread); at a multiplayer table the game goes on without you
+- `{t:"resync"}` (re-send snapshot; in a lobby: the `lobby` frame) · `{t:"ping"}`
+- Lobby only: `{t:"lobbyDeck", deck}` (change your deck) · host: `{t:"lobbySeat", seat, kind: "ai"|"open", deck?}` (fill a seat with Forge AI, or reopen it — removes a human, whose token stops working) · host: `{t:"start", seed?}`
+
+## Multiplayer
+
+1. Host: `POST /api/lobby` → ticket; connect with its token; share `invite`.
+2. Invitee: opens `invite` in a browser (the engine serves the wasm client at `/`, which reads `?join=`), or pastes it /
+   the code into the desktop client: `GET /api/lobby/{code}` (format, free seats) → pick a deck → `POST …/join` → connect.
+3. Host fills empty seats with AI (`lobbySeat`) or leaves them out, then `start`.
+4. Turn order is Forge's; `state.game.players` lists everyone, each client draws its own seat at the bottom.
+   A player who is out (`hasLost`) keeps receiving state until `gameOver` (spectating).
+5. A seated human whose sockets stay closed for 2 minutes mid-game concedes automatically and their seat answers
+   every remaining question with defaults, so the table never waits on someone who closed the tab. Reconnecting
+   with the same token within that window resumes the seat (`hello` + snapshot).
 
 ## Threading notes (server)
 Game thread = Forge's; it blocks inside `prompt`s and inside Inputs. Clicks are applied on the headless "EDT"

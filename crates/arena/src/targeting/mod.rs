@@ -24,7 +24,7 @@ impl Plugin for TargetingPlugin {
 
 /// Ground point of a player's avatar, slightly lifted so ribbons start above the mat.
 pub fn player_anchor(view: &GameView, anchors: &BoardAnchors, pid: mtg_protocol::PlayerId) -> Vec3 {
-    anchors.avatar(view.is_me(pid)) + Vec3::Y * 0.25
+    anchors.avatar_of(pid, view.is_me(pid)) + Vec3::Y * 0.25
 }
 
 fn targeting_arrow(

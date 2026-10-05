@@ -54,6 +54,10 @@ Play 1v1 against the Forge AI in **60-card Constructed** or **Commander**.
 - **Feel.** Spring-damped card motion, floating damage numbers, hit shake, spark bursts, land-drop dust, turn
   banners, victory confetti, synthesized sound effects and ambient music that crossfades between menus and
   matches.
+- **Multiplayer, up to 4 players.** Host a table, send the invite link, and friends join from any browser —
+  no install. Empty seats can be filled with the Forge AI; three- and four-player games lay the opponents out in
+  columns across the far side of the table. Constructed and Commander (free-for-all).
+- **Runs in the browser.** The same Bevy client compiles to WebAssembly (WebGL2); the engine serves it.
 - **Decks.** Four Constructed and two Commander starter decks, Forge's precon and theme decks, and an importer
   for pasted lists (Arena/MTGO/Moxfield formats) that shows unresolved names with suggestions.
 
@@ -80,6 +84,30 @@ Skip the menus and jump straight into a game:
 ./run.sh --quick --format commander --deck starter:lathril-elves
 ```
 
+## Multiplayer
+
+1. **Host:** *Multiplayer → Host a table*, pick 2–4 players and your deck. The lobby shows an invite link like
+   `http://192.168.1.20:8080/?join=K7QF2M` — press **Copy link** and send it.
+2. **Friends:** open the link in a browser (Chrome, Firefox, Edge or Safari with WebGL2), pick a deck, **Take seat**.
+   Desktop players can paste the link or code into *Multiplayer → Join a table* (or `./run.sh --join <link>`).
+3. **Host:** add Forge AI to any empty seat you want filled, then **Start game**.
+
+For browser invitees the engine must serve the web client — build it once:
+
+```bash
+tools/build-web.sh        # → web/dist (≈60 MB wasm, sent gzipped ≈13 MB); the engine picks it up automatically
+./run.sh --web            # desktop host, rebuilding the browser client first if it is stale
+./run.sh --serve          # no desktop window: everyone, host included, plays at http://<this machine>:8080/
+```
+
+The invite uses this machine's LAN address, so it works for people on the same network. To play over the
+internet, make the engine reachable (port forward, VPN such as Tailscale, or a tunnel) and tell it its public
+address: `java -jar engine/target/forge-ws-server.jar --public-url https://my-tunnel.example` (or set
+`ARENA_PUBLIC_URL`). Anyone with the link can take an open seat; seats themselves are protected by per-player tokens.
+
+Short on friends? Fill seats with headless bots that play over the real protocol:
+`cargo run -p mtg_client --bin autopilot -- --engine http://127.0.0.1:8080 --join <link> --bots 2`.
+
 <details>
 <summary><b>All command-line flags</b></summary>
 
@@ -89,6 +117,7 @@ Skip the menus and jump straight into a game:
 | `--format constructed\|commander` | game format |
 | `--deck REF`, `--ai-deck REF` | decks as listed by the engine (`starter:…`, `theme:…`, `precon:…`, `user:…`, `random`) |
 | `--seed N` | engine RNG seed |
+| `--join LINK-OR-CODE` | join a multiplayer table (browser: open the link, i.e. `/?join=CODE`) |
 | `--engine URL`, `--no-autolaunch` | use an engine that is already running |
 | `--autoplay` | a built-in bot plays your seat (demos, screenshots) |
 | `--screenshot out.png --exit-after SECS` | save a frame and quit |
@@ -152,6 +181,8 @@ decks/                starter decks
 ```bash
 cargo test --workspace                                                   # protocol, client, layout, view, prompts
 cargo run -p mtg_client --bin autopilot -- --launch --format constructed --games 10   # headless soak vs the AI
+cargo run -p mtg_client --bin autopilot -- --launch --format commander --players 4 --games 3   # 4 bots at one table
+tools/build-web.sh --dev                                                 # quicker browser build for iterating
 cargo run -p arena -- --replay crates/arena/tests/replays/commander_mid.jsonl --engine http://127.0.0.1:8080
 python3 crates/arena/assets/tools/gen_textures.py                        # regenerate card back, playmats, icons
 python3 crates/arena/assets/tools/gen_sfx.py                             # regenerate sound effects and music

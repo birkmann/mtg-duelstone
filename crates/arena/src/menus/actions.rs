@@ -8,12 +8,12 @@ use mtg_protocol::Format;
 use super::deck_select::{DeckList, DeckSelection, ImportState, RefreshDecks, engine_base, start_import, start_save};
 use super::widgets::Field;
 use super::{MenuAction, MenuState};
-use crate::shared::{AppState, EngineConfig, MatchConfig, MatchDeckNames, RetryBoot, Settings};
+use crate::shared::{AppState, EngineConfig, MatchConfig, MatchDeckNames, MatchMode, RetryBoot, Settings};
 use crate::style::ArenaButton;
 
 pub(super) fn handle_actions(
     q: Query<(&Interaction, &MenuAction, Option<&ArenaButton>), Changed<Interaction>>,
-    state: Res<State<AppState>>,
+    (state, mut mode): (Res<State<AppState>>, ResMut<MatchMode>),
     mut next: ResMut<NextState<AppState>>,
     mut menu: ResMut<MenuState>,
     mut settings: ResMut<Settings>,
@@ -34,7 +34,10 @@ pub(super) fn handle_actions(
             continue;
         }
         match act {
-            MenuAction::Play => next.set(AppState::DeckSelect),
+            MenuAction::Play => {
+                *mode = MatchMode::VsAi;
+                next.set(AppState::DeckSelect);
+            }
             MenuAction::Decks => {
                 menu.import_open = false;
                 next.set(AppState::DeckSelect);
@@ -48,11 +51,13 @@ pub(super) fn handle_actions(
             }
             MenuAction::Back => {
                 menu.import_open = false;
-                next.set(AppState::MainMenu);
+                let from_table = *state.get() == AppState::DeckSelect && mode.is_multiplayer();
+                next.set(if from_table { AppState::Multiplayer } else { AppState::MainMenu });
             }
             MenuAction::FormatConstructed | MenuAction::FormatCommander => {
                 let f = if *act == MenuAction::FormatCommander { Format::Commander } else { Format::Constructed };
-                if f != list.format {
+                // a joiner plays the table's format
+                if f != list.format && !matches!(*mode, MatchMode::Join { .. }) {
                     settings.last_format = f;
                     sel.human = None;
                     sel.ai = None;
@@ -89,9 +94,17 @@ pub(super) fn handle_actions(
             MenuAction::SetTheme(t) => settings.theme = (*t).to_string(),
             MenuAction::Rematch => next.set(AppState::Loading),
             MenuAction::ToMainMenu => next.set(AppState::MainMenu),
+            MenuAction::Multiplayer
+            | MenuAction::SetTableSize(_)
+            | MenuAction::HostTable
+            | MenuAction::JoinTable
+            | MenuAction::CopyInvite
+            | MenuAction::SeatAi(_)
+            | MenuAction::SeatOpen(_)
+            | MenuAction::StartTable
+            | MenuAction::LeaveTable => {} // multiplayer::handle_mp_actions
         }
     }
-    let _ = &state;
 }
 
 fn field_text(fields: &Query<(&Field, &EditableText)>, which: Field) -> String {
@@ -103,11 +116,11 @@ fn random_ai(list: &DeckList) -> Option<String> {
     if valid.is_empty() {
         return None;
     }
-    let n = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.subsec_nanos() as usize).unwrap_or(0);
+    let n = mtg_client::now_millis() as usize;
     Some(valid[n % valid.len()].deck_ref.clone())
 }
 
-/// Dev aid for unattended screenshots: `ARENA_MENU_SCREEN=deck|import|settings|commander` jumps
+/// Dev aid for unattended screenshots: `ARENA_MENU_SCREEN=deck|import|settings|commander|multiplayer` jumps
 /// straight to that screen once the main menu is reached.
 pub(super) fn debug_jump(
     state: Res<State<AppState>>,
@@ -135,6 +148,7 @@ pub(super) fn debug_jump(
             next.set(AppState::DeckSelect);
         }
         "settings" => menu.settings_open = true,
+        "multiplayer" => next.set(AppState::Multiplayer),
         _ => {}
     }
 }

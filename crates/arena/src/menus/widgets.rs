@@ -15,6 +15,8 @@ pub enum Field {
     PlayerName,
     ImportText,
     ImportName,
+    /// Multiplayer: pasted invite link or table code.
+    Invite,
 }
 
 pub struct WidgetsPlugin;

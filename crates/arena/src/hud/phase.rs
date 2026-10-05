@@ -17,6 +17,8 @@ pub struct PhaseZone;
 #[derive(Component)]
 pub struct PhaseIcon {
     pub mine: bool,
+    /// seat slot of the avatar this track belongs to (see `GameView::seat_order`)
+    pub slot: usize,
     pub group: Group,
 }
 #[derive(Component)]
@@ -67,7 +69,7 @@ fn shape_bundle(group: Group) -> Vec<(Node, f32)> {
     }
 }
 
-fn spawn_group(p: &mut ChildSpawnerCommands, mine: bool, groups: &[Group]) {
+fn spawn_group(p: &mut ChildSpawnerCommands, mine: bool, slot: usize, groups: &[Group]) {
     p.spawn((
         Node { flex_direction: FlexDirection::Row, align_items: AlignItems::Center, column_gap: vh(0.5), ..default() },
         PhaseZone,
@@ -85,7 +87,7 @@ fn spawn_group(p: &mut ChildSpawnerCommands, mine: bool, groups: &[Group]) {
                     ..default()
                 },
                 BoxShadow(vec![ShadowStyle { color: Color::NONE, x_offset: Val::Px(0.0), y_offset: Val::Px(0.0), spread_radius: vh(0.2), blur_radius: vh(1.4) }]),
-                PhaseIcon { mine, group: g },
+                PhaseIcon { mine, slot, group: g },
             ));
             if mine {
                 w.insert((OnClick(Act::ToggleStopHere(rep_phase(g))), BtnStyle::GHOST, BackgroundColor(Color::NONE)));
@@ -110,19 +112,19 @@ fn spawn_group(p: &mut ChildSpawnerCommands, mine: bool, groups: &[Group]) {
 
 pub fn attach_phase_tracks(mut commands: Commands, fonts: Res<ArenaFonts>, q: Query<(Entity, &AvatarBox), Added<AvatarBox>>) {
     for (e, a) in &q {
-        let mine = a.mine;
+        let (mine, slot) = (a.mine, a.slot);
         commands.entity(e).with_children(|av| {
             // left group, right group, both level with the orb
             av.spawn((
                 Node { position_type: PositionType::Absolute, right: vh(AV + 1.8), top: vh(AV * 0.5), ..default() },
                 Pickable::IGNORE,
             ))
-            .with_children(|l| spawn_group(l, mine, &[Group::Begin, Group::Main1]));
+            .with_children(|l| spawn_group(l, mine, slot, &[Group::Begin, Group::Main1]));
             av.spawn((
                 Node { position_type: PositionType::Absolute, left: vh(AV + 1.8), top: vh(AV * 0.5), ..default() },
                 Pickable::IGNORE,
             ))
-            .with_children(|r| spawn_group(r, mine, &[Group::Combat, Group::Main2, Group::End]));
+            .with_children(|r| spawn_group(r, mine, slot, &[Group::Combat, Group::Main2, Group::End]));
             if mine {
                 spawn_strip(av, &fonts);
             }
@@ -205,7 +207,11 @@ pub fn update_phase_icons(
     let t = time.elapsed_secs();
     for (icon, children, e) in &icons {
         // only the player whose turn it is shows progress
-        let owner_active = if icon.mine { view.my_turn() } else { view.you.is_some() && !view.my_turn() && view.game.player_turn.is_some() };
+        let owner_active = if icon.mine {
+            view.my_turn()
+        } else {
+            view.you.is_some() && !view.my_turn() && view.game.player_turn.is_some() && view.player_in_slot(icon.slot).map(|p| p.id) == view.game.player_turn
+        };
         let (state, glow) = match (owner_active, cur_group) {
             (true, Some(cg)) => {
                 if cg == icon.group {

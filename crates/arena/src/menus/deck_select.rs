@@ -1,21 +1,26 @@
 //! Deck select: format toggle, deck tile grid (fetched from the engine on a background thread),
 //! AI opponent picker (incl. Random) and the deck-import modal.
 //!
-//! Why threads + channels: `mtg_client::Rest` is blocking; the Bevy schedule must never wait on
-//! the network. Each request spawns a short-lived thread that sends one result back.
+//! Why tasks + channels: the Bevy schedule must never wait on the network. Each request runs as an
+//! `mtg_client::spawn` task (a thread on desktop, the page's event loop in the browser) that sends
+//! one result back.
+//!
+//! The same screen picks your deck for a multiplayer table (`MatchMode::Host` / `Join`): PLAY then
+//! reads HOST TABLE / TAKE SEAT, the right panel picks the deck for AI-filled seats, and a joiner's
+//! format is fixed by the table.
 
 use bevy::input::mouse::{MouseScrollUnit, MouseWheel};
 use bevy::prelude::*;
 use bevy::ui::{BackgroundGradient, ColorStop, LinearGradient, RelativeCursorPosition};
-use crossbeam_channel::{Receiver, unbounded};
-use mtg_client::{ImageRequest, ImageVersion, Rest};
+use crossbeam_channel::Receiver;
+use mtg_client::{Api, ImageRequest, ImageVersion};
 use mtg_protocol::{DeckInfo, Format};
 use serde_json::Value;
 
 use super::widgets::{Field, text_field};
 use super::{MenuAction, MenuState};
 use crate::images::CardImages;
-use crate::shared::{AppState, ArenaFonts, EngineConfig, Settings};
+use crate::shared::{AppState, ArenaFonts, EngineConfig, MatchMode, Settings};
 use crate::style::*;
 
 pub struct DeckSelectPlugin;
@@ -128,12 +133,7 @@ fn start_fetches(
     let base = rest_base(&cfg, &settings);
     list.format = fmt;
     list.status = Fetch::Loading;
-    let (tx, rx) = unbounded();
-    fetch.rx = Some(rx);
-    std::thread::spawn(move || {
-        let r = Rest::new(base).decks(fmt).map_err(|e| format!("{e:#}"));
-        let _ = tx.send((fmt, r));
-    });
+    fetch.rx = Some(mtg_client::spawn(async move { (fmt, Api::new(base).decks(fmt).await.map_err(|e| format!("{e:#}"))) }));
 }
 
 fn poll_fetch(
@@ -195,7 +195,12 @@ struct PlayButton;
 #[derive(Component)]
 struct ArtFade(Handle<Image>);
 
-fn spawn_screen(mut commands: Commands, fonts: Res<ArenaFonts>) {
+fn spawn_screen(mut commands: Commands, fonts: Res<ArenaFonts>, mode: Res<MatchMode>) {
+    let (play_label, side_heading) = match *mode {
+        MatchMode::VsAi => ("PLAY", "OPPONENT"),
+        MatchMode::Host { .. } => ("HOST TABLE", "AI SEATS"),
+        MatchMode::Join { .. } => ("TAKE SEAT", "AI SEATS"),
+    };
     commands
         .spawn((
             Name::new("DeckSelect"),
@@ -245,7 +250,7 @@ fn spawn_screen(mut commands: Commands, fonts: Res<ArenaFonts>) {
                         });
                     mid.spawn(ornate_panel(Node { width: Val::Px(310.0), padding: UiRect::all(Val::Px(16.0)), flex_direction: FlexDirection::Column, row_gap: Val::Px(6.0), ..default() }))
                         .with_children(|p| {
-                            p.spawn(heading(&fonts, "OPPONENT", 24.0));
+                            p.spawn(heading(&fonts, side_heading, 24.0));
                             p.spawn(divider());
                             p.spawn((
                                 AiList,
@@ -262,7 +267,7 @@ fn spawn_screen(mut commands: Commands, fonts: Res<ArenaFonts>) {
                     bar.spawn((StatusLine, Node { flex_grow: 1.0, ..default() }, ui_text(&fonts.body, "", 17.0, TEXT_DIM)));
                     let b = spawn_button(bar, &fonts, ButtonKind::Secondary, "IMPORT DECK", Vec2::new(210.0, 56.0));
                     bar.commands().entity(b).insert(MenuAction::OpenImport);
-                    let b = spawn_button(bar, &fonts, ButtonKind::Primary, "PLAY", Vec2::new(280.0, 66.0));
+                    let b = spawn_button(bar, &fonts, ButtonKind::Primary, play_label, Vec2::new(280.0, 66.0));
                     bar.commands().entity(b).insert((MenuAction::StartMatch, PlayButton));
                 });
         });
@@ -699,12 +704,9 @@ pub(super) fn start_import(import: &mut ImportState, base: String, text: String,
     import.busy = true;
     import.error = false;
     import.result = None;
-    let (tx, rx) = unbounded();
-    import.rx = Some(rx);
-    std::thread::spawn(move || {
-        let r = Rest::new(base).import_deck(&text, format).map_err(|e| format!("{e:#}"));
-        let _ = tx.send(ImportMsg::Analyzed(r));
-    });
+    import.rx = Some(mtg_client::spawn(async move {
+        ImportMsg::Analyzed(Api::new(base).import_deck(&text, format).await.map_err(|e| format!("{e:#}")))
+    }));
 }
 
 pub(super) fn start_save(import: &mut ImportState, base: String, name: String, format: Format) {
@@ -740,12 +742,9 @@ pub(super) fn start_save(import: &mut ImportState, base: String, name: String, f
     let name = if name.trim().is_empty() { res.get("name").and_then(|n| n.as_str()).unwrap_or("Imported Deck").to_string() } else { name.trim().to_string() };
     let body = serde_json::json!({ "name": name, "commanders": commanders, "main": names("main"), "sideboard": names("sideboard") });
     import.busy = true;
-    let (tx, rx) = unbounded();
-    import.rx = Some(rx);
-    std::thread::spawn(move || {
-        let r = Rest::new(base).save_deck(&body, format).map_err(|e| format!("{e:#}"));
-        let _ = tx.send(ImportMsg::Saved(r));
-    });
+    import.rx = Some(mtg_client::spawn(async move {
+        ImportMsg::Saved(Api::new(base).save_deck(&body, format).await.map_err(|e| format!("{e:#}")))
+    }));
 }
 
 pub(super) fn engine_base(cfg: &Option<Res<EngineConfig>>, settings: &Settings) -> String {

@@ -21,6 +21,20 @@ pub enum ClientFrame {
     Concede,
     Resync,
     Ping,
+    /// Lobby: change your own deck.
+    LobbyDeck { deck: String },
+    /// Lobby (host only): fill seat `seat` with an AI (`kind: Ai`, optional deck) or reopen it (`Open`, kicks a human).
+    LobbySeat {
+        seat: i64,
+        kind: crate::SeatKind,
+        #[serde(skip_serializing_if = "Option::is_none", default)]
+        deck: Option<String>,
+    },
+    /// Lobby (host only): start the game with the filled seats.
+    Start {
+        #[serde(skip_serializing_if = "Option::is_none", default)]
+        seed: Option<i64>,
+    },
 }
 
 impl ClientFrame {
@@ -129,4 +143,50 @@ pub struct MatchInfo {
     pub sockets: i32,
     pub turn: Option<i32>,
     pub game_over: Option<bool>,
+}
+
+/// `GET /api/health`.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default, rename_all = "camelCase")]
+pub struct ServerInfo {
+    pub ok: bool,
+    pub protocol: Option<u32>,
+    pub cards: Option<i64>,
+    /// Base URL other machines can reach the engine at (invite links).
+    pub public_url: Option<String>,
+    /// The engine serves the browser client (invitees can play without installing anything).
+    pub web: bool,
+    pub max_players: Option<i64>,
+}
+
+/// `POST /api/lobby`.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CreateLobby {
+    pub format: Format,
+    /// Table size including the host, 2..=4.
+    pub players: i64,
+    pub name: String,
+    pub deck: String,
+}
+
+/// `POST /api/lobby/{id}/join`.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct JoinLobby {
+    pub name: String,
+    pub deck: String,
+}
+
+/// Answer to `POST /api/lobby` (host, seat 0) and `POST /api/lobby/{id}/join`: the seat's credential.
+/// Connect with `ws://…/ws/match/{id}?token={token}`.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default, rename_all = "camelCase")]
+pub struct SeatTicket {
+    pub id: String,
+    pub seat: i64,
+    pub token: String,
+    pub name: Option<String>,
+    pub format: Option<Format>,
+    pub invite: Option<String>,
 }

@@ -8,3 +8,4 @@
 *.jsonl
 !crates/**/fixtures/*.jsonl
 !crates/arena/tests/replays/*.jsonl
+/web/dist/

@@ -25,6 +25,12 @@ pub enum ServerFrame {
         /// v2: protocol version; absent on v1 servers.
         #[serde(default)]
         protocol: Option<u32>,
+        /// Multiplayer: the seat this socket speaks for (0 = host / the classic human seat).
+        #[serde(default)]
+        seat: Option<i64>,
+        /// Multiplayer: number of players at the table (humans + AI).
+        #[serde(default)]
+        players: Option<i64>,
     },
     State(StateFrame),
     Input(InputFrame),
@@ -63,6 +69,8 @@ pub enum ServerFrame {
         #[serde(default)]
         text: String,
     },
+    /// Multiplayer: the lobby before the host starts the game (sent on every seat change).
+    Lobby(LobbyFrame),
     #[serde(other)]
     Unknown,
 }
@@ -140,4 +148,83 @@ pub struct EventCue {
     pub zone_from: Option<String>,
     pub zone_to: Option<String>,
     pub label: Option<String>,
+}
+
+/// A multiplayer table before (and, via `GET /api/lobby/{id}`, around) the game. Also the body of
+/// `GET /api/lobby/{id}` and part of the host ticket from `POST /api/lobby`.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default, rename_all = "camelCase")]
+pub struct LobbyFrame {
+    /// Lobby code = match id (6 letters); also the `?join=` value of the invite link.
+    pub id: String,
+    pub format: Option<crate::Format>,
+    pub max_players: i64,
+    /// Seat index of the host (who may change seats and start).
+    pub host: i64,
+    pub started: bool,
+    /// `http://<host lan ip>:<port>/?join=<id>` — absent when the engine has no public URL.
+    pub invite: Option<String>,
+    /// Seat index of the receiving socket (absent in REST answers).
+    pub you: Option<i64>,
+    pub seats: Vec<SeatInfo>,
+    /// ≥ 2 filled seats and every seated human connected.
+    pub can_start: bool,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default, rename_all = "camelCase")]
+pub struct SeatInfo {
+    pub seat: i64,
+    pub kind: SeatKind,
+    pub name: Option<String>,
+    /// deck ref (`random`, `starter:…`, …)
+    pub deck: Option<String>,
+    pub deck_name: Option<String>,
+    pub connected: bool,
+    pub you: bool,
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum SeatKind {
+    Human,
+    Ai,
+    #[default]
+    Open,
+}
+
+#[cfg(test)]
+mod lobby_tests {
+    use super::*;
+    use crate::{ClientFrame, Format};
+
+    #[test]
+    fn lobby_frame_from_engine_json() {
+        let raw = r#"{"t":"lobby","id":"K7QF2M","format":"commander","maxPlayers":4,"host":0,"started":false,
+            "invite":"http://10.0.0.5:8080/?join=K7QF2M","you":1,"canStart":false,
+            "seats":[{"seat":0,"kind":"human","name":"Ana","deck":"random","deckName":"Random deck","connected":true,"you":false},
+                     {"seat":1,"kind":"human","name":"Bo","deck":"precon:X","deckName":"X","connected":true,"you":true},
+                     {"seat":2,"kind":"ai","name":"Forge AI","deck":"random","deckName":"Random deck","connected":true,"you":false},
+                     {"seat":3,"kind":"open","name":null,"deck":null,"deckName":null,"connected":false,"you":false}]}"#;
+        let ServerFrame::Lobby(l) = ServerFrame::parse(raw).unwrap() else { panic!("not a lobby frame") };
+        assert_eq!(l.format, Some(Format::Commander));
+        assert_eq!(l.you, Some(1));
+        assert_eq!(l.seats.len(), 4);
+        assert_eq!(l.seats[2].kind, SeatKind::Ai);
+        assert_eq!(l.seats[3].kind, SeatKind::Open);
+        assert!(l.seats[1].you);
+    }
+
+    #[test]
+    fn hello_carries_seat() {
+        let f = ServerFrame::parse(r#"{"t":"hello","matchId":"K7QF2M","format":"constructed","protocol":2,"seat":2,"players":4}"#).unwrap();
+        assert!(matches!(f, ServerFrame::Hello { seat: Some(2), players: Some(4), .. }));
+    }
+
+    #[test]
+    fn lobby_commands_serialize_like_the_engine_expects() {
+        assert_eq!(ClientFrame::LobbySeat { seat: 3, kind: SeatKind::Ai, deck: None }.to_json(), r#"{"t":"lobbySeat","seat":3,"kind":"ai"}"#);
+        assert_eq!(ClientFrame::Start { seed: None }.to_json(), r#"{"t":"start"}"#);
+        assert_eq!(ClientFrame::LobbyDeck { deck: "random".into() }.to_json(), r#"{"t":"lobbyDeck","deck":"random"}"#);
+    }
 }

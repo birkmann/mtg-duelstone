@@ -4,6 +4,16 @@
 //!
 //! usage: autopilot [--engine URL] [--format constructed|commander] [--games N] [--seed S]
 //!                  [--deck REF] [--ai-deck REF] [--launch] [--jar PATH] [--record DIR] [--verbose]
+//!                  [--players N [--humans H]] [--join INVITE [--bots N]] [--seat CODE:TOKEN]
+//!
+//! `--players N` (3..=4, or 2) plays multiplayer tables instead: a lobby is opened over REST, `H` bots
+//! (default: all N) take seats with their own tokens, the host fills the rest with Forge AI and
+//! starts, and every bot drives its own seat on its own thread — the soak test for per-seat routing.
+//!
+//! `--join INVITE [--bots N]` sits N bots (default 1) at somebody else's table (link or code) and plays
+//! them once its host starts — handy for trying a four-player game alone. `--seat CODE:TOKEN` plays an
+//! existing seat (e.g. the host ticket from `POST /api/lobby`) and, being the host, starts the game
+//! as soon as every seat is filled and connected.
 
 use std::collections::BTreeMap;
 use std::path::PathBuf;
@@ -31,6 +41,15 @@ struct Args {
     verbose: bool,
     game_timeout: u64,
     max_turns: i32,
+    /// multiplayer table size (0 = classic 1 human vs 1 AI)
+    players: u32,
+    /// bot-driven seats at the table (rest are Forge AI)
+    humans: Option<u32>,
+    /// `--join`: invite link or code of an existing table
+    join: Option<String>,
+    bots: u32,
+    /// `--seat CODE:TOKEN`
+    seat: Option<String>,
 }
 
 fn parse_args() -> Result<Args> {
@@ -47,6 +66,11 @@ fn parse_args() -> Result<Args> {
         verbose: false,
         game_timeout: 600,
         max_turns: 60,
+        players: 0,
+        humans: None,
+        join: None,
+        bots: 1,
+        seat: None,
     };
     let mut it = std::env::args().skip(1);
     while let Some(k) = it.next() {
@@ -70,8 +94,13 @@ fn parse_args() -> Result<Args> {
             "--max-turns" => a.max_turns = val("--max-turns")?.parse()?,
             "--game-timeout" => a.game_timeout = val("--game-timeout")?.parse()?,
             "--verbose" | "-v" => a.verbose = true,
+            "--players" => a.players = val("--players")?.parse()?,
+            "--humans" => a.humans = Some(val("--humans")?.parse()?),
+            "--join" => a.join = Some(val("--join")?),
+            "--bots" => a.bots = val("--bots")?.parse()?,
+            "--seat" => a.seat = Some(val("--seat")?),
             "-h" | "--help" => {
-                println!("autopilot [--engine URL] [--format constructed|commander] [--games N] [--seed S] [--deck REF] [--ai-deck REF] [--launch] [--jar PATH] [--record DIR] [--game-timeout SECS] [--max-turns N] [--verbose]");
+                println!("autopilot [--engine URL] [--format constructed|commander] [--games N] [--seed S] [--deck REF] [--ai-deck REF] [--launch] [--jar PATH] [--record DIR] [--game-timeout SECS] [--max-turns N] [--verbose] [--players N [--humans H]] [--join INVITE [--bots N]] [--seat CODE:TOKEN]");
                 std::process::exit(0);
             }
             o => bail!("unknown argument {o}"),
@@ -136,7 +165,17 @@ fn play_game(args: &Args, rest: &Rest, n: u32, human: &str, ai: &str, hist: &mut
     };
     let rec_path = args.record.as_ref().map(|d| d.join(format!("game-{n}-{}.jsonl", args.format.as_str())));
     let link = EngineLink::connect(&rest.ws_url(&m.id), rec_path.as_deref());
-    let mut policy = AutoPolicy::new(args.seed.wrapping_add(n as u64));
+    let res = drive_seat(args, &format!("game {n}"), args.seed.wrapping_add(n as u64), &link, hist, STALL_SECS);
+    let _ = rest.delete_match(&m.id);
+    fin(res, t0)
+}
+
+/// Play one seat over `link` until `gameOver` (or a stall / livelock / timeout). `tag` prefixes log lines.
+fn drive_seat(args: &Args, tag: &str, seed: u64, link: &EngineLink, hist: &mut BTreeMap<String, u32>, stall_secs: u64) -> GameResult {
+    let t0 = Instant::now();
+    let mut res = GameResult::default();
+    let n = tag;
+    let mut policy = AutoPolicy::new(seed);
 
     let mut state: Option<StateFrame> = None;
     let mut you: Option<PlayerId> = None;
@@ -284,9 +323,19 @@ fn play_game(args: &Args, rest: &Rest, n: u32, human: &str, ai: &str, hist: &mut
             note(&mut trail, format!("-> {}", f.to_json()));
             link.send(f);
         }
-        if last_progress.elapsed() > Duration::from_secs(STALL_SECS) {
+        // A seat that is out of a multiplayer game legitimately hears nothing until the table ends.
+        let out = you.and_then(|y| state.as_ref().and_then(|s| s.game.player(y))).is_some_and(|p| p.has_lost);
+        if out {
+            last_progress = Instant::now();
+            // we gave up at the turn cap and are out; the AI seats may play on for a while
+            if conceded {
+                res.won = Some(false);
+                break;
+            }
+        }
+        if last_progress.elapsed() > Duration::from_secs(stall_secs) {
             res.failure = Some(format!(
-                "STALL: no new input/prompt for {STALL_SECS}s (turn {}, last input: {})",
+                "STALL: no new input/prompt for {stall_secs}s (turn {}, last input: {})",
                 res.turns,
                 last_input.as_ref().map(|i| i.message.replace('\n', " | ")).unwrap_or_default()
             ));
@@ -302,8 +351,187 @@ fn play_game(args: &Args, rest: &Rest, n: u32, human: &str, ai: &str, hist: &mut
             last_progress = Instant::now();
         }
     }
-    let _ = rest.delete_match(&m.id);
-    fin(res, t0)
+    res.secs = t0.elapsed().as_secs_f32();
+    res
+}
+
+/// One multiplayer table: lobby over REST, `humans` bot seats (each on its own thread), AI for the rest.
+fn play_table(args: &Args, rest: &Rest, n: u32, decks: &[String], hist: &mut BTreeMap<String, u32>) -> GameResult {
+    use mtg_protocol::{CreateLobby, JoinLobby, SeatKind};
+    let t0 = Instant::now();
+    let players = args.players.clamp(2, 4);
+    let humans = args.humans.unwrap_or(players).clamp(1, players);
+    let fail = |msg: String| GameResult { failure: Some(msg), secs: t0.elapsed().as_secs_f32(), ..Default::default() };
+    let host = match rest.create_lobby(&CreateLobby { format: args.format, players: players as i64, name: "Bot 1".into(), deck: decks[0].clone() }) {
+        Ok(t) => t,
+        Err(e) => return fail(format!("create lobby: {e:#}")),
+    };
+    let mut tickets = vec![host.clone()];
+    for i in 1..humans {
+        match rest.join_lobby(&host.id, &JoinLobby { name: format!("Bot {}", i + 1), deck: decks[i as usize % decks.len()].clone() }) {
+            Ok(t) => tickets.push(t),
+            Err(e) => return fail(format!("join lobby: {e:#}")),
+        }
+    }
+    println!("  [table {n}] lobby {} (invite {}), {humans} bots + {} AI", host.id, host.invite.clone().unwrap_or_default(), players - humans);
+    let links: Vec<EngineLink> = tickets.iter().map(|t| EngineLink::connect(&rest.ws_url(&format!("{}?token={}", t.id, t.token)), None)).collect();
+    // host: once its socket is up (commands sent while offline are dropped), fill the empty seats
+    // with AI, then start once everyone is connected
+    let mut early: Vec<Vec<LinkEvent>> = vec![Vec::new(); links.len()];
+    let deadline = Instant::now() + Duration::from_secs(20);
+    let (mut started, mut filled) = (false, false);
+    while !started && Instant::now() < deadline {
+        for (i, l) in links.iter().enumerate() {
+            while let Ok(e) = l.rx.try_recv() {
+                if i == 0
+                    && let LinkEvent::Frame(ServerFrame::Lobby(lf)) = &e
+                {
+                    if !filled {
+                        filled = true;
+                        for s in humans..players {
+                            links[0].send(ClientFrame::LobbySeat { seat: s as i64, kind: SeatKind::Ai, deck: Some(decks[s as usize % decks.len()].clone()) });
+                        }
+                    }
+                    if !started && lf.can_start && lf.seats.iter().all(|s| s.kind != SeatKind::Open) {
+                        links[0].send(ClientFrame::Start { seed: Some((args.seed as i64).wrapping_add(n as i64)) });
+                        started = true;
+                    }
+                }
+                if matches!(e, LinkEvent::Frame(ServerFrame::Lobby(_))) {
+                    continue;
+                }
+                early[i].push(e);
+            }
+        }
+        std::thread::sleep(Duration::from_millis(30));
+    }
+    if !started {
+        return fail("lobby never became startable".into());
+    }
+    // Each seat plays on its own thread; frames that raced ahead of the split are replayed first.
+    let results: Vec<(GameResult, BTreeMap<String, u32>)> = std::thread::scope(|sc| {
+        let handles: Vec<_> = links
+            .into_iter()
+            .zip(early)
+            .enumerate()
+            .map(|(i, (link, early))| {
+                sc.spawn(move || {
+                    let (tx, rx) = crossbeam_channel::unbounded();
+                    for e in early {
+                        let _ = tx.send(e);
+                    }
+                    // forward the live link behind the replayed prefix
+                    let fwd = EngineLink { tx: link.tx.clone(), rx };
+                    let src = link.rx.clone();
+                    std::thread::spawn(move || {
+                        while let Ok(e) = src.recv() {
+                            if tx.send(e).is_err() {
+                                break;
+                            }
+                        }
+                    });
+                    let mut h = BTreeMap::new();
+                    let r = drive_seat(args, &format!("table {n} seat {}", i + 1), args.seed.wrapping_add((n * 10 + i as u32) as u64), &fwd, &mut h, STALL_SECS * 3);
+                    drop(link);
+                    (r, h)
+                })
+            })
+            .collect();
+        handles.into_iter().map(|h| h.join().unwrap_or_else(|_| (GameResult { failure: Some("seat thread panicked".into()), ..Default::default() }, BTreeMap::new()))).collect()
+    });
+    let mut out = GameResult { secs: t0.elapsed().as_secs_f32(), ..Default::default() };
+    for (i, (r, h)) in results.into_iter().enumerate() {
+        for (k, v) in h {
+            *hist.entry(k).or_default() += v;
+        }
+        out.turns = out.turns.max(r.turns);
+        if out.winner.is_none() {
+            out.winner = r.winner.clone();
+        }
+        if r.won == Some(true) {
+            out.won = Some(true);
+        }
+        if let Some(f) = r.failure {
+            out.failure.get_or_insert(format!("seat {}: {f}", i + 1));
+        }
+    }
+    out.won.get_or_insert(false);
+    out
+}
+
+/// `--join` / `--seat`: play seats at an existing table until it ends.
+fn sit_in(args: &Args, rest: &Rest) -> Result<bool> {
+    use mtg_protocol::{JoinLobby, SeatKind};
+    let mut seats: Vec<(String, String, bool)> = Vec::new(); // (code, token, is_host)
+    if let Some(s) = &args.seat {
+        let (code, token) = s.split_once(':').ok_or_else(|| anyhow::anyhow!("--seat wants CODE:TOKEN"))?;
+        seats.push((code.to_string(), token.to_string(), true));
+    }
+    if let Some(inv) = &args.join {
+        let (_, code) = mtg_client::parse_invite(inv).ok_or_else(|| anyhow::anyhow!("not an invite link or code: {inv}"))?;
+        for i in 0..args.bots {
+            let t = rest.join_lobby(&code, &JoinLobby { name: format!("Bot {}", i + 1), deck: args.deck.clone().unwrap_or_else(|| "random".into()) })?;
+            println!("seated {} at table {} (seat {})", t.name.clone().unwrap_or_default(), t.id, t.seat + 1);
+            seats.push((t.id, t.token, false));
+        }
+    }
+    let results: Vec<GameResult> = std::thread::scope(|sc| {
+        let hs: Vec<_> = seats
+            .iter()
+            .enumerate()
+            .map(|(i, (code, token, host))| {
+                sc.spawn(move || {
+                    let link = EngineLink::connect(&rest.ws_url(&format!("{code}?token={token}")), None);
+                    if *host {
+                        // wait in the lobby until every seat is filled and connected, then start
+                        let (tx, rx) = crossbeam_channel::unbounded();
+                        let mut started = false;
+                        while !started {
+                            match link.rx.recv_timeout(Duration::from_secs(600)) {
+                                Ok(LinkEvent::Frame(ServerFrame::Lobby(lf))) => {
+                                    if lf.can_start && lf.seats.iter().all(|s| s.kind != SeatKind::Open) {
+                                        link.send(ClientFrame::Start { seed: Some(args.seed as i64) });
+                                    }
+                                }
+                                Ok(e @ LinkEvent::Frame(ServerFrame::Hello { .. })) => {
+                                    started = true;
+                                    let _ = tx.send(e);
+                                }
+                                Ok(_) => {}
+                                Err(_) => return GameResult { failure: Some("nobody joined within 10 minutes".into()), ..Default::default() },
+                            }
+                        }
+                        let src = link.rx.clone();
+                        std::thread::spawn(move || {
+                            while let Ok(e) = src.recv() {
+                                if tx.send(e).is_err() {
+                                    break;
+                                }
+                            }
+                        });
+                        let fwd = EngineLink { tx: link.tx.clone(), rx };
+                        let mut h = BTreeMap::new();
+                        drive_seat(args, &format!("seat {}", i + 1), args.seed.wrapping_add(i as u64), &fwd, &mut h, 3600)
+                    } else {
+                        let mut h = BTreeMap::new();
+                        drive_seat(args, &format!("seat {}", i + 1), args.seed.wrapping_add(i as u64), &link, &mut h, 3600)
+                    }
+                })
+            })
+            .collect();
+        hs.into_iter().map(|h| h.join().unwrap_or_default()).collect()
+    });
+    let mut ok = true;
+    for (i, r) in results.iter().enumerate() {
+        match &r.failure {
+            Some(f) => {
+                ok = false;
+                println!("seat {}: FAILED: {f}", i + 1);
+            }
+            None => println!("seat {}: {} winner={:?} turns={}", i + 1, if r.won == Some(true) { "WON" } else { "lost" }, r.winner, r.turns),
+        }
+    }
+    Ok(ok)
 }
 
 fn action_name(a: ClickAction) -> &'static str {
@@ -358,6 +586,9 @@ fn run(args: &Args) -> Result<bool> {
     if let Some(dir) = &args.record {
         std::fs::create_dir_all(dir)?;
     }
+    if args.join.is_some() || args.seat.is_some() {
+        return sit_in(args, &rest);
+    }
     let decks = rest.decks(args.format)?;
     println!("engine ok, {} {} decks", decks.len(), args.format.as_str());
     let mut rng = Rng(args.seed.wrapping_mul(0x9E37_79B9_7F4A_7C15) | 1);
@@ -367,8 +598,17 @@ fn run(args: &Args) -> Result<bool> {
     for n in 1..=args.games {
         let human = pick_deck(&decks, args.deck.as_deref(), &mut rng, None)?;
         let ai = pick_deck(&decks, args.ai_deck.as_deref(), &mut rng, Some(&human))?;
-        println!("game {n}/{}: {human}  vs  {ai}", args.games);
-        let r = play_game(args, &rest, n, &human, &ai, &mut hist);
+        let r = if args.players >= 2 {
+            let mut seat_decks = vec![human.clone(), ai.clone()];
+            while seat_decks.len() < 4 {
+                seat_decks.push(pick_deck(&decks, None, &mut rng, None)?);
+            }
+            println!("table {n}/{}: {} players: {}", args.games, args.players, seat_decks[..args.players.clamp(2, 4) as usize].join("  ·  "));
+            play_table(args, &rest, n, &seat_decks, &mut hist)
+        } else {
+            println!("game {n}/{}: {human}  vs  {ai}", args.games);
+            play_game(args, &rest, n, &human, &ai, &mut hist)
+        };
         played += 1;
         match (&r.failure, r.won) {
             (Some(f), _) => {

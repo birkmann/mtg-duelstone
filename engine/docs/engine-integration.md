@@ -52,6 +52,20 @@ implement game logic; when a new prompt kind appears it is already one of the `I
 5. **Before any blocking prompt, a fresh `state` is pushed** (`ask()`), so the client renders the prompt
    against current zones.
 6. **`assignCombatDamage` → null means "assign another attacker first"** and re-queues the attacker; it is not "auto".
+7. **Concede only while the game thread is parked on that seat's Input** (`MatchSession.driveConcede`, checked with
+   `InputIntrospect.awaiting`). `PlayerControllerHuman.concede()` runs `checkGameOverCondition` → `onPlayerLost` on
+   the calling thread; from the EDT while the game thread resolves anything it throws
+   `ConcurrentModificationException` (found by the 4-bot multiplayer autopilot). An Input object outlives its
+   release, so "the proxy has an input" is not enough — its `finished` flag must still be false.
+
+## Multiplayer seats
+
+`MatchSession` holds up to four `Seat`s. Every human seat owns its own `WsGuiGame` (passed to
+`HostedMatch.startMatch(…, Map<RegisteredPlayer, IGuiGame>)`, exactly how Forge's own network play hands one GUI to
+each remote human), its own `PromptBroker` and its own event subscriber, so hidden information, prompts, phase stops
+and auto-yields are per player for free. Frames from a seat's GUI go only to that seat's sockets (`seatOut`).
+The lobby (`lobby` frames, `lobbySeat`/`start`) lives entirely in `MatchSession`; Forge only sees the filled seats
+once the host starts. `MatchManager` ticks every 2 s to put abandoned seats on autopilot (rule 7).
 
 ## Hidden information
 

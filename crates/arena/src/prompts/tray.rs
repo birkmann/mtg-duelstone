@@ -179,7 +179,7 @@ fn refresh_tray(input: Res<CurrentInput>, mut cells: Query<(&TrayCell, &mut OnCl
         let hi = c.0.iter().any(|id| f.highlighted.contains(id));
         let sel = c.0.iter().any(|id| f.selectable.contains(id));
         let next = Act::ClickCard(next_click(&c.0, &f.highlighted));
-        if !matches!((click.0, next), (Act::ClickCard(a), Act::ClickCard(b)) if a == b) {
+        if !matches!((&click.0, &next), (Act::ClickCard(a), Act::ClickCard(b)) if a == b) {
             click.0 = next;
         }
         *bc = BorderColor::all(if hi { GOLD } else if sel { BLUE_GLOW } else { Color::NONE });
