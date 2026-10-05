@@ -12,7 +12,7 @@ Play 1v1 against the Forge AI in **60-card Constructed** or **Commander**.
 ![Engine](https://img.shields.io/badge/rules-Forge-6b4f2a)
 ![License](https://img.shields.io/badge/license-GPL--3.0-blue)
 
-![A Constructed match in progress](docs/screenshots/match.png)
+![A Constructed match: Dimir Control vs Gruul Dinosaurs, choosing a target for Go for the Throat](docs/screenshots/match.jpg)
 
 </div>
 
@@ -22,16 +22,18 @@ Play 1v1 against the Forge AI in **60-card Constructed** or **Commander**.
 
 | | |
 |:---:|:---:|
-| ![Main menu](docs/screenshots/menu.png) | ![Deck selection](docs/screenshots/decks.png) |
-| **Main menu.** Boot splash, then Play / Decks / Settings | **Choose your deck.** Constructed ↔ Commander, AI opponent or Random, deck import |
-| ![Opening hand](docs/screenshots/mulligan.png) | ![Hover preview](docs/screenshots/hover.png) |
-| **Opening hand.** Keep or mulligan | **Hover a card.** Large preview with rules text on the right edge |
-| ![Combat](docs/screenshots/combat.png) | ![Targeting](docs/screenshots/targeting.png) |
-| **Combat.** Attackers push forward, blocker ribbons | **The stack.** Spells fan out right, arrows show their targets |
-| ![Commander](docs/screenshots/commander.png) | ![Combat damage](docs/screenshots/damage.png) |
-| **Commander.** 40 life, command zone, commander damage | **Prompts.** Every engine question has a dialog, e.g. damage assignment |
+| ![Main menu](docs/screenshots/menu.jpg) | ![Deck selection](docs/screenshots/decks.jpg) |
+| **Main menu.** Animated card-back backdrop, Play · Decks · Settings | **Choose your deck.** Constructed ↔ Commander, pick the AI's deck or Random, import your own |
+| ![Opening hand](docs/screenshots/mulligan.jpg) | ![Hover preview while paying mana](docs/screenshots/hover.jpg) |
+| **Opening hand.** Keep or mulligan | **Hover preview & mana payment.** Big card on the right, cost pips, Auto Pay |
+| ![Commander game with goblin and elf tokens](docs/screenshots/commander.jpg) | ![Counterspell on the stack](docs/screenshots/stack.jpg) |
+| **Commander.** Krenko's goblin tokens stack up (x5), elves (x11), commander damage | **The stack.** The AI counters your spell; the button reads *Resolve* |
+| ![Combat](docs/screenshots/combat.jpg) | ![Combat damage assignment](docs/screenshots/damage.jpg) |
+| **Combat.** A Commander alpha strike: ribbons to the defender, Inferno Titan's ability on the stack | **Prompts.** Every engine question gets a dialog, e.g. trample damage assignment |
 
-<p align="center"><img src="docs/screenshots/gameover.png" width="70%" alt="Game over screen"><br><b>Victory / Defeat</b> with Rematch</p>
+| ![Victory](docs/screenshots/victory.jpg) | ![Defeat](docs/screenshots/defeat.jpg) |
+|:---:|:---:|
+| **Victory.** Confetti, Rematch or back to the menu | **Defeat.** Better luck next time |
 
 ## Features
 
