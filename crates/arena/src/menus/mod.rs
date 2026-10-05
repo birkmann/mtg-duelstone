@@ -1,4 +1,4 @@
-//! Menus: Boot splash, Main menu, Deck select (+ deck import), Settings overlay, Loading/VS
+//! Menus: Boot splash (over a full-screen card-art showcase), Main menu, Deck select (+ deck import), Settings overlay, Loading/VS
 //! screen and the GameOver banner — all `bevy_ui`, styled with `style`.
 //!
 //! Why one `MenuAction` enum: every clickable thing in the menus carries one, and a single system
@@ -16,6 +16,7 @@ mod game_over;
 mod loading;
 mod main_menu;
 mod settings_ui;
+mod showcase;
 pub mod widgets;
 
 use bevy::prelude::*;
@@ -81,6 +82,7 @@ impl Plugin for MenusPlugin {
                 loading::LoadingPlugin,
                 game_over::GameOverPlugin,
                 widgets::WidgetsPlugin,
+                showcase::ShowcasePlugin,
             ))
             .add_systems(Update, (actions::handle_actions, actions::debug_jump));
     }

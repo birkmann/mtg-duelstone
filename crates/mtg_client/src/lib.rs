@@ -7,11 +7,13 @@
 //! - [`Rest`] — blocking REST helpers (call from a task pool / thread, never the main schedule).
 //! - [`autoplay::AutoPolicy`] — decide a reply to an input/prompt (autopilot bin + arena `--autoplay`).
 //! - [`launcher::ensure_engine`] — start the Java engine if `/api/health` doesn't answer.
+//! - [`scryfall::Showcase`] — curated card artworks + artist facts for the splash screens (cached).
 
 pub mod autoplay;
 pub mod launcher;
 pub mod record;
 pub mod rest;
+pub mod scryfall;
 pub mod ws;
 
 pub use launcher::{EngineProcess, LaunchConfig, ensure_engine};
