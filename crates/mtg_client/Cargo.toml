@@ -1,0 +1,16 @@
+[package]
+name = "mtg_client"
+edition.workspace = true
+version.workspace = true
+license.workspace = true
+
+[dependencies]
+mtg_protocol.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+anyhow.workspace = true
+thiserror.workspace = true
+crossbeam-channel.workspace = true
+tungstenite.workspace = true
+ureq.workspace = true
+directories.workspace = true

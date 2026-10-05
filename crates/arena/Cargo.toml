@@ -1,0 +1,23 @@
+[package]
+name = "arena"
+edition.workspace = true
+version.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "mtg-arena"
+path = "src/main.rs"
+
+[features]
+# Fast iteration: cargo run -p arena --features dev
+dev = ["bevy/dynamic_linking"]
+
+[dependencies]
+bevy.workspace = true
+mtg_protocol.workspace = true
+mtg_client.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+anyhow.workspace = true
+crossbeam-channel.workspace = true
+directories.workspace = true

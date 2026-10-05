@@ -1,0 +1,1 @@
+I need you to launch five sonnet 5.5 sub-agents and help me build a triple A quality game using PLAN.md What I want you to do is I want you to launch thesesub-agents, build the game without asking me any questions at all. And once you're done, report back to me.

@@ -1,0 +1,268 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Commander Arena — engine test client</title>
+<style>
+  :root { color-scheme: dark; font: 13px/1.4 system-ui, sans-serif; }
+  body { margin: 0; background: #14161a; color: #ddd; display: grid; grid-template-rows: auto 1fr auto; height: 100vh; }
+  header { padding: 8px 12px; background: #1d2026; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  main { display: grid; grid-template-columns: 1fr 320px; overflow: hidden; }
+  #table { overflow: auto; padding: 8px 12px; }
+  #side { border-left: 1px solid #333; display: grid; grid-template-rows: auto 1fr; overflow: hidden; }
+  #log { overflow: auto; font-family: ui-monospace, monospace; font-size: 11px; padding: 6px; white-space: pre-wrap; }
+  #inputbar { background: #1d2026; padding: 8px 12px; display: flex; gap: 10px; align-items: center; border-top: 1px solid #333; }
+  #inputbar .msg { flex: 1; white-space: pre-wrap; }
+  button { background: #2c313a; color: #eee; border: 1px solid #444; border-radius: 4px; padding: 4px 10px; cursor: pointer; }
+  button:disabled { opacity: .4; cursor: default; }
+  button.primary { background: #2d5be3; border-color: #3b6cf0; }
+  select, input { background: #222; color: #eee; border: 1px solid #444; padding: 3px 6px; border-radius: 4px; }
+  .player { border: 1px solid #333; border-radius: 6px; margin: 6px 0; padding: 6px 8px; }
+  .player.turn { border-color: #c90; }
+  .player h3 { margin: 0 0 4px; font-size: 13px; display: flex; gap: 12px; align-items: baseline; cursor: pointer; }
+  .player h3.selectable { outline: 2px solid #4af; border-radius: 4px; }
+  .zone { display: flex; flex-wrap: wrap; gap: 4px; margin: 3px 0; min-height: 18px; }
+  .zone .label { color: #888; width: 72px; flex: none; }
+  .card { border: 1px solid #555; border-radius: 4px; padding: 2px 6px; background: #23262c; cursor: pointer; max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .card.tapped { transform: rotate(6deg); opacity: .7; }
+  .card.selectable { border-color: #4af; box-shadow: 0 0 0 1px #4af; }
+  .card.highlighted { background: #2d5be3; }
+  .card.weak { border-style: dashed; border-color: #8c8; }
+  .card.hidden { background: #33281a; color: #a98; }
+  .card.land { color: #9c9; } .card.creature { color: #fc8; } .card.commander { font-weight: bold; }
+  .card.attacking { border-color: #f55; }
+  .stack { border: 1px dashed #664; border-radius: 6px; padding: 6px 8px; margin: 6px 0; background: #1a1a14; }
+  .stack .item { padding: 2px 0; }
+  dialog { background: #1d2026; color: #eee; border: 1px solid #555; border-radius: 8px; max-width: 720px; }
+  dialog .opts { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0; max-height: 50vh; overflow: auto; }
+  dialog .opt { border: 1px solid #555; border-radius: 4px; padding: 4px 8px; cursor: pointer; background: #23262c; }
+  dialog .opt.on { background: #2d5be3; }
+  .phases { display: flex; gap: 2px; }
+  .phases span { padding: 1px 5px; border-radius: 3px; background: #222; color: #777; font-size: 11px; cursor: pointer; }
+  .phases span.cur { background: #c90; color: #000; }
+  .phases span.stop { outline: 1px solid #4af; color: #ccc; }
+  .muted { color: #888; }
+</style>
+</head>
+<body>
+<header>
+  <strong>Commander Arena</strong> <span class="muted">engine test client</span>
+  <label>You: <select id="humanDeck"></select></label>
+  <label>AI: <select id="aiDeck"></select></label>
+  <button id="newMatch" class="primary">New match</button>
+  <span id="conn" class="muted">disconnected</span>
+  <span style="flex:1"></span>
+  <span id="turn" class="muted"></span>
+  <div class="phases" id="phases"></div>
+  <button id="concede">Concede</button>
+</header>
+<main>
+  <div id="table"></div>
+  <div id="side">
+    <div style="padding:6px 8px;border-bottom:1px solid #333" class="muted">Log</div>
+    <div id="log"></div>
+  </div>
+</main>
+<div id="inputbar">
+  <div class="msg" id="msg">—</div>
+  <button id="okBtn" disabled>OK</button>
+  <button id="cancelBtn" disabled>Cancel</button>
+</div>
+<dialog id="dlg"></dialog>
+<script>
+const $ = (s) => document.querySelector(s);
+const PHASES = ['UNTAP','UPKEEP','DRAW','MAIN1','COMBAT_BEGIN','COMBAT_DECLARE_ATTACKERS','COMBAT_DECLARE_BLOCKERS','COMBAT_FIRST_STRIKE_DAMAGE','COMBAT_DAMAGE','COMBAT_END','MAIN2','END_OF_TURN','CLEANUP'];
+const SHORT = {UNTAP:'Un',UPKEEP:'Up',DRAW:'Dr',MAIN1:'M1',COMBAT_BEGIN:'BC',COMBAT_DECLARE_ATTACKERS:'DA',COMBAT_DECLARE_BLOCKERS:'DB',COMBAT_FIRST_STRIKE_DAMAGE:'FS',COMBAT_DAMAGE:'CD',COMBAT_END:'EC',MAIN2:'M2',END_OF_TURN:'End',CLEANUP:'Cl'};
+let ws, state = null, input = null, prompt = null, matchId = null;
+const send = (o) => ws && ws.readyState === 1 && ws.send(JSON.stringify(o));
+
+async function loadDecks() {
+  const decks = await (await fetch('/api/decks')).json();
+  for (const sel of [$('#humanDeck'), $('#aiDeck')]) {
+    sel.innerHTML = decks.map(d => `<option value="${d.ref}">${d.name} (${d.commanders.join('/')})</option>`).join('');
+  }
+  $('#aiDeck').selectedIndex = Math.min(1, decks.length - 1);
+  const saved = localStorage.getItem('matchId');
+  if (saved) { const m = await (await fetch('/api/match/' + saved)).json(); if (m.id && !m.over) connect(saved); }
+}
+$('#newMatch').onclick = async () => {
+  const body = { humanDeck: $('#humanDeck').value, aiDeck: $('#aiDeck').value, humanName: 'You' };
+  const m = await (await fetch('/api/match', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) })).json();
+  if (m.error) { alert(m.error); return; }
+  $('#log').textContent = '';
+  connect(m.id);
+};
+$('#concede').onclick = () => confirm('Concede?') && send({ t: 'concede' });
+$('#okBtn').onclick = () => send({ t: 'click', action: 'ok' });
+$('#cancelBtn').onclick = () => send({ t: 'click', action: 'cancel' });
+document.addEventListener('keydown', (e) => {
+  if (e.target.tagName === 'INPUT' || $('#dlg').open) return;
+  if (e.code === 'Space' || e.key === 'Enter') { e.preventDefault(); if (!$('#okBtn').disabled) $('#okBtn').click(); }
+  if (e.key === 'Escape') { if (!$('#cancelBtn').disabled) $('#cancelBtn').click(); }
+});
+
+function connect(id) {
+  matchId = id; localStorage.setItem('matchId', id);
+  if (ws) ws.close();
+  ws = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws/match/${id}`);
+  ws.onopen = () => $('#conn').textContent = 'connected ' + id;
+  ws.onclose = () => $('#conn').textContent = 'disconnected';
+  ws.onmessage = (ev) => onFrame(JSON.parse(ev.data));
+}
+
+function onFrame(f) {
+  switch (f.t) {
+    case 'state': state = f; render(); break;
+    case 'input': input = f; renderInput(); render(); break;
+    case 'prompt': prompt = f; showPrompt(f); break;
+    case 'log': for (const e of f.entries) appendLog(e); break;
+    case 'message': appendLog({ type: 'MESSAGE', text: `[${f.title}] ${f.text}` }); break;
+    case 'gameOver': appendLog({ type: 'GAME', text: `GAME OVER — winner: ${f.winner}` }); alert(`Game over — ${f.youWon ? 'you won!' : 'you lost.'} (${f.winner})`); localStorage.removeItem('matchId'); break;
+    case 'flash': document.body.style.background = '#421'; setTimeout(() => document.body.style.background = '', 120); break;
+    case 'error': appendLog({ type: 'ERROR', text: f.text }); break;
+  }
+}
+function appendLog(e) {
+  const el = $('#log'); const atBottom = el.scrollTop + el.clientHeight >= el.scrollHeight - 20;
+  el.textContent += `${e.type.padEnd(14)} ${e.text}\n`;
+  if (atBottom) el.scrollTop = el.scrollHeight;
+}
+
+function renderInput() {
+  if (!input) return;
+  $('#msg').textContent = input.message || '—';
+  $('#okBtn').textContent = input.ok.label || 'OK'; $('#okBtn').disabled = !input.ok.enabled;
+  $('#cancelBtn').textContent = input.cancel.label || 'Cancel'; $('#cancelBtn').disabled = !input.cancel.enabled;
+}
+
+function cardEl(c, opts = {}) {
+  const d = document.createElement('div');
+  d.className = 'card';
+  if (c.hidden) { d.classList.add('hidden'); d.textContent = '🂠'; d.title = 'hidden'; }
+  else {
+    const s = c.state || {};
+    d.textContent = (c.tapped ? '⟳ ' : '') + c.name + (s.isCreature ? ` ${s.power}/${s.toughness}` : '') + (c.damage ? ` (${c.damage} dmg)` : '');
+    d.title = `${s.type || ''} ${s.manaCost || ''}\n${s.oracleText || ''}`.trim();
+    if (s.isLand) d.classList.add('land'); if (s.isCreature) d.classList.add('creature');
+    if (c.commander) d.classList.add('commander'); if (c.tapped) d.classList.add('tapped'); if (c.attacking) d.classList.add('attacking');
+    const ctr = Object.entries(c.counters || {}); if (ctr.length) d.textContent += ' [' + ctr.map(([k, v]) => `${k}:${v}`).join(' ') + ']';
+  }
+  if (input?.selectable?.includes(c.id)) d.classList.add('selectable');
+  if (input?.highlighted?.includes(c.id)) d.classList.add('highlighted');
+  if (input?.weak?.includes(c.id)) d.classList.add('weak');
+  d.onclick = () => send({ t: 'click', action: 'card', id: c.id });
+  return d;
+}
+function zoneRow(label, cards, collapse) {
+  const z = document.createElement('div'); z.className = 'zone';
+  const l = document.createElement('span'); l.className = 'label'; l.textContent = `${label} (${cards.length})`; z.appendChild(l);
+  if (collapse && cards.length) {
+    const b = document.createElement('button'); b.textContent = 'show'; let open = false;
+    const holder = document.createElement('span'); holder.style.display = 'contents';
+    b.onclick = () => { open = !open; holder.innerHTML = ''; if (open) cards.forEach(c => holder.appendChild(cardEl(c))); b.textContent = open ? 'hide' : 'show'; };
+    z.appendChild(b); z.appendChild(holder);
+  } else cards.forEach(c => z.appendChild(cardEl(c)));
+  return z;
+}
+
+function render() {
+  if (!state) return;
+  const g = state.game;
+  $('#turn').textContent = `Turn ${g.turn} · ${g.phase || ''} · stack ${g.stack.length}`;
+  // phase strip with stop toggles (click toggles stop for the current turn owner's category)
+  const ph = $('#phases'); ph.innerHTML = '';
+  const myTurn = g.playerTurn === state.you;
+  const stops = myTurn ? state.stops.myTurn : state.stops.oppTurn;
+  for (const p of PHASES) {
+    const s = document.createElement('span'); s.textContent = SHORT[p]; s.title = p + (myTurn ? ' (my turn stops)' : ' (opp turn stops)');
+    if (p === g.phase) s.classList.add('cur'); if (stops.includes(p)) s.classList.add('stop');
+    s.onclick = () => { const set = new Set(stops); set.has(p) ? set.delete(p) : set.add(p); send({ t: 'settings', stops: myTurn ? { myTurn: [...set] } : { oppTurn: [...set] } }); };
+    ph.appendChild(s);
+  }
+  const t = $('#table'); t.innerHTML = '';
+  const players = [...g.players].sort((a, b) => (a.id === state.you) - (b.id === state.you)); // opponent first, me last
+  for (const p of players) {
+    const div = document.createElement('div'); div.className = 'player' + (g.playerTurn === p.id ? ' turn' : '');
+    const h = document.createElement('h3');
+    h.innerHTML = `<span>${p.name}${p.isViewer ? ' (you)' : ''}</span><span>❤ ${p.life}</span><span class="muted">hand ${p.zones.hand.length} · lib ${p.zones.library.length}</span>` +
+      `<span class="muted">mana ${Object.entries(p.manaPool).filter(([, v]) => v).map(([k, v]) => k + v).join(' ') || '—'}</span>` +
+      (Object.keys(p.commanderDamage).length ? `<span class="muted">cmd dmg ${Object.values(p.commanderDamage).join('/')}</span>` : '') +
+      (p.hasPriority ? '<span style="color:#4af">● priority</span>' : '');
+    if (input?.selectablePlayers?.includes(p.id)) h.classList.add('selectable');
+    h.onclick = () => send({ t: 'click', action: 'player', id: p.id });
+    div.appendChild(h);
+    div.appendChild(zoneRow('command', p.zones.command));
+    const bf = p.zones.battlefield;
+    div.appendChild(zoneRow('creatures', bf.filter(c => c.state?.isCreature)));
+    div.appendChild(zoneRow('other', bf.filter(c => !c.state?.isCreature && !c.state?.isLand)));
+    div.appendChild(zoneRow('lands', bf.filter(c => c.state?.isLand && !c.state?.isCreature)));
+    div.appendChild(zoneRow('graveyard', p.zones.graveyard, true));
+    div.appendChild(zoneRow('exile', p.zones.exile, true));
+    if (p.isViewer) div.appendChild(zoneRow('hand', p.zones.hand));
+    if (p.id !== state.you && g.stack.length) { /* stack between players */ }
+    t.appendChild(div);
+    if (p.id !== state.you) {
+      const st = document.createElement('div'); st.className = 'stack';
+      st.innerHTML = `<div class="muted">Stack (${g.stack.length}) — top first</div>` + g.stack.map(si => `<div class="item">▸ ${si.text}</div>`).join('');
+      if (g.combat && g.combat.attackers.length) st.innerHTML += `<div class="muted" style="margin-top:4px">Combat: ${g.combat.attackers.map(a => `#${a.attacker}→${a.defender?.name}${a.blockers.length ? ' blocked by ' + a.blockers.join(',') : ''}`).join('; ')}</div>`;
+      t.appendChild(st);
+    }
+  }
+}
+
+// ---- prompts (blocking dialogs) ----
+function showPrompt(p) {
+  const dlg = $('#dlg'); dlg.innerHTML = '';
+  const answer = (value) => { send({ t: 'answer', id: p.id, value }); dlg.close(); prompt = null; };
+  const h = document.createElement('div'); h.innerHTML = `<div class="muted">${p.kind}</div><h3 style="margin:4px 0">${(p.title || '')}</h3><div style="white-space:pre-wrap">${p.message || ''}</div>`; dlg.appendChild(h);
+  const optLabel = (o) => o.label + (o.type === 'card' && o.card?.state ? ` <span class="muted">${o.card.state.type || ''}</span>` : '');
+  const btn = (label, fn, primary) => { const b = document.createElement('button'); b.textContent = label; b.onclick = fn; if (primary) b.className = 'primary'; return b; };
+  const row = document.createElement('div'); row.style.cssText = 'display:flex;gap:8px;justify-content:flex-end;margin-top:8px';
+  switch (p.kind) {
+    case 'confirm': row.append(btn(p.no, () => answer(false)), btn(p.yes, () => answer(true), true)); if (p.card) h.innerHTML += `<div class="muted">${p.card.name}</div>`; break;
+    case 'option': p.options.forEach((o, i) => row.append(btn(o, () => answer(i), i === p.default))); break;
+    case 'text': { const inp = document.createElement('input'); inp.value = p.initial || ''; dlg.appendChild(inp); row.append(btn('OK', () => answer(inp.value), true)); break; }
+    case 'chooseAbility': { const opts = document.createElement('div'); opts.className = 'opts'; p.options.forEach(o => { const d = document.createElement('div'); d.className = 'opt'; d.textContent = o.label; d.onclick = () => answer(o.i); opts.appendChild(d); }); dlg.appendChild(opts); row.append(btn('Cancel', () => answer(null))); break; }
+    case 'choices': case 'chooseEntity': {
+      const min = p.min < 0 ? 0 : p.min, max = p.max < 0 ? p.options.length : p.max; const sel = new Set(p.selected || []);
+      h.innerHTML += `<div class="muted">pick ${min}${max !== min ? '–' + max : ''}</div>`;
+      if (p.reveal) h.innerHTML += `<div class="muted">Revealed: ${p.reveal.cards.map(c => c.name).join(', ')}</div>`;
+      const opts = document.createElement('div'); opts.className = 'opts';
+      const refresh = () => { [...opts.children].forEach((d, i) => d.classList.toggle('on', sel.has(p.options[i].i))); ok.disabled = sel.size < min || sel.size > max; };
+      p.options.forEach(o => { const d = document.createElement('div'); d.className = 'opt'; d.innerHTML = optLabel(o); d.onclick = () => { if (max === 1) { sel.clear(); sel.add(o.i); if (min <= 1) return answer([o.i]); } else sel.has(o.i) ? sel.delete(o.i) : sel.add(o.i); refresh(); }; opts.appendChild(d); });
+      dlg.appendChild(opts); const ok = btn('OK', () => answer([...sel]), true); if (min === 0) row.append(btn('None', () => answer([]))); row.append(ok); refresh(); break;
+    }
+    case 'order': {
+      h.innerHTML += `<div class="muted">${p.top || ''} — click to move to the ordered list; leave ${p.remainMin}–${p.remainMax} in source</div>`;
+      const src = p.options.slice(0, p.sourceCount).map(o => o.i), dst = p.options.slice(p.sourceCount).map(o => o.i);
+      const a = document.createElement('div'); a.className = 'opts'; const b = document.createElement('div'); b.className = 'opts'; b.style.borderTop = '1px solid #444';
+      const draw = () => { a.innerHTML = ''; b.innerHTML = ''; src.forEach(i => { const d = document.createElement('div'); d.className = 'opt'; d.innerHTML = optLabel(p.options[i]); d.onclick = () => { src.splice(src.indexOf(i), 1); dst.push(i); draw(); }; a.appendChild(d); }); dst.forEach((i, k) => { const d = document.createElement('div'); d.className = 'opt on'; d.innerHTML = `${k + 1}. ` + optLabel(p.options[i]); d.onclick = () => { dst.splice(k, 1); src.push(i); draw(); }; b.appendChild(d); }); ok.disabled = src.length < p.remainMin || (p.remainMax >= 0 && src.length > p.remainMax); };
+      dlg.append(a, b); const ok = btn('OK', () => answer({ order: dst, remember: false }), true); row.append(ok); draw(); break;
+    }
+    case 'assignCombatDamage': {
+      h.innerHTML += `<div>${p.attacker.name} deals ${p.damage}. Assign to blockers${p.defender ? ' / ' + p.defender.name : ''}:</div>`;
+      const fields = {}; const wrap = document.createElement('div');
+      const mk = (key, label) => { const l = document.createElement('label'); l.style.display = 'block'; l.textContent = label + ' '; const i = document.createElement('input'); i.type = 'number'; i.min = 0; i.value = 0; i.style.width = '60px'; l.appendChild(i); wrap.appendChild(l); fields[key] = i; };
+      p.blockers.forEach(b => mk(String(b.id), b.name)); if (p.defender && p.overrideOrder !== undefined) mk('defender', p.defender.name + ' (trample)');
+      if (p.blockers[0]) fields[String(p.blockers[0].id)].value = p.damage;
+      dlg.appendChild(wrap); if (p.maySkip) row.append(btn('Auto', () => answer(null))); row.append(btn('OK', () => answer(Object.fromEntries(Object.entries(fields).map(([k, i]) => [k, +i.value]))), true)); break;
+    }
+    case 'assignAmount': {
+      const fields = {}; const wrap = document.createElement('div');
+      p.options.forEach(o => { const l = document.createElement('label'); l.style.display = 'block'; l.textContent = o.label + ' '; const i = document.createElement('input'); i.type = 'number'; i.min = 0; i.value = o.current || 0; i.style.width = '60px'; l.appendChild(i); wrap.appendChild(l); fields[o.i] = i; });
+      dlg.appendChild(wrap); row.append(btn('OK', () => answer(Object.fromEntries(Object.entries(fields).map(([k, i]) => [k, +i.value]))), true)); break;
+    }
+    case 'manipulateCards': {
+      h.innerHTML += `<div class="muted">click a card to move it to the end (bottom) — ${p.cards.length} cards, top first</div>`;
+      const ids = p.cards.map(c => c.id); const opts = document.createElement('div'); opts.className = 'opts';
+      const draw = () => { opts.innerHTML = ''; ids.forEach((id, k) => { const c = p.cards.find(x => x.id === id); const d = document.createElement('div'); d.className = 'opt' + (p.manipulable.includes(id) ? '' : ' muted'); d.textContent = `${k + 1}. ${c.name}`; d.onclick = () => { if (!p.manipulable.includes(id)) return; ids.splice(k, 1); ids.push(id); draw(); }; opts.appendChild(d); }); };
+      dlg.appendChild(opts); draw(); row.append(btn('OK', () => answer(ids), true)); break;
+    }
+    default: h.innerHTML += `<pre>${JSON.stringify(p, null, 1).slice(0, 2000)}</pre>`; row.append(btn('Send null', () => answer(null)));
+  }
+  dlg.appendChild(row); if (!dlg.open) dlg.showModal();
+}
+loadDecks();
+</script>
+</body>
+</html>

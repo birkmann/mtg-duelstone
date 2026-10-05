@@ -1,0 +1,9 @@
+# Forge checkout (symlink or clone via tools/setup-forge.sh; GPL upstream, ~800MB)
+/forge
+# Build outputs
+/target/
+**/target/
+# Local logs / recordings
+/tools/*.log
+*.jsonl
+!crates/**/fixtures/*.jsonl
