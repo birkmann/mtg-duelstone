@@ -133,6 +133,11 @@ pub fn ensure_engine(cfg: &LaunchConfig, progress: &mut dyn FnMut(&str)) -> anyh
         let a = find_jar_dir(a);
         cmd.arg("--assets").arg(a);
     }
+    // The engine also searches upward from its cwd, but a packaged build or a user-dir pack
+    // is only found from here.
+    if let Some(pack) = crate::offline::dir() {
+        cmd.arg("--offline").arg(pack);
+    }
     cmd.stdin(Stdio::null()).stdout(Stdio::from(out)).stderr(Stdio::from(err));
     // If we die without running destructors (Ctrl+C, crash, process::exit), take the engine with
     // us instead of leaving an orphaned JVM holding the port.

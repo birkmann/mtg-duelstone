@@ -34,9 +34,9 @@ public final class EngineServer {
     private final Server server;
     private final ImageCache images;
 
-    public EngineServer(final int port, final File staticDir) throws IOException {
-        images = new ImageCache(ImageCache.defaultDir());
-        System.out.println("[server] image cache: " + ImageCache.defaultDir());
+    public EngineServer(final int port, final File staticDir, final java.nio.file.Path offlinePack) throws IOException {
+        images = new ImageCache(offlinePack);
+        System.out.println("[server] offline pack: " + offlinePack + " (" + images.size() + " card names with images)");
         server = new Server(port);
         final ServletContextHandler ctx = new ServletContextHandler(ServletContextHandler.SESSIONS);
         ctx.setContextPath("/");
@@ -126,7 +126,8 @@ public final class EngineServer {
                     final File f = images.get(name, req.getParameter("set"), "1".equals(req.getParameter("back")), version);
                     cors(resp);
                     if (f == null) { resp.setStatus(404); return true; }
-                    resp.setStatus(200); resp.setContentType("png".equals(version) ? "image/png" : "image/jpeg");
+                    // the pack is all JPEG, whatever version was asked for
+                    resp.setStatus(200); resp.setContentType("image/jpeg");
                     resp.setHeader("Cache-Control", "public, max-age=31536000, immutable");
                     resp.setContentLengthLong(f.length());
                     java.nio.file.Files.copy(f.toPath(), resp.getOutputStream());
@@ -134,7 +135,6 @@ public final class EngineServer {
                 case "GET /rulings" -> {
                     final String r = images.rulings(req.getParameter("name"));
                     cors(resp);
-                    if (r == null) { json(resp, 404, err("no rulings")); return true; }
                     resp.setStatus(200); resp.setContentType("application/json;charset=utf-8");
                     resp.setHeader("Cache-Control", "public, max-age=86400");
                     resp.getWriter().write(r);

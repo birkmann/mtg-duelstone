@@ -26,4 +26,10 @@ cargo run -p arena -- --quick --autoplay --screenshot shots/a.png --exit-after 4
 cargo run -p mtg_client --bin autopilot -- --format constructed --games 5
 cargo test --workspace
 ./run.sh                                              # build engine if stale + run the game
+tools/fetch-offline.sh                                # once, online: fill offline/ (images, rulings, vendor, m2)
 ```
+
+## Offline
+Nothing touches the network at runtime: `/api/img` and `/api/rulings` are served from `offline/` (see
+`offline/README.md`), and the splash showcase reads it directly. Only `fetch-offline` (bin) downloads. Don't add
+runtime network calls; put new data into the fetcher. After adding a crate, re-run `tools/fetch-offline.sh`.

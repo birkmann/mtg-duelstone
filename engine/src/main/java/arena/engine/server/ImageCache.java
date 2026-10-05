@@ -1,46 +1,67 @@
 package arena.engine.server;
 
+import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
+
 import java.io.File;
 import java.io.IOException;
-import java.net.URI;
-import java.net.URLEncoder;
-import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
+import java.io.Reader;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.security.MessageDigest;
-import java.time.Duration;
+import java.util.HashMap;
 import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.locks.ReentrantLock;
 
 /**
- * Card images: fetched from Scryfall once, cached on disk forever, served locally. Follows Scryfall's
- * API guidelines (identifying User-Agent, ≥100ms between requests, cache aggressively) and keeps the
- * browser from hitting their rate limit — and keeps games rendering offline after the first load.
+ * Card images and rulings, served from the offline pack ({@code offline/}) and nothing else.
+ * The game must run without internet and without depending on Scryfall, so nothing is fetched at
+ * runtime: {@code tools/fetch-offline.sh} fills the pack once (one printing per card, {@code large}
+ * + {@code art_crop}). A card missing from the pack answers 404 instantly, and the client falls back
+ * to drawing its rules text.
  */
 public final class ImageCache {
-    private static final String UA = "MTGDuelstone/0.1 (personal Forge client; +https://github.com/birkmann/mtg-duelstone)";
-    private final Path dir;
-    private final HttpClient http = HttpClient.newBuilder().followRedirects(HttpClient.Redirect.ALWAYS).connectTimeout(Duration.ofSeconds(10)).build();
-    private final ReentrantLock fetchLock = new ReentrantLock(true); // serialize upstream requests
-    private long lastFetchAt = 0;
-    private final Map<String, Long> negative = new ConcurrentHashMap<>(); // key → time of 404
+    /** {@code img/index.json} entry, written by the {@code fetch-offline} bin. */
+    private record Entry(String id, String name, int face, boolean back) {}
 
-    public ImageCache(final Path dir) throws IOException {
-        this.dir = dir;
-        Files.createDirectories(dir);
+    private final Path pack;
+    private final Map<String, Entry> index = new HashMap<>();
+    private volatile Map<String, String> rulings; // lowercase full name → JSON, loaded on first use
+
+    public ImageCache(final Path pack) throws IOException {
+        this.pack = pack;
+        final Path idx = pack == null ? null : pack.resolve("img/index.json");
+        if (idx == null || !Files.isRegularFile(idx)) {
+            System.err.println("[server] WARNING: no offline image pack at " + (idx == null ? "(none found)" : idx)
+                    + " — cards will show as text. Run tools/fetch-offline.sh once while online.");
+            return;
+        }
+        try (Reader r = Files.newBufferedReader(idx, StandardCharsets.UTF_8)) {
+            for (final Map.Entry<String, JsonElement> e : JsonParser.parseReader(r).getAsJsonObject().entrySet()) {
+                final JsonObject o = e.getValue().getAsJsonObject();
+                index.put(e.getKey(), new Entry(o.get("id").getAsString(), o.get("name").getAsString(), o.get("face").getAsInt(), o.get("back").getAsBoolean()));
+            }
+        }
     }
 
-    public static Path defaultDir() {
-        final String xdg = System.getenv("XDG_CACHE_HOME");
-        final Path base = xdg != null && !xdg.isBlank() ? Path.of(xdg) : Path.of(System.getProperty("user.home"), ".cache");
-        return base.resolve("commander-arena").resolve("img");
+    /**
+     * {@code --offline DIR}, else walk up from the cwd: the first {@code offline/} with images, else
+     * the first with just the committed {@code data/} (rulings still work without images).
+     */
+    public static Path resolvePack(final String explicit) {
+        if (explicit != null && !explicit.isBlank()) return Path.of(explicit);
+        Path dataOnly = null;
+        File cur = new File(".").getAbsoluteFile();
+        for (int i = 0; i < 6 && cur != null; i++, cur = cur.getParentFile()) {
+            final File cand = new File(cur, "offline");
+            if (new File(cand, "img/index.json").isFile()) return cand.toPath();
+            if (dataOnly == null && new File(cand, "data").isDirectory()) dataOnly = cand.toPath();
+        }
+        return dataOnly;
     }
 
-    /** Returns the cached file, fetching it if needed; null if Scryfall has no such image. */
+    public int size() { return index.size(); }
+
     public static String version(final String v) {
         if (v == null) return "normal";
         return switch (v.toLowerCase()) {
@@ -49,124 +70,52 @@ public final class ImageCache {
         };
     }
 
-    public File get(final String name, final String set, final boolean back) throws IOException, InterruptedException { return get(name, set, back, "normal"); }
-
-    public File get(final String name, final String set, final boolean back, final String version) throws IOException, InterruptedException {
-        final String key = key(name, set, back, version);
-        final File f = dir.resolve(key + ("png".equals(version) ? ".png" : ".jpg")).toFile();
-        if (f.isFile() && f.length() > 0) return f;
-        final Long neg = negative.get(key);
-        if (neg != null && System.currentTimeMillis() - neg < 6 * 3600_000L) return null;
-
-        fetchLock.lock();
-        try {
-            if (f.isFile() && f.length() > 0) return f; // another thread fetched it meanwhile
-            byte[] bytes = fetch(name, set, back, version);
-            if (bytes == null && set != null && !set.isBlank()) bytes = fetch(name, null, back, version); // other printing
-            // Forge names tokens "Goblin Token"; Scryfall's token printings are just "Goblin".
-            if (bytes == null && name.endsWith(" Token")) bytes = fetch(name.substring(0, name.length() - " Token".length()), null, back, version);
-            if (bytes == null) { negative.put(key, System.currentTimeMillis()); return null; }
-            final Path tmp = dir.resolve(key + ".tmp");
-            Files.write(tmp, bytes);
-            Files.move(tmp, f.toPath(), java.nio.file.StandardCopyOption.REPLACE_EXISTING, java.nio.file.StandardCopyOption.ATOMIC_MOVE);
-            return f;
-        } finally {
-            fetchLock.unlock();
-        }
+    /**
+     * The image file, or null if the pack has none. {@code set} is ignored: the pack holds one
+     * printing per card. Every version but {@code art_crop} is served from {@code large}.
+     */
+    public File get(final String name, final String set, final boolean back, final String version) {
+        final Entry e = lookup(name);
+        if (e == null) return null;
+        final boolean useBack = e.back() && (back || e.face() == 1);
+        final String dir = "art_crop".equals(version) ? "art_crop" : "large";
+        final File f = pack.resolve("img").resolve(dir).resolve(e.id().substring(0, 2)).resolve(e.id() + (useBack ? "-back" : "") + ".jpg").toFile();
+        return f.isFile() ? f : null;
     }
 
-    private byte[] fetch(final String name, final String set, final boolean back, final String version) throws IOException, InterruptedException {
-        final StringBuilder url = new StringBuilder("https://api.scryfall.com/cards/named?format=image&version=" + version + "&exact=")
-                .append(URLEncoder.encode(name, StandardCharsets.UTF_8));
-        if (set != null && !set.isBlank()) url.append("&set=").append(URLEncoder.encode(set.toLowerCase(), StandardCharsets.UTF_8));
-        if (back) url.append("&face=back");
-        for (int attempt = 0; attempt < 3; attempt++) {
-            final long wait = 120 - (System.currentTimeMillis() - lastFetchAt);
-            if (wait > 0) Thread.sleep(wait);
-            lastFetchAt = System.currentTimeMillis();
-            final HttpRequest req = HttpRequest.newBuilder(URI.create(url.toString()))
-                    .header("User-Agent", UA).header("Accept", "image/*,*/*;q=0.5").timeout(Duration.ofSeconds(20)).GET().build();
-            final HttpResponse<byte[]> resp = http.send(req, HttpResponse.BodyHandlers.ofByteArray());
-            final int code = resp.statusCode();
-            if (code == 200) {
-                final String ct = resp.headers().firstValue("content-type").orElse("");
-                if (ct.startsWith("image/")) return resp.body();
-                return null;
-            }
-            if (code == 404 || code == 400) return null;
-            if (code == 429 || code >= 500) {
-                final long retry = resp.headers().firstValue("retry-after").map(v -> { try { return Long.parseLong(v.trim()) * 1000; } catch (final NumberFormatException e) { return 1000L; } }).orElse(1000L);
-                Thread.sleep(Math.min(retry, 5000) + 250L * attempt);
-                continue;
-            }
-            return null;
-        }
-        return null;
+    /** Keep in sync with {@code engine_lookup} in the fetch-offline bin (its coverage report). */
+    private Entry lookup(final String name) {
+        final String k = name.toLowerCase();
+        Entry e = index.get(k);
+        // Forge names tokens "Goblin Token"; Scryfall's token printings are just "Goblin".
+        if (e == null && k.endsWith(" token")) e = index.get(k.substring(0, k.length() - " token".length()));
+        // Alchemy rebalances ("A-Blood Artist") aren't on Scryfall; show the original card.
+        if (e == null && k.startsWith("a-")) e = index.get(k.substring(2));
+        return e;
     }
 
-    // ---- rulings (same client, same politeness) -----------------------------------------------
+    /** Rulings as JSON text: {"rulings":[{"date","comment"}], "scryfallUri"}; an empty list if the card has none. */
+    public String rulings(final String name) throws IOException {
+        if (name == null || name.isBlank()) throw new IllegalArgumentException("name required");
+        final Entry e = lookup(name);
+        final String r = rulingsMap().get((e != null ? e.name() : name).toLowerCase());
+        return r != null ? r : "{\"scryfallUri\":null,\"rulings\":[]}";
+    }
 
-    /** Scryfall rulings for a card as JSON text: {"rulings":[{"date","comment"}], "scryfallUri"} — cached on disk. */
-    public String rulings(final String name) throws IOException, InterruptedException {
-        final String key = key("rulings:" + name, null, false, "normal");
-        final Path f = dir.resolveSibling("rulings").resolve(key + ".json");
-        if (Files.isRegularFile(f)) return Files.readString(f);
-        final Long neg = negative.get(key);
-        if (neg != null && System.currentTimeMillis() - neg < 6 * 3600_000L) return null;
-        fetchLock.lock();
-        try {
-            final String card = getJson("https://api.scryfall.com/cards/named?exact=" + URLEncoder.encode(name, StandardCharsets.UTF_8));
-            if (card == null) { negative.put(key, System.currentTimeMillis()); return null; }
-            final com.google.gson.JsonObject co = com.google.gson.JsonParser.parseString(card).getAsJsonObject();
-            final String rulingsUri = co.has("rulings_uri") ? co.get("rulings_uri").getAsString() : null;
-            final com.google.gson.JsonObject out = new com.google.gson.JsonObject();
-            out.addProperty("scryfallUri", co.has("scryfall_uri") ? co.get("scryfall_uri").getAsString() : null);
-            final com.google.gson.JsonArray arr = new com.google.gson.JsonArray();
-            if (rulingsUri != null) {
-                final String r = getJson(rulingsUri);
-                if (r != null) {
-                    final com.google.gson.JsonObject ro = com.google.gson.JsonParser.parseString(r).getAsJsonObject();
-                    if (ro.has("data")) for (final com.google.gson.JsonElement e : ro.getAsJsonArray("data")) {
-                        final com.google.gson.JsonObject x = e.getAsJsonObject();
-                        final com.google.gson.JsonObject y = new com.google.gson.JsonObject();
-                        y.addProperty("date", x.has("published_at") ? x.get("published_at").getAsString() : "");
-                        y.addProperty("comment", x.has("comment") ? x.get("comment").getAsString() : "");
-                        arr.add(y);
-                    }
+    private Map<String, String> rulingsMap() throws IOException {
+        Map<String, String> m = rulings;
+        if (m != null) return m;
+        synchronized (this) {
+            if (rulings != null) return rulings;
+            m = new HashMap<>();
+            final Path f = pack == null ? null : pack.resolve("data/rulings.json");
+            if (f != null && Files.isRegularFile(f)) {
+                try (Reader r = Files.newBufferedReader(f, StandardCharsets.UTF_8)) {
+                    for (final Map.Entry<String, JsonElement> e : JsonParser.parseReader(r).getAsJsonObject().entrySet()) m.put(e.getKey(), e.getValue().toString());
                 }
             }
-            out.add("rulings", arr);
-            final String text = out.toString();
-            Files.createDirectories(f.getParent());
-            Files.writeString(f, text);
-            return text;
-        } finally {
-            fetchLock.unlock();
+            rulings = m;
+            return m;
         }
-    }
-
-    private String getJson(final String url) throws IOException, InterruptedException {
-        for (int attempt = 0; attempt < 3; attempt++) {
-            final long wait = 120 - (System.currentTimeMillis() - lastFetchAt);
-            if (wait > 0) Thread.sleep(wait);
-            lastFetchAt = System.currentTimeMillis();
-            final HttpRequest req = HttpRequest.newBuilder(URI.create(url)).header("User-Agent", UA).header("Accept", "application/json").timeout(Duration.ofSeconds(20)).GET().build();
-            final HttpResponse<String> resp = http.send(req, HttpResponse.BodyHandlers.ofString());
-            if (resp.statusCode() == 200) return resp.body();
-            if (resp.statusCode() == 404) return null;
-            if (resp.statusCode() == 429 || resp.statusCode() >= 500) { Thread.sleep(1000L + 500L * attempt); continue; }
-            return null;
-        }
-        return null;
-    }
-
-    private static String key(final String name, final String set, final boolean back, final String version) {
-        try {
-            final MessageDigest md = MessageDigest.getInstance("SHA-1");
-            final byte[] d = md.digest((name + "|" + (set == null ? "" : set.toLowerCase()) + "|" + (back ? "b" : "f") + ("normal".equals(version) ? "" : "|" + version)).getBytes(StandardCharsets.UTF_8));
-            final StringBuilder sb = new StringBuilder();
-            for (final byte b : d) sb.append(String.format("%02x", b));
-            return sb.toString();
-        } catch (final Exception e) { throw new RuntimeException(e); }
     }
 }

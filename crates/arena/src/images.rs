@@ -1,7 +1,7 @@
 //! Card image cache.
 //!
 //! CONTRACT: `CardImages::request(&card, version)` returns a `Handle<Image>` immediately (a
-//! reserved handle that is filled when the bytes arrive from the engine's Scryfall proxy);
+//! reserved handle that is filled when the bytes arrive from the engine's offline image pack);
 //! `CardImages::card_back` is always valid. `Assets<Image>::contains(handle)` tells whether the
 //! real image has arrived yet (until then, draw `card_blank` instead).
 //!

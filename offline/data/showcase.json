@@ -1,0 +1,396 @@
+{
+  "cards": {
+    "arn_juz_m_djinn": {
+      "name": "Juzám Djinn",
+      "set": "arn",
+      "artist": "Mark Tedin",
+      "set_name": "Arabian Nights",
+      "released_at": "1993-12-17",
+      "flavor_text": "\"Expect my visit when the darkness comes. The night I think is best for hiding all.\" —Ouallada",
+      "reserved": true
+    },
+    "avr_avacyn__angel_of_hope": {
+      "name": "Avacyn, Angel of Hope",
+      "set": "avr",
+      "artist": "Jason Chan",
+      "set_name": "Avacyn Restored",
+      "released_at": "2012-05-04",
+      "flavor_text": "A golden helix streaked skyward from the Helvault. A thunderous explosion shattered the silver monolith and Avacyn emerged, free from her prison at last.",
+      "reserved": false
+    },
+    "avr_craterhoof_behemoth": {
+      "name": "Craterhoof Behemoth",
+      "set": "avr",
+      "artist": "Chris Rahn",
+      "set_name": "Avacyn Restored",
+      "released_at": "2012-05-04",
+      "flavor_text": "Its footsteps of today are the lakes of tomorrow.",
+      "reserved": false
+    },
+    "avr_griselbrand": {
+      "name": "Griselbrand",
+      "set": "avr",
+      "artist": "Igor Kieryluk",
+      "set_name": "Avacyn Restored",
+      "released_at": "2012-05-04",
+      "flavor_text": "\"Avacyn emerged from the broken Helvault, but her freedom came at a price—him.\"\n—Thalia, Knight-Cathar",
+      "reserved": false
+    },
+    "con_path_to_exile": {
+      "name": "Path to Exile",
+      "set": "con",
+      "artist": "Todd Lockwood",
+      "set_name": "Conflux",
+      "released_at": "2009-02-06",
+      "flavor_text": null,
+      "reserved": false
+    },
+    "dmu_sheoldred__the_apocalypse": {
+      "name": "Sheoldred, the Apocalypse",
+      "set": "dmu",
+      "artist": "Richard Whitters",
+      "set_name": "Dominaria United",
+      "released_at": "2023-02-03",
+      "flavor_text": null,
+      "reserved": false
+    },
+    "frf_ugin__the_spirit_dragon": {
+      "name": "Ugin, the Spirit Dragon",
+      "set": "frf",
+      "artist": "Raymond Swanland",
+      "set_name": "Fate Reforged",
+      "released_at": "2015-01-23",
+      "flavor_text": null,
+      "reserved": false
+    },
+    "fut_tarmogoyf": {
+      "name": "Tarmogoyf",
+      "set": "fut",
+      "artist": "Justin Murray",
+      "set_name": "Future Sight",
+      "released_at": "2007-05-04",
+      "flavor_text": null,
+      "reserved": false
+    },
+    "ice_brainstorm": {
+      "name": "Brainstorm",
+      "set": "ice",
+      "artist": "Christopher Rush",
+      "set_name": "Ice Age",
+      "released_at": "1995-06-03",
+      "flavor_text": "\"I reeled from the blow, and then suddenly, I knew exactly what to do. Within moments, victory was mine.\"\n—Gustha Ebbasdotter,\nKjeldoran Royal Mage",
+      "reserved": false
+    },
+    "isd_liliana_of_the_veil": {
+      "name": "Liliana of the Veil",
+      "set": "isd",
+      "artist": "Steve Argyle",
+      "set_name": "Innistrad",
+      "released_at": "2011-09-30",
+      "flavor_text": null,
+      "reserved": false
+    },
+    "isd_snapcaster_mage": {
+      "name": "Snapcaster Mage",
+      "set": "isd",
+      "artist": "Volkan Baǵa",
+      "set_name": "Innistrad",
+      "released_at": "2011-09-30",
+      "flavor_text": null,
+      "reserved": false
+    },
+    "lea_ancestral_recall": {
+      "name": "Ancestral Recall",
+      "set": "lea",
+      "artist": "Mark Poole",
+      "set_name": "Limited Edition Alpha",
+      "released_at": "1993-08-05",
+      "flavor_text": null,
+      "reserved": true
+    },
+    "lea_birds_of_paradise": {
+      "name": "Birds of Paradise",
+      "set": "lea",
+      "artist": "Mark Poole",
+      "set_name": "Limited Edition Alpha",
+      "released_at": "1993-08-05",
+      "flavor_text": null,
+      "reserved": false
+    },
+    "lea_black_lotus": {
+      "name": "Black Lotus",
+      "set": "lea",
+      "artist": "Christopher Rush",
+      "set_name": "Limited Edition Alpha",
+      "released_at": "1993-08-05",
+      "flavor_text": null,
+      "reserved": true
+    },
+    "lea_counterspell": {
+      "name": "Counterspell",
+      "set": "lea",
+      "artist": "Mark Poole",
+      "set_name": "Limited Edition Alpha",
+      "released_at": "1993-08-05",
+      "flavor_text": null,
+      "reserved": false
+    },
+    "lea_dark_ritual": {
+      "name": "Dark Ritual",
+      "set": "lea",
+      "artist": "Sandra Everingham",
+      "set_name": "Limited Edition Alpha",
+      "released_at": "1993-08-05",
+      "flavor_text": null,
+      "reserved": false
+    },
+    "lea_lightning_bolt": {
+      "name": "Lightning Bolt",
+      "set": "lea",
+      "artist": "Christopher Rush",
+      "set_name": "Limited Edition Alpha",
+      "released_at": "1993-08-05",
+      "flavor_text": null,
+      "reserved": false
+    },
+    "lea_llanowar_elves": {
+      "name": "Llanowar Elves",
+      "set": "lea",
+      "artist": "Anson Maddocks",
+      "set_name": "Limited Edition Alpha",
+      "released_at": "1993-08-05",
+      "flavor_text": "Whenever the Llanowar Elves gather the fruits of their forest, they leave one plant of each type untouched, considering that nature's portion.",
+      "reserved": false
+    },
+    "lea_mox_sapphire": {
+      "name": "Mox Sapphire",
+      "set": "lea",
+      "artist": "Dan Frazier",
+      "set_name": "Limited Edition Alpha",
+      "released_at": "1993-08-05",
+      "flavor_text": null,
+      "reserved": true
+    },
+    "lea_serra_angel": {
+      "name": "Serra Angel",
+      "set": "lea",
+      "artist": "Douglas Shuler",
+      "set_name": "Limited Edition Alpha",
+      "released_at": "1993-08-05",
+      "flavor_text": "Born with wings of light and a sword of faith, this heavenly incarnation embodies both fury and purity.",
+      "reserved": false
+    },
+    "lea_shivan_dragon": {
+      "name": "Shivan Dragon",
+      "set": "lea",
+      "artist": "Melissa A. Benson",
+      "set_name": "Limited Edition Alpha",
+      "released_at": "1993-08-05",
+      "flavor_text": "While it's true most Dragons are cruel, the Shivan Dragon seems to take particular glee in the misery of others, often tormenting its victims much like a cat plays with a mouse before delivering the final blow.",
+      "reserved": false
+    },
+    "lea_sol_ring": {
+      "name": "Sol Ring",
+      "set": "lea",
+      "artist": "Mark Tedin",
+      "set_name": "Limited Edition Alpha",
+      "released_at": "1993-08-05",
+      "flavor_text": null,
+      "reserved": false
+    },
+    "lea_swords_to_plowshares": {
+      "name": "Swords to Plowshares",
+      "set": "lea",
+      "artist": "Jeff A. Menges",
+      "set_name": "Limited Edition Alpha",
+      "released_at": "1993-08-05",
+      "flavor_text": null,
+      "reserved": false
+    },
+    "lea_time_walk": {
+      "name": "Time Walk",
+      "set": "lea",
+      "artist": "Amy Weber",
+      "set_name": "Limited Edition Alpha",
+      "released_at": "1993-08-05",
+      "flavor_text": null,
+      "reserved": true
+    },
+    "lea_timetwister": {
+      "name": "Timetwister",
+      "set": "lea",
+      "artist": "Mark Tedin",
+      "set_name": "Limited Edition Alpha",
+      "released_at": "1993-08-05",
+      "flavor_text": null,
+      "reserved": true
+    },
+    "lea_wrath_of_god": {
+      "name": "Wrath of God",
+      "set": "lea",
+      "artist": "Quinton Hoover",
+      "set_name": "Limited Edition Alpha",
+      "released_at": "1993-08-05",
+      "flavor_text": null,
+      "reserved": false
+    },
+    "leg_nicol_bolas": {
+      "name": "Nicol Bolas",
+      "set": "leg",
+      "artist": "Edward P. Beard, Jr.",
+      "set_name": "Legends",
+      "released_at": "1994-06-01",
+      "flavor_text": null,
+      "reserved": false
+    },
+    "lrw_thoughtseize": {
+      "name": "Thoughtseize",
+      "set": "lrw",
+      "artist": "Aleksi Briclot",
+      "set_name": "Lorwyn",
+      "released_at": "2007-10-12",
+      "flavor_text": "\"Any dream is a robust harvest. Still, I prefer the timeworn dreams, heavy with import, that haunt the obsessive mind.\"",
+      "reserved": false
+    },
+    "m10_baneslayer_angel": {
+      "name": "Baneslayer Angel",
+      "set": "m10",
+      "artist": "Greg Staples",
+      "set_name": "Magic 2010",
+      "released_at": "2009-07-17",
+      "flavor_text": "Some angels protect the meek and innocent. Others seek out and smite evil wherever it lurks.",
+      "reserved": false
+    },
+    "m11_primeval_titan": {
+      "name": "Primeval Titan",
+      "set": "m11",
+      "artist": "Aleksi Briclot",
+      "set_name": "Magic 2011",
+      "released_at": "2010-07-16",
+      "flavor_text": "When nature calls, *run*.",
+      "reserved": false
+    },
+    "mh2_ragavan__nimble_pilferer": {
+      "name": "Ragavan, Nimble Pilferer",
+      "set": "mh2",
+      "artist": "Simon Dominic",
+      "set_name": "Modern Horizons 2",
+      "released_at": "2021-06-18",
+      "flavor_text": null,
+      "reserved": false
+    },
+    "mor_bitterblossom": {
+      "name": "Bitterblossom",
+      "set": "mor",
+      "artist": "Rebecca Guay",
+      "set_name": "Morningtide",
+      "released_at": "2008-02-01",
+      "flavor_text": "In Lorwyn's brief evenings, the sun pauses at the horizon long enough for a certain species of violet to bloom with the fragrance of mischief.",
+      "reserved": false
+    },
+    "nph_elesh_norn__grand_cenobite": {
+      "name": "Elesh Norn, Grand Cenobite",
+      "set": "nph",
+      "artist": "Igor Kieryluk",
+      "set_name": "New Phyrexia",
+      "released_at": "2011-05-13",
+      "flavor_text": "\"The Gitaxians whisper among themselves of other worlds. If they exist, we must bring Phyrexia's magnificence to them.\"",
+      "reserved": false
+    },
+    "pls_meddling_mage": {
+      "name": "Meddling Mage",
+      "set": "pls",
+      "artist": "Christopher Moeller",
+      "set_name": "Planeshift",
+      "released_at": "2001-02-05",
+      "flavor_text": "Meddling mages chant so loudly that no one can get a spell in edgewise.",
+      "reserved": false
+    },
+    "rav_dark_confidant": {
+      "name": "Dark Confidant",
+      "set": "rav",
+      "artist": "Ron Spears",
+      "set_name": "Ravnica: City of Guilds",
+      "released_at": "2005-10-07",
+      "flavor_text": "Greatness, at any cost.",
+      "reserved": false
+    },
+    "roe_emrakul__the_aeons_torn": {
+      "name": "Emrakul, the Aeons Torn",
+      "set": "roe",
+      "artist": "Mark Tedin",
+      "set_name": "Rise of the Eldrazi",
+      "released_at": "2010-04-23",
+      "flavor_text": null,
+      "reserved": false
+    },
+    "unh_island": {
+      "name": "Island",
+      "set": "unh",
+      "artist": "John Avon",
+      "set_name": "Unhinged",
+      "released_at": "2004-11-19",
+      "flavor_text": null,
+      "reserved": false
+    },
+    "wwk_jace__the_mind_sculptor": {
+      "name": "Jace, the Mind Sculptor",
+      "set": "wwk",
+      "artist": "Jason Chan",
+      "set_name": "Worldwake",
+      "released_at": "2010-02-05",
+      "flavor_text": null,
+      "reserved": false
+    },
+    "wwk_stoneforge_mystic": {
+      "name": "Stoneforge Mystic",
+      "set": "wwk",
+      "artist": "Mike Bierek",
+      "set_name": "Worldwake",
+      "released_at": "2010-02-05",
+      "flavor_text": null,
+      "reserved": false
+    },
+    "zen_goblin_guide": {
+      "name": "Goblin Guide",
+      "set": "zen",
+      "artist": "Warren Mahy",
+      "set_name": "Zendikar",
+      "released_at": "2009-10-02",
+      "flavor_text": "\"I've been all over this world. I even remember some of those places.\"",
+      "reserved": false
+    }
+  },
+  "artists": {
+    "Aleksi Briclot": 125,
+    "Amy Weber": 67,
+    "Anson Maddocks": 126,
+    "Chris Rahn": 255,
+    "Christopher Moeller": 269,
+    "Christopher Rush": 132,
+    "Dan Frazier": 196,
+    "Douglas Shuler": 152,
+    "Edward P. Beard, Jr.": 125,
+    "Greg Staples": 346,
+    "Igor Kieryluk": 243,
+    "Jason Chan": 77,
+    "Jeff A. Menges": 58,
+    "John Avon": 336,
+    "Justin Murray": 2,
+    "Mark Poole": 224,
+    "Mark Tedin": 243,
+    "Melissa A. Benson": 65,
+    "Mike Bierek": 105,
+    "Quinton Hoover": 80,
+    "Raymond Swanland": 203,
+    "Rebecca Guay": 172,
+    "Richard Whitters": 15,
+    "Ron Spears": 144,
+    "Sandra Everingham": 47,
+    "Simon Dominic": 167,
+    "Steve Argyle": 121,
+    "Todd Lockwood": 86,
+    "Volkan Baǵa": 244,
+    "Warren Mahy": 140
+  }
+}

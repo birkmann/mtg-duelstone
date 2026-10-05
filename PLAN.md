@@ -68,7 +68,7 @@ Effects seen in the shots: targeting/ability arrows (glowing bezier ribbons), se
 - We need server changes (format selection, art-crop images, event cues).
 - The protocol stays backward compatible, so mtg-cmd's React UI could still use it.
 
-**Licensing:** `engine/` links Forge, so it is GPL-3. The Bevy client only talks over a socket. Simplest is GPL-3 for the whole repo. Card images are fetched at runtime from Scryfall (per the WotC Fan Content Policy) and never committed.
+**Licensing:** `engine/` links Forge, so it is GPL-3. The Bevy client only talks over a socket. Simplest is GPL-3 for the whole repo. Card images are downloaded once from Scryfall by `tools/fetch-offline.sh` into the gitignored `offline/` folder (per the WotC Fan Content Policy) and never committed; at runtime nothing goes online.
 
 ### Repo layout
 
@@ -180,7 +180,7 @@ This crate has no Bevy dependency, so it is reusable by the autopilot and by tes
 | `net` | Owns `EngineLink`. Drains `LinkEvent`s each frame into `Message<ServerFrame>`; sends `Message<ClientCmd>` out. Shows a connection-lost banner. |
 | `view` | Resources `GameView` (latest `state`), `CurrentInput`, `PendingPrompt`, `GameLog`, `ViewerId`. On each new `state` it **diffs** against the previous one by card id and emits `CardMoved{id, from, to}`, `CardChanged{id}`, `LifeChanged{player, delta}`, `CardTapped`, … messages. Also keeps a `CardCache` (id → last known `Card`) so mid-cast cards are still drawable. |
 | `cards` | `CardRegistry: HashMap<CardId, Entity>`. Spawns or despawns card entities as ids appear or vanish. A card is a parent `CardEntity{id}` with front and back child quads: a rounded-rect mesh at the 63:88 ratio, an unlit `StandardMaterial`, and a shared mesh. Components: `CardFace(Handle<Image>)`, `InZone(ZoneKind, PlayerId)`, `Tapped`, `Selectable`, `Highlighted`. |
-| `images` | `CardImages` cache keyed by `(name, set, face, version)` → `Handle<Image>`. Requests go to an `IoTaskPool` task that calls `Rest::image_bytes` (the engine proxies and disk-caches Scryfall) and decodes with `Image::from_buffer`. Shows the card back plus a name placeholder until the image loads. Keeps at most 4 concurrent fetches. |
+| `images` | `CardImages` cache keyed by `(name, set, face, version)` → `Handle<Image>`. Requests go to an `IoTaskPool` task that calls `Rest::image_bytes` (the engine serves the offline pack in `offline/img`) and decodes with `Image::from_buffer`. Shows the card back plus a name placeholder until the image loads. Keeps at most 4 concurrent fetches. |
 | `layout` | **Pure functions** (unit-tested, no ECS) from a `GameView` snapshot plus viewport to `HashMap<CardId, Placement{translation, rotation, scale, layer}>`. Covers the hand fan, battlefield rows with land/token grouping, piles, stack, command zone, opponent mirroring, and row compression when overflowing. A system writes `TargetPlacement` components. |
 | `motion` | Critically damped smooth-damp of `Transform` toward `TargetPlacement` per card. Draw, play, die and tap all fall out of this. Adds an arc lift (y-bump) for zone-to-zone moves. A speed multiplier comes from settings. |
 | `interact` | `MeshPickingPlugin` observers: `Pointer<Over/Out>` → hover lift plus `HoverPreview`; `Pointer<Click>` on a `Selectable` card → `ClickCard(id)`; `Pointer<Drag*>` from the hand → the card follows the cursor, and release above the hand line sends `ClickCard`. Right-click or held Alt opens the inspector. Player avatars are pickable for `ClickPlayer`. Hotkeys: Space = OK/Next, Enter = OK, Esc = cancel/close, Z = undo, F = fast-forward toggle. |
@@ -285,7 +285,7 @@ Each milestone ends runnable and committed.
 | Bevy 0.19 API drift vs. remembered APIs | Check docs.rs/bevy 0.19 for picking, observers, Messages and state-scoped entities; compile early and often. eu-ui's `thw_sim` engine is a working 0.19 reference. |
 | Forge `GameType.Constructed` start differs from the commander path | M1 autopilot proves it headless before any UI work. |
 | Text on 3D cards | Avoided: full card images (M2) and projected `bevy_ui` overlays for dynamic numbers (P/T, counters, xN). |
-| Scryfall rate limits / offline | Engine `ImageCache` already rate-limits and disk-caches forever. The client shows card-back placeholders, and `Loading` preloads visible cards. |
+| Scryfall rate limits / offline | No runtime Scryfall calls: `tools/fetch-offline.sh` fills `offline/` once from the bulk files and CDN, and the engine's `ImageCache` serves only from there. Cards missing from the pack 404 and show their rules text. |
 | Prompt kinds we haven't seen | `PromptKind::Unknown` falls back to a generic "list of options" modal; the autopilot histogram reveals gaps. |
 | Hand overlay camera + picking across two cameras | bevy_picking supports multiple cameras by `order`. Prototype in M2. Fallback: hand cards as children of the main camera. |
 | Java dependency at runtime | `launcher` autostarts the jar; `tools/install-toolchain.sh` installs a user-local JDK 17. |

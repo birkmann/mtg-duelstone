@@ -16,7 +16,8 @@ decisions arrive as `prompt` frames listing the legal options; the client answer
 | GET | `/api/deck`, `/api/deck/export` | `?ref=…&format=?` | full deck / `.dck` text |
 | POST | `/api/deck`, `/api/deck/validate`, `/api/deck/import` | body gains `format?` (default commander); constructed decks save to `~/.forge/decks/constructed` and need no `commanders` | as before |
 | DELETE | `/api/deck` | `?name=…&format=?` | |
-| GET | `/api/img` | `?name=&set?&back?&version=normal\|large\|art_crop\|png` (default `normal`; `small`/`border_crop` also accepted) | the cached Scryfall image; version is part of the cache key (`png` is served as `image/png`) |
+| GET | `/api/img` | `?name=&set?&back?&version=normal\|large\|art_crop\|png` (default `normal`; `small`/`border_crop` also accepted) | JPEG from the offline pack (`offline/img`, filled by `tools/fetch-offline.sh`); never goes online. One printing per card, so `set` is ignored; `art_crop` is the art, every other version is the `large` scan. 404 if the pack has no image |
+| GET | `/api/rulings` | `?name=` | `{"scryfallUri","rulings":[{"date","comment"}]}` from `offline/data/rulings.json`; an empty list when the card has none |
 | GET | `/api/matches` | | `[ matchInfo ]` |
 | POST | `/api/match` | `{humanDeck, aiDeck, format?, seed?, humanName?}` — `format` is `"constructed"` (60-card main deck, 20 life, `GameType.Constructed`) or `"commander"` (default; 100 cards, 40 life) | `matchInfo` (`{id, humanDeck, aiDeck, humanDeckName, aiDeckName, format, started, over, sockets, turn, gameOver}`) |
 | GET | `/api/match/{id}` | | `matchInfo` |

@@ -19,7 +19,7 @@ arch=$(uname -m)
 version=$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -n1)
 
 if [[ "${SKIP_BUILD:-0}" != 1 ]]; then
-    cargo build --release -p arena
+    cargo build --release -p arena -p mtg_client --bin mtg-duelstone --bin fetch-offline
 fi
 
 app="$out/MTG Duelstone.app"
@@ -27,6 +27,9 @@ rm -rf "$app"
 mkdir -p "$app/Contents/MacOS"
 install -m755 "$target/release/mtg-duelstone" "$app/Contents/MacOS/mtg-duelstone"
 strip -x "$app/Contents/MacOS/mtg-duelstone"
+# One-time card image fetch for release users (images are not redistributed); see offline/README.md
+install -m755 "$target/release/fetch-offline" "$app/Contents/MacOS/fetch-offline"
+strip -x "$app/Contents/MacOS/fetch-offline"
 ./packaging/stage-bundle.sh "$app/Contents/Resources"
 install -m644 "$here/mtg-duelstone.icns" "$app/Contents/Resources/"
 sed "s/@VERSION@/$version/g" "$here/Info.plist" > "$app/Contents/Info.plist"

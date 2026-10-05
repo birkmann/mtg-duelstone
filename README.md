@@ -91,18 +91,20 @@ match needs network access to fetch card images. Releases are built by
 ## Build from source
 
 You need Rust (edition 2024), the usual Bevy system libraries (ALSA, udev, Vulkan), JDK 17 + Maven for the
-engine and about 1 GB of disk for Forge.
+engine and about 1 GB of disk for Forge, plus 7–10 GB for the offline pack.
 
 ```bash
 tools/install-toolchain.sh        # JDK 17 + Maven into ~/.local/opt (skip if you have them)
 source tools/env.sh
 tools/setup-forge.sh              # clone Forge (pinned tag) into ./forge and install it to ~/.m2
                                   #   or reuse a checkout:  ln -s /path/to/forge forge
+tools/fetch-offline.sh            # once, online: card images, rulings, crates, Maven repo → offline/
 ./run.sh                          # builds the engine jar if stale, then runs the game
 ```
 
-The game starts the engine for you (port 8080) and stops it when you quit. Card images are fetched through the
-engine's Scryfall proxy on first use and cached on disk, so the first match needs network access.
+The game starts the engine for you (port 8080) and stops it when you quit. After `tools/fetch-offline.sh`, nothing
+needs the internet: the engine serves every card image and ruling from `offline/`, and cargo and Maven build from
+the vendored crates and the repo-local Maven repo there. See [offline/README.md](offline/README.md).
 
 Skip the menus and jump straight into a game:
 
@@ -199,4 +201,5 @@ scripts in `crates/arena/assets/tools/`.
 Magic: The Gathering, its card names, art and images are © Wizards of the Coast. This is an unofficial fan
 project, not affiliated with or endorsed by Wizards of the Coast, and is intended to fall under the
 [Fan Content Policy](https://company.wizards.com/en/legal/fancontentpolicy). **No card images are included or
-redistributed**: they are fetched at runtime from [Scryfall](https://scryfall.com).
+redistributed**: `tools/fetch-offline.sh` downloads them once from [Scryfall](https://scryfall.com) into the
+gitignored `offline/` folder of your own checkout, and the game reads them from there.

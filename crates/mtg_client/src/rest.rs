@@ -102,7 +102,7 @@ impl Rest {
         let resp = agent(Duration::from_secs(5)).delete(self.url(&format!("/api/match/{id}"))).call().context("DELETE match")?;
         check(resp, "delete match").map(|_| ())
     }
-    /// Raw image bytes (jpeg/png) via the engine's Scryfall proxy `/api/img`.
+    /// Raw JPEG bytes from the engine's offline pack (`/api/img`); `Err` (404) when the pack has no image.
     /// Servers that don't know `version` ignore it and return the normal image.
     pub fn image_bytes(&self, req: &ImageRequest) -> Result<Vec<u8>> {
         let mut r = agent(Duration::from_secs(30)).get(self.url("/api/img")).query("name", &req.name);

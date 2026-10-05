@@ -23,7 +23,7 @@ fetch appimagetool-x86_64.AppImage https://github.com/AppImage/appimagetool/rele
 fetch runtime-x86_64 https://github.com/AppImage/type2-runtime/releases/download/continuous/runtime-x86_64
 
 if [[ "${SKIP_BUILD:-0}" != 1 ]]; then
-    cargo build --release -p arena
+    cargo build --release -p arena -p mtg_client --bin mtg-duelstone --bin fetch-offline
 fi
 
 appdir="$here/AppDir"
@@ -31,6 +31,9 @@ rm -rf "$appdir"
 mkdir -p "$appdir/usr/bin" "$appdir/usr/share/applications"
 install -m755 "$target/release/mtg-duelstone" "$appdir/usr/bin/mtg-duelstone"
 strip "$appdir/usr/bin/mtg-duelstone"
+# One-time card image fetch for release users (images are not redistributed); see offline/README.md
+install -m755 "$target/release/fetch-offline" "$appdir/usr/bin/fetch-offline"
+strip "$appdir/usr/bin/fetch-offline"
 ./packaging/stage-bundle.sh "$appdir/usr/share/mtg-duelstone"
 
 install -m644 packaging/mtg-duelstone.desktop "$appdir/usr/share/applications/"

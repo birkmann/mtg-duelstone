@@ -4,10 +4,10 @@
 //!
 //! Why it's a separate layer (GlobalZIndex between the backdrop and the screens): Boot and Loading
 //! keep their own widgets and despawn on exit, while the reel keeps going across both. Why a
-//! thread + bounded(1) channel: `mtg_client::scryfall::Showcase` blocks on disk/network and JPEG
+//! thread + bounded(1) channel: `mtg_client::scryfall::Showcase` blocks on disk and JPEG
 //! decoding is CPU work. The thread stays one image ahead and then waits, so only what's on screen
-//! (plus the next one) is held in memory. If nothing is cached and Scryfall can't be reached, the
-//! layer never appears and the animated backdrop shows as before.
+//! (plus the next one) is held in memory. If the offline pack has no showcase art, the layer never
+//! appears and the animated backdrop shows as before.
 
 use std::time::{SystemTime, UNIX_EPOCH};
 

@@ -14,10 +14,16 @@ crossbeam-channel.workspace = true
 tungstenite.workspace = true
 ureq.workspace = true
 directories.workspace = true
+# fetch-offline: Scryfall bulk files are gzipped JSONL
+flate2 = "1"
 
 [[bin]]
 name = "autopilot"
 path = "src/bin/autopilot.rs"
+
+[[bin]]
+name = "fetch-offline"
+path = "src/bin/fetch-offline.rs"
 
 [target.'cfg(target_os = "linux")'.dependencies]
 libc = "0.2"
