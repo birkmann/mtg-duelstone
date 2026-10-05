@@ -21,8 +21,9 @@ impl Plugin for TrayPlugin {
 struct TrayRoot {
     key: (i64, usize),
 }
+/// One tray tile: every card id it stands for (identical cards are grouped).
 #[derive(Component)]
-struct TrayCell(i64);
+struct TrayCell(Vec<i64>);
 #[derive(Component)]
 struct MulliganRoot {
     key: Vec<i64>,
@@ -54,6 +55,33 @@ fn where_label(cards: &[Card], view: &GameView) -> String {
     labels.join(" / ")
 }
 
+/// Identical cards (same name, printing, zone and controller) collapse into one tile with an "×N"
+/// badge — a basic-land search otherwise shows fifteen identical Forests.
+fn group_cards(cards: &[Card]) -> Vec<(&Card, Vec<i64>)> {
+    let same = |a: &Card, b: &Card| {
+        a.display_name() == b.display_name()
+            && a.state.as_ref().and_then(|s| s.set_code.as_ref()) == b.state.as_ref().and_then(|s| s.set_code.as_ref())
+            && a.hidden == b.hidden
+            && a.zone == b.zone
+            && a.controller == b.controller
+            && a.counters == b.counters
+    };
+    let mut groups: Vec<(&Card, Vec<i64>)> = Vec::new();
+    for c in cards {
+        match groups.iter_mut().find(|(rep, _)| same(rep, c)) {
+            Some((_, ids)) => ids.push(c.id),
+            None => groups.push((c, vec![c.id])),
+        }
+    }
+    groups
+}
+
+/// Which id a click on a grouped tile should send: the first not-yet-picked copy, or (when every
+/// copy is picked) the last one, so clicking again unpicks.
+fn next_click(ids: &[i64], highlighted: &[i64]) -> i64 {
+    ids.iter().copied().find(|id| !highlighted.contains(id)).unwrap_or_else(|| *ids.last().unwrap_or(&0))
+}
+
 fn sync_tray(
     mut commands: Commands,
     input: Res<CurrentInput>,
@@ -72,7 +100,8 @@ fn sync_tray(
     let (Some(key), Some(f)) = (want, input.frame.as_ref()) else { return };
     let cards = &f.tray_cards;
     let title = format!("Choose from {}", where_label(cards, &view));
-    let h = if cards.len() > 12 { 17.0 } else { 24.0 };
+    let groups = group_cards(cards);
+    let h = if groups.len() > 12 { 17.0 } else { 24.0 };
     let fonts = fonts.clone();
     commands
         .spawn((
@@ -101,7 +130,8 @@ fn sync_tray(
             p.spawn(scroll_node(Node { flex_direction: FlexDirection::Row, flex_wrap: FlexWrap::Wrap, justify_content: JustifyContent::Center, column_gap: vh(0.8), row_gap: vh(0.8), max_height: vh(44.0), width: Val::Percent(100.0), ..default() }))
                 .insert(ScrollArea)
                 .with_children(|row| {
-                    for c in cards {
+                    for (c, ids) in &groups {
+                        let count = ids.len();
                         row.spawn((
                             Node {
                                 flex_direction: FlexDirection::Column,
@@ -113,22 +143,45 @@ fn sync_tray(
                             },
                             BackgroundColor(Color::NONE),
                             BorderColor::all(Color::NONE),
-                            OnClick(Act::ClickCard(c.id)),
-                            TrayCell(c.id),
+                            OnClick(Act::ClickCard(ids[0])),
+                            TrayCell(ids.clone()),
                         ))
                         .with_children(|cell| {
                             spawn_card_pic(cell, &fonts, c, ImageVersion::Normal, h);
+                            if count > 1 {
+                                cell.spawn((
+                                    Node {
+                                        position_type: PositionType::Absolute,
+                                        top: vh(0.2),
+                                        right: vh(0.2),
+                                        padding: UiRect::axes(vh(0.7), vh(0.15)),
+                                        border: UiRect::all(vh(0.18)),
+                                        border_radius: BorderRadius::all(vh(1.0)),
+                                        ..default()
+                                    },
+                                    BackgroundColor(Color::srgba(0.05, 0.05, 0.08, 0.92)),
+                                    BorderColor::all(GOLD_DIM),
+                                    Pickable::IGNORE,
+                                ))
+                                .with_children(|b| {
+                                    b.spawn(label(&fonts, format!("x{count}"), FontKind::Title, 1.9, GOLD));
+                                });
+                            }
                         });
                     }
                 });
         });
 }
 
-fn refresh_tray(input: Res<CurrentInput>, mut cells: Query<(&TrayCell, &mut BorderColor, &mut BackgroundColor)>) {
+fn refresh_tray(input: Res<CurrentInput>, mut cells: Query<(&TrayCell, &mut OnClick, &mut BorderColor, &mut BackgroundColor)>) {
     let Some(f) = input.frame.as_ref() else { return };
-    for (c, mut bc, mut bg) in &mut cells {
-        let hi = f.highlighted.contains(&c.0);
-        let sel = f.selectable.contains(&c.0);
+    for (c, mut click, mut bc, mut bg) in &mut cells {
+        let hi = c.0.iter().any(|id| f.highlighted.contains(id));
+        let sel = c.0.iter().any(|id| f.selectable.contains(id));
+        let next = Act::ClickCard(next_click(&c.0, &f.highlighted));
+        if !matches!((click.0, next), (Act::ClickCard(a), Act::ClickCard(b)) if a == b) {
+            click.0 = next;
+        }
         *bc = BorderColor::all(if hi { GOLD } else if sel { BLUE_GLOW } else { Color::NONE });
         bg.0 = if hi { Color::srgba(0.86, 0.69, 0.36, 0.25) } else { Color::NONE };
     }
@@ -218,5 +271,30 @@ fn mulligan_visuals(
         } else if !enabled && !off {
             commands.entity(e).insert(BtnOff);
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn card(id: i64, name: &str) -> Card {
+        Card { id, name: name.into(), zone: Some("Library".into()), ..default() }
+    }
+
+    #[test]
+    fn identical_cards_group_in_order() {
+        let cards = vec![card(1, "Forest"), card(2, "Mountain"), card(3, "Forest"), card(4, "Forest")];
+        let g = group_cards(&cards);
+        assert_eq!(g.len(), 2);
+        assert_eq!(g[0].1, vec![1, 3, 4]);
+        assert_eq!(g[1].1, vec![2]);
+    }
+
+    #[test]
+    fn grouped_click_picks_next_unpicked_then_unpicks() {
+        assert_eq!(next_click(&[1, 3, 4], &[]), 1);
+        assert_eq!(next_click(&[1, 3, 4], &[1]), 3);
+        assert_eq!(next_click(&[1, 3, 4], &[1, 3, 4]), 4);
     }
 }

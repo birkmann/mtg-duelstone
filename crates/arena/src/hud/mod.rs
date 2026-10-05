@@ -51,6 +51,7 @@ impl Plugin for HudPlugin {
                     buttons::spawn_buttons,
                     menu::spawn_menu,
                     preview::spawn_preview,
+                    phase::spawn_ladder,
                 ),
             )
             .add_systems(
@@ -61,6 +62,7 @@ impl Plugin for HudPlugin {
                     phase::attach_phase_tracks,
                     phase::update_phase_icons,
                     phase::update_strip,
+                    phase::update_ladder,
                     phase::handle_stop_acts,
                     buttons::update_buttons,
                     buttons::update_message_bar,

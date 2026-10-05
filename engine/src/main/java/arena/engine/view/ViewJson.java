@@ -187,7 +187,9 @@ public final class ViewJson {
         o.addProperty("rulesText", s.getRulesText());
         o.addProperty("setCode", s.getSetCode());
         o.addProperty("imageKey", s.getImageKey());
-        if (s.isCreature() || s.isVehicle()) {
+        // printed P/T of permanents that aren't creatures right now (Theros Gods below devotion,
+        // uncrewed Vehicles, Spacecraft) too: the client shows it greyed so players can still read it
+        if (s.isCreature() || s.isVehicle() || s.getPower() != 0 || s.getToughness() != 0) {
             o.addProperty("power", s.getPower());
             o.addProperty("toughness", s.getToughness());
         }

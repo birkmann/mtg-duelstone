@@ -60,9 +60,10 @@ public class WsGuiGame extends AbstractGuiGame {
     private volatile PlayerView me;
     private volatile ViewJson vj = new ViewJson(null);
 
-    // phase stops (MTGO-style). Defaults mirror Forge's PHASE_HUMAN_* / PHASE_AI_* preferences.
+    // phase stops (MTGO-style). Defaults mirror Forge's PHASE_HUMAN_* / PHASE_AI_* preferences, minus
+    // the opponent's Begin Combat: Arena doesn't stop there, and players read it as a pointless "Pass".
     private final Set<PhaseType> myStops = EnumSet.of(PhaseType.MAIN1, PhaseType.COMBAT_DECLARE_BLOCKERS, PhaseType.MAIN2);
-    private final Set<PhaseType> oppStops = EnumSet.of(PhaseType.COMBAT_BEGIN, PhaseType.COMBAT_DECLARE_ATTACKERS, PhaseType.COMBAT_DECLARE_BLOCKERS, PhaseType.END_OF_TURN);
+    private final Set<PhaseType> oppStops = EnumSet.of(PhaseType.COMBAT_DECLARE_ATTACKERS, PhaseType.COMBAT_DECLARE_BLOCKERS, PhaseType.END_OF_TURN);
 
     // current Input painting
     private volatile String inputMessage = "";
@@ -381,7 +382,9 @@ public class WsGuiGame extends AbstractGuiGame {
     }
     @Override public void setHighlighted(final Iterable<GameEntityView> entities, final boolean b) {
         super.setHighlighted(entities, b);
-        synchronized (highlightedIds) { for (final GameEntityView e : entities) { if (b) highlightedIds.add(e.getId()); else highlightedIds.remove(e.getId()); } }
+        // Players share the id space with cards (InputAttack highlights the current defender), so only
+        // cards go out as `highlighted` — otherwise the defending player reads as a picked attacker.
+        synchronized (highlightedIds) { for (final GameEntityView e : entities) { if (!(e instanceof CardView)) continue; if (b) highlightedIds.add(e.getId()); else highlightedIds.remove(e.getId()); } }
         markInputIfPainting();
     }
     @Override public void setWeaklySelectable(final Iterable<CardView> cards) {

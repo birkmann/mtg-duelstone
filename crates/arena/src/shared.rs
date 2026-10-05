@@ -246,6 +246,8 @@ pub const CARD_THICKNESS: f32 = 0.004;
 pub const TABLE_LAYER: usize = 0;
 /// Render layer for the screen-aligned hand overlay (hand cards, dragged card).
 pub const HAND_LAYER: usize = 1;
+/// Render layer for the main menu's 3D stage (portal + card carousel). Owner: menus.
+pub const MENU_LAYER: usize = 2;
 
 /// Root entity of a card. Owner: cards. Children: a front quad (`CardFront`) and a back quad (`CardBack`).
 #[derive(Component, Debug, Clone, Copy, PartialEq, Eq, Hash)]

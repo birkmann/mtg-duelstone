@@ -104,8 +104,9 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
     let g = luma(col);
     col = mix(col, vec3<f32>(g) * 0.9, params.misc.x * 0.55);
     col = col * (1.0 - 0.32 * params.misc.x);
-    // hover brighten
-    col = col + vec3<f32>(0.10) * params.state.w;
+    // hover brighten: scale, never add — `col` is linear, so even +0.1 lifts the art's blacks to
+    // a milky grey and the card reads as washed out
+    col = col * (1.0 + 0.18 * params.state.w);
 
     // glowing rim in the frame: selectable (blue), highlighted (gold), weak (soft blue)
     let rim_w = 1.0 - smoothstep(-0.02, -0.004, d_outer);   // 1 at the very edge, 0 deeper in

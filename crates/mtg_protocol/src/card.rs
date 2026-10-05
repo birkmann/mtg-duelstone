@@ -72,6 +72,8 @@ pub struct CardState {
     pub rules_text: Option<String>,
     pub set_code: Option<String>,
     pub image_key: Option<String>,
+    /// Creatures, Vehicles, and any card with a printed P/T (a God below devotion has one but
+    /// `is_creature == false`).
     pub power: Option<i32>,
     pub toughness: Option<i32>,
     pub loyalty: Option<String>,

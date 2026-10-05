@@ -83,12 +83,15 @@ pub fn primary_model(view: &GameView, input: &CurrentInput) -> PrimaryModel {
                 None => ("Next".into(), None, false),
             }
         } else {
-            ("Pass".into(), Some("Opponent's Turn".into()), true)
+            // name the step: a bare "Opponent's Turn" left players wondering why they were asked
+            let at = phase.map(|p| format!("Opponent's {}", p.label())).unwrap_or_else(|| "Opponent's Turn".into());
+            ("Pass".into(), Some(at), true)
         }
     } else if is_mana_payment(msg) {
         (if raw.eq_ignore_ascii_case("auto") { "Auto Pay".into() } else { raw.to_string() }, Some("Pay mana".into()), false)
     } else if my_turn && phase == Some(PhaseType::CombatDeclareAttackers) && raw.eq_ignore_ascii_case("ok") {
-        let n = f.highlighted.len();
+        // A defending planeswalker is highlighted too; only my own picked creatures are attackers.
+        let n = f.highlighted.iter().filter(|&&id| view.card(id).is_some_and(|c| c.controller.is_some_and(|p| view.is_me(p)))).count();
         if n == 0 { ("No Attack".into(), None, false) } else { ("Attack".into(), Some(format!("with {n}")), false) }
     } else if !my_turn && phase == Some(PhaseType::CombatDeclareBlockers) && raw.eq_ignore_ascii_case("ok") {
         let n = count_blockers(view);
@@ -272,7 +275,7 @@ pub fn short_label(p: PhaseType) -> &'static str {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use mtg_protocol::{ButtonState, Game};
+    use mtg_protocol::{ButtonState, Card, Game, Player, Zones};
 
     fn view(phase: PhaseType, my_turn: bool) -> GameView {
         GameView {
@@ -306,16 +309,23 @@ mod tests {
         let i = input("Priority: You", "OK", "End Turn");
         assert_eq!(primary_model(&view(PhaseType::Main2, true), &i).label, "End Turn");
         let m = primary_model(&view(PhaseType::Upkeep, false), &i);
-        assert_eq!(m.label, "Pass");
+        assert_eq!((m.label.as_str(), m.subtitle.as_deref()), ("Pass", Some("Opponent's Upkeep")));
         assert!(m.passive);
     }
 
     #[test]
     fn attackers_and_blockers_wording() {
         let mut i = input("Declare attackers", "OK", "Alpha Strike");
-        let v = view(PhaseType::CombatDeclareAttackers, true);
+        let mut v = view(PhaseType::CombatDeclareAttackers, true);
+        let card = |id, controller| Card { id, controller: Some(controller), ..Default::default() };
+        v.game.players = vec![
+            Player { id: 1, zones: Zones { battlefield: vec![card(5, 1), card(6, 1)], ..Default::default() }, ..Default::default() },
+            Player { id: 2, zones: Zones { battlefield: vec![card(9, 2)], ..Default::default() }, ..Default::default() },
+        ];
+        // Forge highlights the current defender (here a planeswalker): that alone is still "No Attack".
+        i.frame.as_mut().unwrap().highlighted = vec![9];
         assert_eq!(primary_model(&v, &i).label, "No Attack");
-        i.frame.as_mut().unwrap().highlighted = vec![5, 6];
+        i.frame.as_mut().unwrap().highlighted = vec![9, 5, 6];
         let m = primary_model(&v, &i);
         assert_eq!((m.label.as_str(), m.subtitle.as_deref()), ("Attack", Some("with 2")));
         assert_eq!(secondary_model(&i).unwrap().kind, SecondaryKind::AttackAll);

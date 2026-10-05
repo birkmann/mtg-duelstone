@@ -1,4 +1,4 @@
-//! Menus: Boot splash (over a full-screen card-art showcase), Main menu, Deck select (+ deck import), Settings overlay, Loading/VS
+//! Menus: Boot splash (over a full-screen card-art showcase), Main menu (over a 3D portal stage), Deck select (+ deck import), Settings overlay, Loading/VS
 //! screen and the GameOver banner — all `bevy_ui`, styled with `style`.
 //!
 //! Why one `MenuAction` enum: every clickable thing in the menus carries one, and a single system
@@ -17,6 +17,7 @@ mod loading;
 mod main_menu;
 mod settings_ui;
 mod showcase;
+mod stage;
 pub mod widgets;
 
 use bevy::prelude::*;
@@ -83,12 +84,13 @@ impl Plugin for MenusPlugin {
                 game_over::GameOverPlugin,
                 widgets::WidgetsPlugin,
                 showcase::ShowcasePlugin,
+                stage::StagePlugin,
             ))
             .add_systems(Update, (actions::handle_actions, actions::debug_jump));
     }
 }
 
-/// Menu-ish states where the animated backdrop is visible.
+/// Menu-ish states where the animated 2D backdrop is visible. The main menu has its own 3D stage.
 pub(crate) fn backdrop_state(s: AppState) -> bool {
-    matches!(s, AppState::Boot | AppState::MainMenu | AppState::DeckSelect | AppState::Loading)
+    matches!(s, AppState::Boot | AppState::DeckSelect | AppState::Loading)
 }

@@ -1,5 +1,7 @@
-//! Screen-space overlays that ride on battlefield cards: P/T plate (bottom-right), loyalty,
-//! counter badges, "xN" group badge. Each overlay is a UI node that covers the card's projected
+//! Screen-space overlays that ride on battlefield and command-zone cards: P/T plate
+//! (bottom-right), loyalty, counter badges, "xN" group badge. The printed P/T is unreadable at
+//! table scale, so every card that has one gets a plate — greyed when it isn't a creature right
+//! now (uncrewed Vehicle, God below devotion), so players see the number without a hover. Each overlay is a UI node that covers the card's projected
 //! bounding box every frame, so it follows the card's motion and shrinks with row compression.
 //!
 //! Why UI nodes instead of 3D text: crisp text at any resolution and no render-layer juggling
@@ -27,6 +29,8 @@ pub struct OverlayMap(pub HashMap<CardId, Entity>);
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct PlateInfo {
     pub pt: Option<(String, String)>,
+    /// Has a P/T but isn't a creature at the moment: drawn greyed.
+    pub inactive: bool,
     pub buffed: bool,
     pub damaged: bool,
     pub reduced: bool,
@@ -43,9 +47,8 @@ pub fn plate_info(card: &Card, group: usize) -> PlateInfo {
     let get = |a: &str, b: &str| card.counters.get(a).copied().unwrap_or(0) + card.counters.get(b).copied().unwrap_or(0);
     let plus = get("P1P1", "+1/+1");
     let minus = get("M1M1", "-1/-1");
-    if st.is_creature
-        && let (Some(p), Some(t)) = (st.power, st.toughness)
-    {
+    if let (Some(p), Some(t)) = (st.power, st.toughness) {
+        info.inactive = !st.is_creature;
         let t_left = t - card.damage;
         info.damaged = card.damage > 0;
         info.buffed = plus > minus;
@@ -86,6 +89,10 @@ fn pretty_counter(k: &str) -> String {
     out
 }
 
+fn has_overlay(zone: mtg_protocol::ZoneKind) -> bool {
+    matches!(zone, mtg_protocol::ZoneKind::Battlefield | mtg_protocol::ZoneKind::Command)
+}
+
 pub fn sync_overlays(
     mut commands: Commands,
     mut map: ResMut<OverlayMap>,
@@ -95,7 +102,7 @@ pub fn sync_overlays(
     map.0.retain(|_, e| existing.contains(*e));
     let mut wanted: Vec<CardId> = Vec::new();
     for (_, ce, loc) in &cards {
-        if loc.zone == mtg_protocol::ZoneKind::Battlefield && !loc.hidden {
+        if has_overlay(loc.zone) && !loc.hidden {
             wanted.push(ce.0);
         }
     }
@@ -147,7 +154,7 @@ pub fn position_overlays(
             hide(&mut vis);
             continue;
         };
-        if loc.zone != mtg_protocol::ZoneKind::Battlefield || *cvis == Visibility::Hidden || tp.is_some_and(|t| t.layer != TABLE_LAYER || !t.face_up) {
+        if !has_overlay(loc.zone) || *cvis == Visibility::Hidden || tp.is_some_and(|t| t.layer != TABLE_LAYER || !t.face_up) {
             hide(&mut vis);
             continue;
         }
@@ -178,7 +185,11 @@ pub fn position_overlays(
             *vis = Visibility::Inherited;
         }
         let Some(card) = view.card(ov.card).or_else(|| cache.0.get(&ov.card)) else { continue };
-        let info = plate_info(card, grp.map(|g| g.count).unwrap_or(0));
+        let mut info = plate_info(card, grp.map(|g| g.count).unwrap_or(0));
+        if loc.zone != mtg_protocol::ZoneKind::Battlefield {
+            // a commander waiting in the command zone isn't "summoning sick"
+            info.sick = false;
+        }
         let font_px = (size.x.min(size.y * 1.4) * 0.17).round().clamp(9.0, 40.0);
         let key = format!("{:?}|{}", info, font_px);
         if ov.key != key {
@@ -195,10 +206,11 @@ fn build_overlay(o: &mut ChildSpawnerCommands, fonts: &ArenaFonts, info: &PlateI
     let pad = (fpx * 0.35).round();
     // ---- P/T plate ----
     if let Some((p, t)) = &info.pt {
-        let (pc, tc) = (
+        let grey = Color::srgb(0.62, 0.62, 0.62);
+        let (pc, tc) = if info.inactive { (grey, grey) } else { (
             if info.buffed { Color::srgb(0.55, 0.78, 1.0) } else if info.reduced { Color::srgb(1.0, 0.45, 0.4) } else { Color::WHITE },
             if info.damaged || info.reduced { Color::srgb(1.0, 0.4, 0.35) } else if info.buffed { Color::srgb(0.55, 0.78, 1.0) } else { Color::WHITE },
-        );
+        ) };
         o.spawn((
             Node {
                 position_type: PositionType::Absolute,
@@ -211,8 +223,8 @@ fn build_overlay(o: &mut ChildSpawnerCommands, fonts: &ArenaFonts, info: &PlateI
                 border_radius: BorderRadius::all(px(fpx * 0.5)),
                 ..default()
             },
-            BackgroundColor(Color::srgba(0.08, 0.08, 0.1, 0.94)),
-            BorderColor::all(if info.damaged { Color::srgb(0.85, 0.25, 0.2) } else { Color::srgb(0.75, 0.72, 0.65) }),
+            BackgroundColor(Color::srgba(0.08, 0.08, 0.1, if info.inactive { 0.8 } else { 0.94 })),
+            BorderColor::all(if info.inactive { Color::srgb(0.4, 0.4, 0.4) } else if info.damaged { Color::srgb(0.85, 0.25, 0.2) } else { Color::srgb(0.75, 0.72, 0.65) }),
             Pickable::IGNORE,
         ))
         .with_children(|b| {
@@ -337,5 +349,15 @@ mod tests {
         assert_eq!(i.group, 6);
         assert!(i.counters.contains(&"+2/+2".to_string()));
         assert!(i.counters.contains(&"Charge x3".to_string()));
+    }
+
+    #[test]
+    fn non_creature_with_printed_pt_is_inactive() {
+        let mut god = creature(5, 5, 0, &[]);
+        god.state.as_mut().unwrap().is_creature = false;
+        let i = plate_info(&god, 0);
+        assert_eq!(i.pt, Some(("5".into(), "5".into())));
+        assert!(i.inactive);
+        assert!(!plate_info(&creature(2, 2, 0, &[]), 0).inactive);
     }
 }

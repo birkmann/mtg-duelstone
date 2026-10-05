@@ -317,3 +317,202 @@ pub fn handle_stop_acts(mut acts: MessageReader<Acted>, view: Res<GameView>, mut
         }
     }
 }
+
+// ---- phase ladder ----------------------------------------------------------------------------
+// The icon track above is Arena-faithful but unreadable for anyone who doesn't already know the
+// turn structure, so a labelled ladder on the left edge spells out every step, which one we're
+// in, whose turn it is, and where you'll be asked to act (gold dot = stop; click to toggle).
+
+/// The steps the ladder lists, in turn order. Untap/Cleanup never give priority, and first-strike
+/// damage is shown on the regular damage row.
+pub const LADDER: [PhaseType; 10] = [
+    PhaseType::Upkeep,
+    PhaseType::Draw,
+    PhaseType::Main1,
+    PhaseType::CombatBegin,
+    PhaseType::CombatDeclareAttackers,
+    PhaseType::CombatDeclareBlockers,
+    PhaseType::CombatDamage,
+    PhaseType::CombatEnd,
+    PhaseType::Main2,
+    PhaseType::EndOfTurn,
+];
+
+fn ladder_label(p: PhaseType) -> &'static str {
+    match p {
+        PhaseType::CombatBegin => "Begin Combat",
+        PhaseType::CombatDeclareAttackers => "Attackers",
+        PhaseType::CombatDeclareBlockers => "Blockers",
+        PhaseType::CombatDamage => "Damage",
+        _ => p.label(),
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum StepState {
+    Past,
+    Current,
+    Future,
+}
+
+/// Where `step` sits relative to the current phase (pure; unit-tested).
+pub fn step_state(step: PhaseType, cur: Option<PhaseType>) -> StepState {
+    let Some(cur) = cur else { return StepState::Future };
+    let cur = if cur == PhaseType::CombatFirstStrikeDamage { PhaseType::CombatDamage } else { cur };
+    match step.cmp(&cur) {
+        std::cmp::Ordering::Less => StepState::Past,
+        std::cmp::Ordering::Equal => StepState::Current,
+        std::cmp::Ordering::Greater => StepState::Future,
+    }
+}
+
+#[derive(Component)]
+pub struct Ladder;
+#[derive(Component)]
+pub struct LadderHeader;
+#[derive(Component)]
+pub struct LadderRow(pub PhaseType);
+#[derive(Component)]
+pub struct LadderText(pub PhaseType);
+#[derive(Component)]
+pub struct LadderDot(pub PhaseType);
+
+const ROW_ON: BtnStyle = BtnStyle {
+    base: Color::srgba(0.93, 0.43, 0.13, 0.92),
+    hover: Color::srgb(1.0, 0.58, 0.25),
+    press: Color::srgb(0.8, 0.36, 0.1),
+    off: Color::NONE,
+};
+
+pub fn spawn_ladder(mut commands: Commands, fonts: Res<ArenaFonts>) {
+    commands
+        .spawn((
+            Node {
+                position_type: PositionType::Absolute,
+                left: vw(1.0),
+                top: vh(20.0),
+                width: vh(19.5),
+                flex_direction: FlexDirection::Column,
+                row_gap: vh(0.25),
+                padding: UiRect::axes(vh(0.7), vh(0.8)),
+                border: UiRect::all(vh(0.15)),
+                border_radius: BorderRadius::all(vh(1.0)),
+                display: Display::None,
+                ..default()
+            },
+            BackgroundColor(Color::srgba(0.02, 0.025, 0.04, 0.72)),
+            BorderColor::all(GOLD_DIM),
+            GlobalZIndex(3),
+            Ladder,
+            HudEntity,
+            Pickable::IGNORE,
+        ))
+        .with_children(|l| {
+            l.spawn((label(&fonts, "", FontKind::Title, 1.75, GOLD), LadderHeader, Node { margin: UiRect::bottom(vh(0.4)), ..default() }));
+            for step in LADDER {
+                l.spawn((
+                    Node {
+                        height: vh(2.5),
+                        padding: UiRect::axes(vh(0.8), Val::ZERO),
+                        flex_direction: FlexDirection::Row,
+                        align_items: AlignItems::Center,
+                        justify_content: JustifyContent::SpaceBetween,
+                        border_radius: BorderRadius::all(vh(0.6)),
+                        ..default()
+                    },
+                    BackgroundColor(Color::NONE),
+                    BtnStyle::GHOST,
+                    OnClick(Act::ToggleStopHere(step)),
+                    LadderRow(step),
+                ))
+                .with_children(|r| {
+                    r.spawn((label(&fonts, ladder_label(step), FontKind::Body, 1.55, INK), LadderText(step)));
+                    r.spawn((
+                        Node { width: vh(0.9), height: vh(0.9), border: UiRect::all(vh(0.12)), border_radius: BorderRadius::MAX, ..default() },
+                        BackgroundColor(Color::NONE),
+                        BorderColor::all(GOLD_DIM),
+                        LadderDot(step),
+                        Pickable::IGNORE,
+                    ));
+                });
+            }
+            l.spawn((label(&fonts, "Dot = you stop here. Click to toggle.", FontKind::Body, 1.3, INK_DIM), Node { margin: UiRect::top(vh(0.4)), ..default() }));
+        });
+}
+
+pub fn update_ladder(
+    view: Res<GameView>,
+    mut root: Query<&mut Node, With<Ladder>>,
+    mut header: Query<(&mut Text, &mut TextColor), (With<LadderHeader>, Without<LadderText>)>,
+    mut rows: Query<(&LadderRow, &mut BtnStyle)>,
+    mut texts: Query<(&LadderText, &mut TextColor), Without<LadderHeader>>,
+    mut dots: Query<(&LadderDot, &mut BackgroundColor, &mut BorderColor)>,
+) {
+    let live = view.has_state() && view.game.player_turn.is_some();
+    for mut n in &mut root {
+        let d = if live { Display::Flex } else { Display::None };
+        if n.display != d {
+            n.display = d;
+        }
+    }
+    if !live {
+        return;
+    }
+    let mine = view.my_turn();
+    let cur = view.phase();
+    for (mut t, mut c) in &mut header {
+        // turn number already sits in the top-left tag; one short line keeps the panel narrow
+        let s = if mine { "Your turn" } else { "Opponent's turn" };
+        if t.0 != s {
+            t.0 = s.to_string();
+        }
+        let col = if mine { ORANGE_HI } else { Color::srgb(0.55, 0.75, 1.0) };
+        if c.0 != col {
+            c.0 = col;
+        }
+    }
+    for (row, mut st) in &mut rows {
+        let want = if step_state(row.0, cur) == StepState::Current { ROW_ON } else { BtnStyle::GHOST };
+        if st.base != want.base {
+            *st = want;
+        }
+    }
+    for (t, mut c) in &mut texts {
+        let col = match step_state(t.0, cur) {
+            StepState::Current => Color::WHITE,
+            StepState::Past => Color::srgba(0.66, 0.63, 0.58, 0.55),
+            StepState::Future => INK,
+        };
+        if c.0 != col {
+            c.0 = col;
+        }
+    }
+    let stops = if mine { &view.stops.my_turn } else { &view.stops.opp_turn };
+    for (d, mut bg, mut bc) in &mut dots {
+        let on = stops.contains(&d.0) || (d.0 == PhaseType::CombatDamage && stops.contains(&PhaseType::CombatFirstStrikeDamage));
+        let fill = if on { GOLD } else { Color::NONE };
+        if bg.0 != fill {
+            bg.0 = fill;
+        }
+        *bc = BorderColor::all(if on { GOLD } else { GOLD_DIM });
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn ladder_marks_past_current_future() {
+        let cur = Some(PhaseType::CombatBegin);
+        assert_eq!(step_state(PhaseType::Main1, cur), StepState::Past);
+        assert_eq!(step_state(PhaseType::CombatBegin, cur), StepState::Current);
+        assert_eq!(step_state(PhaseType::Main2, cur), StepState::Future);
+    }
+
+    #[test]
+    fn first_strike_lights_the_damage_row() {
+        assert_eq!(step_state(PhaseType::CombatDamage, Some(PhaseType::CombatFirstStrikeDamage)), StepState::Current);
+        assert_eq!(step_state(PhaseType::CombatDeclareBlockers, Some(PhaseType::CombatFirstStrikeDamage)), StepState::Past);
+    }
+}

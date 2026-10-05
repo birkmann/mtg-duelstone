@@ -73,7 +73,8 @@ pub fn attacking_set(view: &GameView, input: &CurrentInput, opt: &OptimisticAtta
     if declaring_attackers(view, input)
         && let Some(f) = input.frame.as_ref()
     {
-        s.extend(f.highlighted.iter().copied());
+        // Skip the highlighted defender (an opposing planeswalker) — it isn't attacking.
+        s.extend(f.highlighted.iter().copied().filter(|&id| view.card(id).is_some_and(|c| c.controller.is_some_and(|p| view.is_me(p)))));
     }
     for (id, on) in &opt.toggles {
         if *on {
