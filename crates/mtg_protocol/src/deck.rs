@@ -46,7 +46,7 @@ impl CatalogCard {
     pub fn has_tag(&self, tag: &str) -> bool {
         self.tags.iter().any(|t| t == tag)
     }
-    /// Primary card type for grouping a decklist, in Arena's order.
+    /// Primary card type for grouping a decklist, in the usual deck-list order.
     pub fn primary_type(&self) -> CardKind {
         let t = self.type_line.to_ascii_lowercase();
         // Land first: "Artifact Land" plays like a land; creature before artifact for artifact creatures.

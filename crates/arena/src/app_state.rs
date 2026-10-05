@@ -8,6 +8,7 @@ use std::path::{Path, PathBuf};
 
 use bevy::prelude::*;
 use crossbeam_channel::{Receiver, unbounded};
+use mtg_client::launcher::find_bundled;
 use mtg_client::{EngineLink, EngineProcess, LaunchConfig, Rest, ensure_engine};
 use mtg_protocol::{CreateMatch, MatchInfo, ServerFrame};
 
@@ -23,9 +24,10 @@ impl Plugin for AppStatePlugin {
             .init_resource::<EngineConfig>()
             .init_resource::<Settings>()
             .add_message::<RetryBoot>()
-            .add_systems(Startup, build_engine_config)
             .add_systems(Update, retry_boot)
-            .add_systems(OnEnter(AppState::Boot), start_boot)
+            // Not in Startup: Bevy enters the initial state before Startup runs, so start_boot
+            // would see the default config (wrong jar, and --engine ignored).
+            .add_systems(OnEnter(AppState::Boot), (build_engine_config, start_boot).chain())
             .add_systems(Update, poll_boot.run_if(in_state(AppState::Boot)))
             .add_systems(OnEnter(AppState::Loading), start_loading)
             .add_systems(Update, poll_loading.run_if(in_state(AppState::Loading)))
@@ -75,7 +77,7 @@ fn locate(rel: &str) -> Option<PathBuf> {
 fn build_engine_config(cli: Res<CliArgs>, settings: Res<Settings>, mut cfg: ResMut<EngineConfig>) {
     cfg.base_url = cli.engine_url.clone().unwrap_or_else(|| settings.engine_url.clone());
     cfg.autolaunch = !cli.no_autolaunch && settings.autolaunch;
-    if let Some(jar) = locate("engine/target/forge-ws-server.jar") {
+    if let Some(jar) = find_bundled("engine/forge-ws-server.jar").or_else(|| locate("engine/target/forge-ws-server.jar")) {
         cfg.jar = jar;
     }
 }
@@ -110,7 +112,7 @@ fn start_boot(
         base_url: cfg.base_url.clone(),
         port: port_of(&cfg.base_url),
         jar: cfg.jar.clone(),
-        assets: locate("forge/forge-gui"),
+        assets: find_bundled("forge").or_else(|| locate("forge/forge-gui")),
         java: None,
         health_timeout_secs: 90,
     };

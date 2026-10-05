@@ -1,4 +1,4 @@
-//! Arena-style phase track: compact diamonds / card / swords icons flanking each avatar, with the
+//! Phase track: compact diamonds / card / swords icons flanking each avatar, with the
 //! current phase glowing orange. Hovering MY track expands a full 13-phase strip whose pills toggle
 //! stops (`ClientFrame::Settings`).
 
@@ -319,7 +319,7 @@ pub fn handle_stop_acts(mut acts: MessageReader<Acted>, view: Res<GameView>, mut
 }
 
 // ---- phase ladder ----------------------------------------------------------------------------
-// The icon track above is Arena-faithful but unreadable for anyone who doesn't already know the
+// The icon track above is compact but unreadable for anyone who doesn't already know the
 // turn structure, so a labelled ladder on the left edge spells out every step, which one we're
 // in, whose turn it is, and where you'll be asked to act (gold dot = stop; click to toggle).
 

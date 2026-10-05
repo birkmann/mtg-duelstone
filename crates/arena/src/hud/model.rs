@@ -1,5 +1,5 @@
 //! Pure view-models for the action buttons and the prompt bar: Forge's labels / messages in,
-//! Arena wording out. Kept ECS-free so the mapping is unit-tested.
+//! short player wording out. Kept ECS-free so the mapping is unit-tested.
 
 use mtg_protocol::{InputFrame, PhaseType};
 
@@ -234,7 +234,7 @@ pub fn mana_to_pay(msg: &str) -> Option<String> {
     Some(rest[start..end].to_string())
 }
 
-/// Phases grouped for the compact Arena-style track.
+/// Phases grouped for the compact track.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Group {
     Begin,

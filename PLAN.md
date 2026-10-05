@@ -1,17 +1,17 @@
-# MTG Arena (Rust + Bevy) — Implementation Plan
+# MTG Duelstone (Rust + Bevy) — Implementation Plan
 
 ## Context
 
-The goal is a desktop Magic: The Gathering client that looks and plays like **MTG Arena** (see `inspiration/`), written in **Rust + Bevy**. It covers 1v1 against an AI opponent in both **60-card Constructed (20 life)** and **1v1 Commander (40 life)**.
+The goal is a desktop Magic: The Gathering client with a polished 3D table, written in **Rust + Bevy**. It covers 1v1 against an AI opponent in both **60-card Constructed (20 life)** and **1v1 Commander (40 life)**.
 
 Writing a full comprehensive-rules engine is a multi-year effort. The existing `~/Gits/mtg-cmd` repo already solves that problem. It runs **Forge** (GPL-3, about 33k scripted cards, full rules, a competent AI) headless behind a Java WebSocket/JSON server (`forge-ws-server`). That server has a documented protocol (`mtg-cmd/docs/protocol.md`), a Scryfall image proxy, deck import and a soak-tested autopilot. A React client already plays complete games over it.
 
 **Decisions (confirmed with the user):**
 - **Rules:** Forge via the existing WS protocol. The Bevy client never computes legality: it renders `state`, highlights what `input.selectable` says, and answers `prompt`s by index.
 - **Formats:** Constructed and Commander from the start.
-- **Rendering:** a 3D tilted table with a perspective camera, like Arena. Cards are textured quads; HUD and dialogs use `bevy_ui`.
+- **Rendering:** a 3D tilted table with a perspective camera. Cards are textured quads; HUD and dialogs use `bevy_ui`.
 
-The client's job is everything Arena is: board layout, card motion, hover previews, targeting arrows, combat presentation, the phase track and action button, dialogs, menus, effects and sound.
+The client's job is everything the player sees: board layout, card motion, hover previews, targeting arrows, combat presentation, the phase track and action button, dialogs, menus, effects and sound.
 
 ---
 
@@ -30,7 +30,7 @@ Common layout across all eight screenshots, with the camera tilted about 55–60
 | Library / graveyard / exile | bottom-left: graveyard top card face-up, library as a card-back pile | top-right |
 | Command zone (Commander) | left of the library pile | top-right next to the library |
 | Stack | right-middle, enlarged spell cards fanned (newest on top) | — |
-| Hover preview | large full card on the right edge (Arena "Frilled Deathspitter" shot) | — |
+| Hover preview | large full card on the right edge | — |
 | Action button | bottom-right orange pill: "Next / To Combat", "Pass", "End Turn", "Attack", "No Blocks", "Done"; small secondary button and a fast-forward toggle | — |
 | Battlefield cards | **art-crop frames**: coloured name bar, art, P/T plate bottom-right, keyword badges bottom-left, counters as round badges | same |
 | Token stacks | identical tokens grouped as "x10" | same |
@@ -42,9 +42,9 @@ Effects seen in the shots: targeting/ability arrows (glowing bezier ribbons), se
 ## 2. Architecture
 
 ```
-┌──────────────────────── mtg-arena--rust (this repo) ─────────────────────────┐
+┌──────────────────────── mtg-duelstone (this repo) ───────────────────────────┐
 │                                                                              │
-│  crates/arena  (Bevy 0.19 app, bin "mtg-arena")                              │
+│  crates/arena  (Bevy 0.19 app, bin "mtg-duelstone")                          │
 │    plugins: net · view · cards · layout · motion · interact · hud ·          │
 │             prompts · combat · stack · fx · audio · menus · settings         │
 │                 ▲ ServerFrame messages        │ ClientCmd messages            │
@@ -73,7 +73,7 @@ Effects seen in the shots: targeting/ability arrows (glowing bezier ribbons), se
 ### Repo layout
 
 ```
-mtg-arena--rust/
+mtg-duelstone/
   PLAN.md  README.md  CLAUDE.md  LICENSE  run.sh  .gitignore
   Cargo.toml                       # workspace: resolver = "3", edition 2024
   crates/
@@ -112,7 +112,7 @@ Copy `mtg-cmd/forge-ws-server` and `mtg-cmd/tools/{setup-forge.sh,install-toolch
    - Reuse `DeckSource`, `DeckStore`, `DeckImporter` and `CardCatalog` unchanged where possible.
 3. **Art-crop images.**
    - `ImageCache` gains `version=art_crop|normal|large`, and the cache key includes the version.
-   - Arena-style battlefield frames need the art crop. The hover preview uses `large`.
+   - Battlefield frames need the art crop. The hover preview uses `large`.
 4. **Animation cue frame `events`** (phase M5, optional at first).
    - Subscribe to Forge's game event bus (`forge.game.event.GameEvent*`: damage dealt, zone change, spell cast, attackers declared, life changed, counters, tapped). Emit `{t:"events", seq, items:[{kind, source, target, amount}]}`.
    - The client can derive most motion from state diffs, but "who damaged whom" and "which ability fired" need cues.
@@ -156,7 +156,7 @@ This crate has no Bevy dependency, so it is reusable by the autopilot and by tes
   - Wait for health (the card DB loads in about 6s) and kill the child on drop.
   - Read the JAR path and port from config or env.
 - **`record`**
-  - Optionally tee every inbound frame to `~/.local/share/mtg-arena/replays/<ts>.jsonl`.
+  - Optionally tee every inbound frame to `~/.local/share/mtg-duelstone/replays/<ts>.jsonl`.
   - A `Replayer` feeds a recording back as `LinkEvent`s. This enables UI development without the engine and deterministic regression tests.
 - **`bin/autopilot`** (port of `mtg-cmd/tools/ws-autopilot.mjs`)
   - Plays full games against Forge AI with a "first legal option" or random policy per input and prompt kind.
@@ -188,18 +188,18 @@ This crate has no Bevy dependency, so it is reusable by the autopilot and by tes
 | `prompts` | One modal per `PromptKind`. `confirm` → two buttons. `option`/`chooseAbility` → button list. `choices`/`chooseEntity` → **card tray** (a row of large card images with selection, min/max, Done). `order` → drag-reorder list. `assignCombatDamage`/`assignAmount` → per-target ± steppers that must sum to the total (and never send `null` unless "assign later"). `manipulateCards` → reorder tray. `text` → text/number field. Every answer uses the prompt `id`; the modal closes when the prompt clears. `input.trayCards` reuses the tray in non-modal mode. |
 | `combat` | From `game.combat`: attackers translate toward the centre line. Blocker → attacker arrows are curved ribbon meshes with an emissive material. Planned blockers show dashed outlines. "Attack all" uses `alphaStrike`. |
 | `stack` | Renders stack items enlarged at right-middle, newest on top. Abilities appear as a small "ability card" (source art plus text). Targeting arrows run from stack item to `targetCards`/`targetPlayers`. Auto-yield toggle per item (`yield` frame). |
-| `targeting` | While an input has `selectableCards/Players` with a source `input.card`, draws a live arrow from the source to the cursor (the Arena bezier ribbon) and glows valid targets. |
+| `targeting` | While an input has `selectableCards/Players` with a source `input.card`, draws a live arrow from the source to the cursor (a glowing bezier ribbon) and glows valid targets. |
 | `fx` | Floating damage and life numbers, hit shake, impact particle bursts (billboard sprites with lifetime), death dissolve (custom WGSL in M7), land-drop dust, turn banner ("Your Turn"). Driven by `view` diff messages and, later, `events` frames. |
 | `audio` | `bevy_audio` one-shots for draw, play land, cast, resolve, attack, hit, life loss, turn start, victory/defeat. CC0 sound pack under `assets/sfx/`. Volume in settings. |
 | `menus` | Main menu (Play / Decks / Settings / Quit). Deck select has a **Constructed ↔ Commander** toggle, your deck, an AI deck (or random) and a seed. Deck import pastes text → engine importer → shows unresolved lines and suggestions → save. Game-over screen offers Rematch or Menu. |
-| `settings` | Persisted with serde to `~/.config/mtg-arena/settings.json`: engine URL/port, autolaunch, animation speed, phase stops, volume, fullscreen, battlefield theme. |
+| `settings` | Persisted with serde to `~/.config/mtg-duelstone/settings.json`: engine URL/port, autolaunch, animation speed, phase stops, volume, fullscreen, battlefield theme. |
 | `table` | 3D scene: the table plane with a playmat texture (themeable), border props, directional light plus ambient, a **fixed perspective camera** pitched about 58° with a slight cursor parallax, and the camera rig resizing with the viewport. |
-| `hand_camera` | A second **orthographic overlay camera** (higher `order`, own `RenderLayers`) for hand cards and the dragged card. The hand never clips into the table and stays screen-aligned like Arena's. On drag-out, the card moves to the table layer. |
+| `hand_camera` | A second **orthographic overlay camera** (higher `order`, own `RenderLayers`) for hand cards and the dragged card. The hand never clips into the table and stays screen-aligned. On drag-out, the card moves to the table layer. |
 
 #### Card visuals (staged)
 
 1. **M2:** every visible card uses Scryfall `normal` images everywhere. Battlefield cards are scaled down, and the hover preview uses `large`.
-2. **M7 (Arena look):** battlefield cards use a custom `ArenaCardMaterial` (WGSL).
+2. **M7 (card look):** battlefield cards use a custom `ArenaCardMaterial` (WGSL).
    - It composites the `art_crop` texture into a frame whose colour comes from `state.colors` (W/U/B/R/G/multi-gold/colourless/land).
    - It adds a rounded-corner mask, a selectable glow rim (blue), a highlighted rim (yellow), a tapped darken, and a damage-tint uniform.
    - The name bar and P/T plate come from the projected UI overlay.
@@ -261,7 +261,7 @@ Each milestone ends runnable and committed.
   - 40 life
 - **Acceptance:** one full game of each format started from the menus.
 
-### M7 — Arena polish
+### M7 — Visual polish
 - `ArenaCardMaterial` art-crop frames, keyword badge atlas, counters and P/T plates with buff/debuff colouring (blue/red, as in the screenshots).
 - Draw, cast, resolve and land-drop animations, death dissolve shader, damage numbers and particles, turn banner, and SFX.
 - Fast-forward. Two or three battlefield themes (playmat texture, light colour, props).
@@ -301,7 +301,7 @@ Each milestone ends runnable and committed.
   - `POST /api/match` with `format:"constructed"` returns a match, and `hello` shows the format.
 - **Soak:** `cargo run -p mtg_client --bin autopilot -- --format constructed --games 10` and the same with `--format commander`. All games reach `gameOver`, with no stall warnings.
 - **Visual and manual (`./run.sh`):**
-  - Start a Constructed game from the menu and compare the board against `inspiration/arena.png` and `mtg-arena-gameplay-storm.jpg` (layout, hand fan, preview, button).
+  - Start a Constructed game from the menu and check the board: layout, hand fan, preview, button.
   - Play lands, cast a creature, attack, block, cast a targeted instant, resolve the stack, reach game over.
   - Repeat for Commander: cast the commander from the command zone, check the tax badge and 40 life.
   - Use the `run` skill or screenshots to confirm visuals at each milestone.

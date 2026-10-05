@@ -22,7 +22,7 @@ import java.util.concurrent.locks.ReentrantLock;
  * browser from hitting their rate limit — and keeps games rendering offline after the first load.
  */
 public final class ImageCache {
-    private static final String UA = "CommanderArena/0.1 (personal Forge client; +https://github.com/)";
+    private static final String UA = "MTGDuelstone/0.1 (personal Forge client; +https://github.com/birkmann/mtg-duelstone)";
     private final Path dir;
     private final HttpClient http = HttpClient.newBuilder().followRedirects(HttpClient.Redirect.ALWAYS).connectTimeout(Duration.ofSeconds(10)).build();
     private final ReentrantLock fetchLock = new ReentrantLock(true); // serialize upstream requests

@@ -17,7 +17,7 @@ import java.util.regex.Pattern;
 
 /**
  * Parses pasted decklists — plain text ("1 Sol Ring"), Moxfield/Archidekt/TappedOut exports
- * ("1 Sol Ring (C21) 263 *F*", "1x Sol Ring (c21) 263 [Artifact]"), MTGO/Arena, and Forge .dck —
+ * ("1 Sol Ring (C21) 263 *F*", "1x Sol Ring (c21) 263 [Artifact]"), MTGO-style exports, and Forge .dck —
  * and resolves every line against Forge's card DB. Nothing is saved: the result lists what resolved,
  * what didn't (with suggestions) and which cards look like commanders, for the user to confirm.
  */

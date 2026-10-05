@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Application
+Name=MTG Duelstone
+GenericName=Card Game
+Comment=Play Magic: The Gathering against the Forge AI on a 3D card table
+Exec=mtg-duelstone
+Icon=mtg-duelstone
+Terminal=false
+Categories=Game;CardGame;
+Keywords=magic;mtg;card;commander;constructed;tcg;
+StartupWMClass=mtg-duelstone
+SingleMainWindow=true

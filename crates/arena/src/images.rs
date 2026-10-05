@@ -27,6 +27,10 @@ use crate::shared::{AppState, EngineConfig};
 
 /// Directory holding `textures/`, `fonts/`, … — works from the repo root or the crate dir.
 pub fn assets_dir() -> PathBuf {
+    // A packaged build must use its own copy, even when built on this machine from a checkout.
+    if let Some(p) = mtg_client::launcher::find_bundled("assets") {
+        return p;
+    }
     let compiled = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("assets");
     if compiled.exists() {
         return compiled;

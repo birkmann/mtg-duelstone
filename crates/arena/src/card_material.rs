@@ -1,7 +1,7 @@
-//! Arena look for cards: art-crop battlefield frames, glow rims, and name plates.
+//! The card look: art-crop battlefield frames, glow rims, and name plates.
 //!
 //! Why a material swap instead of one shader for everything: hand/stack/graveyard keep the full
-//! card image (you need the text), while battlefield permanents use the compact Arena frame
+//! card image (you need the text), while battlefield permanents use a compact frame
 //! (coloured border, pale name bar, art window). cards.rs owns `MeshMaterial3d<StandardMaterial>`
 //! on the `CardFront`; we *remove* that component while a card wears the frame material, so the
 //! two systems never fight, and put a StandardMaterial back when it leaves the battlefield
@@ -9,7 +9,7 @@
 //!
 //! Glow: every card root gets one extra additive quad slightly larger than the card, whose
 //! material depends on Selectable / Highlighted / WeakSelectable (blue = playable/selectable,
-//! gold = highlighted, soft blue = weak). That gives hand cards Arena's blue edge glow too.
+//! gold = highlighted, soft blue = weak). That gives hand cards the blue edge glow too.
 
 use std::collections::HashMap;
 
@@ -267,7 +267,7 @@ fn update_glow(
 // Material swap
 // -------------------------------------------------------------------------------------------
 
-/// Present while the card wears the Arena frame material.
+/// Present while the card wears the battlefield frame material.
 #[derive(Component)]
 struct ArenaMat {
     handle: Handle<ArenaCardMaterial>,

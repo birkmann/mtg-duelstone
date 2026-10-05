@@ -1,4 +1,4 @@
-//! Small bevy_ui toolkit shared by hud / prompts / stack: Arena-ish palette, text + button
+//! Small bevy_ui toolkit shared by hud / prompts / stack: the game palette, text + button
 //! helpers, mana pips, a card-picture widget and scroll areas.
 //!
 //! Why a mini toolkit: every widget here is spawned dynamically (prompts differ per kind), so

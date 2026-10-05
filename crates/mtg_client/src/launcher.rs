@@ -18,7 +18,8 @@ pub struct LaunchConfig {
     pub jar: PathBuf,
     /// Forge assets dir (`forge/forge-gui`); None = let the engine search upward from cwd.
     pub assets: Option<PathBuf>,
-    /// Java binary; None = `$JAVA_HOME/bin/java`, then `~/.local/opt/jdk-17*/bin/java`, then `java`.
+    /// Java binary; None = the bundled `jre/`, then `$JAVA_HOME/bin/java`, then
+    /// `~/.local/opt/jdk-17*/bin/java`, then `java`.
     pub java: Option<PathBuf>,
     pub health_timeout_secs: u64,
 }
@@ -35,18 +36,38 @@ impl Drop for EngineProcess {
     }
 }
 
-/// `~/.local/share/mtg-arena/engine.log` (platform data dir).
+/// `~/.local/share/mtg-duelstone/engine.log` (platform data dir).
 pub fn log_path() -> PathBuf {
-    directories::ProjectDirs::from("", "", "mtg-arena")
+    directories::ProjectDirs::from("", "", "mtg-duelstone")
         .map(|d| d.data_dir().to_path_buf())
         .unwrap_or_else(std::env::temp_dir)
         .join("engine.log")
+}
+
+/// Where a packaged build keeps its resources (`assets/`, `engine/`, `forge/`, `decks/`, `jre/`):
+/// next to the executable, in a macOS bundle's `Contents/Resources`, or in `../share/mtg-duelstone`
+/// (AppImage and `/usr` installs). Packaging scripts lay files out to match; see `packaging/`.
+pub fn bundle_dirs() -> Vec<PathBuf> {
+    let exe = std::env::current_exe().and_then(|e| e.canonicalize());
+    let Some(exe_dir) = exe.ok().and_then(|e| e.parent().map(Path::to_path_buf)) else {
+        return Vec::new();
+    };
+    vec![exe_dir.join("../Resources"), exe_dir.join("../share/mtg-duelstone"), exe_dir]
+}
+
+/// `rel` inside the first [`bundle_dirs`] entry that has it.
+pub fn find_bundled(rel: &str) -> Option<PathBuf> {
+    bundle_dirs().into_iter().map(|d| d.join(rel)).find(|p| p.exists())
 }
 
 /// Locate a Java binary following the documented search order.
 pub fn find_java(cfg: &LaunchConfig) -> PathBuf {
     if let Some(j) = &cfg.java {
         return j.clone();
+    }
+    // A packaged build ships its own runtime; prefer it over whatever Java the user has.
+    if let Some(j) = find_bundled("jre/bin/java") {
+        return j;
     }
     if let Some(h) = std::env::var_os("JAVA_HOME") {
         let p = Path::new(&h).join("bin/java");
@@ -105,7 +126,9 @@ pub fn ensure_engine(cfg: &LaunchConfig, progress: &mut dyn FnMut(&str)) -> anyh
     let out = OpenOptions::new().create(true).write(true).truncate(true).open(&log).with_context(|| format!("open {}", log.display()))?;
     let err = out.try_clone()?;
     let mut cmd = Command::new(&java);
-    cmd.arg("-jar").arg(&jar).arg("--port").arg(cfg.port.to_string());
+    // Headless: the engine never opens a window, and on macOS touching AWT would otherwise put a
+    // second "java" icon in the Dock.
+    cmd.arg("-Djava.awt.headless=true").arg("-jar").arg(&jar).arg("--port").arg(cfg.port.to_string());
     if let Some(a) = &cfg.assets {
         let a = find_jar_dir(a);
         cmd.arg("--assets").arg(a);

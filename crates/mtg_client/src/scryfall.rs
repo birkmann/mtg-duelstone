@@ -18,7 +18,7 @@ use anyhow::{Context, Result, anyhow};
 use serde::{Deserialize, Serialize};
 use ureq::Agent;
 
-const UA: &str = concat!("MTGArenaFanClient/", env!("CARGO_PKG_VERSION"), " (personal Forge client)");
+const UA: &str = concat!("MTGDuelstone/", env!("CARGO_PKG_VERSION"), " (personal Forge client)");
 const API: &str = "https://api.scryfall.com";
 /// Artist portfolio sizes grow slowly; refresh them once a month.
 const ARTIST_TTL_SECS: u64 = 30 * 24 * 3600;
@@ -113,9 +113,9 @@ struct ArtistCount {
     fetched: u64,
 }
 
-/// `~/.cache/mtg-arena/showcase` (platform cache dir).
+/// `~/.cache/mtg-duelstone/showcase` (platform cache dir).
 pub fn cache_dir() -> PathBuf {
-    directories::ProjectDirs::from("", "", "mtg-arena")
+    directories::ProjectDirs::from("", "", "mtg-duelstone")
         .map(|d| d.cache_dir().to_path_buf())
         .unwrap_or_else(std::env::temp_dir)
         .join("showcase")

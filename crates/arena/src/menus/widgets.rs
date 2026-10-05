@@ -31,7 +31,7 @@ impl Plugin for WidgetsPlugin {
     }
 }
 
-/// A single- or multi-line text input in the Arena style. `lines` = visible lines.
+/// A single- or multi-line text input in the game's style. `lines` = visible lines.
 pub fn text_field(fonts: &ArenaFonts, field: Field, initial: &str, width: Val, lines: f32, multiline: bool) -> impl Bundle {
     let mut et = EditableText::new(initial);
     et.visible_lines = Some(lines);

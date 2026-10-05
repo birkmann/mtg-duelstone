@@ -16,7 +16,9 @@ fn main() {
                 })
                 .set(WindowPlugin {
                     primary_window: Some(Window {
-                        title: "MTG Arena".into(),
+                        title: "MTG Duelstone".into(),
+                        // Wayland app id / X11 WM_CLASS: matches StartupWMClass in packaging/mtg-duelstone.desktop.
+                        name: Some("mtg-duelstone".into()),
                         resolution: std::env::var("ARENA_WIN").ok().and_then(|s| s.split_once('x').and_then(|(w, h)| Some((w.parse().ok()?, h.parse().ok()?)))).map(|(w, h): (u32, u32)| WindowResolution::new(w, h)).unwrap_or_else(|| WindowResolution::new(1600, 900)),
                         ..default()
                     }),
@@ -54,7 +56,7 @@ fn parse_args() -> CliArgs {
             "--autoplay" => cli.autoplay = true,
             "-h" | "--help" => {
                 println!(
-                    "mtg-arena [--quick] [--format constructed|commander] [--deck REF] [--ai-deck REF] [--seed N]\n\
+                    "mtg-duelstone [--quick] [--format constructed|commander] [--deck REF] [--ai-deck REF] [--seed N]\n\
                      \x20         [--replay FILE.jsonl] [--record FILE.jsonl] [--engine URL] [--no-autolaunch]\n\
                      \x20         [--screenshot OUT.png] [--exit-after SECS] [--autoplay]"
                 );

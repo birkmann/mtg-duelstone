@@ -8,3 +8,11 @@
 *.jsonl
 !crates/**/fixtures/*.jsonl
 !crates/arena/tests/replays/*.jsonl
+# Packaging outputs
+/packaging/appimage/tools/
+/packaging/appimage/AppDir/
+/squashfs-root/
+*.AppImage
+*.dmg
+# Local reference screenshots (third-party, not redistributed)
+/inspiration/

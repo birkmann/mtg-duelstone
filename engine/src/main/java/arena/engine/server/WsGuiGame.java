@@ -61,7 +61,7 @@ public class WsGuiGame extends AbstractGuiGame {
     private volatile ViewJson vj = new ViewJson(null);
 
     // phase stops (MTGO-style). Defaults mirror Forge's PHASE_HUMAN_* / PHASE_AI_* preferences, minus
-    // the opponent's Begin Combat: Arena doesn't stop there, and players read it as a pointless "Pass".
+    // the opponent's Begin Combat: stopping there is unusual, and players read it as a pointless "Pass".
     private final Set<PhaseType> myStops = EnumSet.of(PhaseType.MAIN1, PhaseType.COMBAT_DECLARE_BLOCKERS, PhaseType.MAIN2);
     private final Set<PhaseType> oppStops = EnumSet.of(PhaseType.COMBAT_DECLARE_ATTACKERS, PhaseType.COMBAT_DECLARE_BLOCKERS, PhaseType.END_OF_TURN);
 

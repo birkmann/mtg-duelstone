@@ -1,7 +1,7 @@
 //! Bottom-right action cluster (orange "Next / To Combat" pill, fast-forward, Attack All), the
 //! input message bar, turn tags, and the click → `ClientFrame` translation for all of them.
 //!
-//! The engine drives everything: labels come from `input.ok/cancel`, mapped to Arena wording by
+//! The engine drives everything: labels come from `input.ok/cancel`, mapped to short player wording by
 //! `model`; a click sends the frame and sets `CurrentInput.awaiting` so the buttons grey out until
 //! the next input arrives (rule 4 in engine-integration.md).
 
@@ -133,7 +133,7 @@ pub fn spawn_buttons(mut commands: Commands, fonts: Res<ArenaFonts>) {
             b.spawn((ghost(Node { flex_direction: FlexDirection::Row, column_gap: vh(0.25), ..default() }), MessageMana));
         });
 
-    // ---- name tags + turn indicator (top-left / bottom-left like Arena) ----
+    // ---- name tags + turn indicator (top-left / bottom-left) ----
     for mine in [false, true] {
         commands
             .spawn((

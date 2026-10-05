@@ -120,7 +120,7 @@ def playmat_sanctum():
     col -= seam[..., None]
     # centre line
     col -= (np.exp(-(v / 0.004) ** 2) * 0.08)[..., None]
-    # green-ish dark edges (arena's mossy corners)
+    # green-ish dark edges (mossy corners)
     col = lerp(col, col * np.array([0.35, 0.4, 0.2]), np.clip(edge_dark + np.clip(X - 0.9, 0, 1) * 6, 0, 0.9))
     col *= vig[..., None]
     save(col, "playmat_sanctum.png")

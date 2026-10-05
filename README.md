@@ -1,8 +1,8 @@
 <div align="center">
 
-# MTG Arena · Rust + Bevy
+# MTG Duelstone
 
-**A desktop Magic: The Gathering client that looks and plays like *MTG Arena*:<br>
+**A desktop Magic: The Gathering client written in Rust + Bevy:<br>
 a tilted 3D table, art-framed cards, targeting arrows and the full rules engine behind it.**
 
 Play 1v1 against the Forge AI in **60-card Constructed** or **Commander**.
@@ -23,11 +23,13 @@ Play 1v1 against the Forge AI in **60-card Constructed** or **Commander**.
 | | |
 |:---:|:---:|
 | ![Main menu](docs/screenshots/menu.jpg) | ![Deck selection](docs/screenshots/decks.jpg) |
-| **Main menu.** Animated card-back backdrop, Play · Decks · Settings | **Choose your deck.** Constructed ↔ Commander, pick the AI's deck or Random, import your own |
+| **Main menu.** A card carousel around an arcane portal; Play · Decks · Customize · Settings | **Choose your deck.** Constructed ↔ Commander, every deck in its box, pick the AI's deck or Random |
 | ![Opening hand](docs/screenshots/mulligan.jpg) | ![Hover preview while paying mana](docs/screenshots/hover.jpg) |
 | **Opening hand.** Keep or mulligan | **Hover preview & mana payment.** Big card on the right, cost pips, Auto Pay |
 | ![Commander game with goblin and elf tokens](docs/screenshots/commander.jpg) | ![Counterspell on the stack](docs/screenshots/stack.jpg) |
 | **Commander.** Krenko's goblin tokens stack up (x5), elves (x11), commander damage | **The stack.** The AI counters your spell; the button reads *Resolve* |
+| ![Deck builder with recommendations](docs/screenshots/builder.jpg) | ![Design Studio](docs/screenshots/designer.jpg) |
+| **Deck builder.** Offline EDHREC-style suggestions, live mana curve, colour sources and role counts | **Design Studio.** Sleeves, deckboxes and playmats from presets or your own designs |
 | ![Combat](docs/screenshots/combat.jpg) | ![Combat damage assignment](docs/screenshots/damage.jpg) |
 | **Combat.** A Commander alpha strike: ribbons to the defender, Inferno Titan's ability on the stack | **Prompts.** Every engine question gets a dialog, e.g. trample damage assignment |
 
@@ -40,13 +42,13 @@ Play 1v1 against the Forge AI in **60-card Constructed** or **Commander**.
 - **Full Magic rules.** The [Forge](https://github.com/Card-Forge/forge) engine (~33 000 scripted cards) runs
   headless and decides everything: priority, the stack, combat, triggers, layers, mulligans and the AI. The
   client never computes legality. It renders what the engine says and answers its questions.
-- **Arena-style table.** Perspective camera over a themed playmat (Sanctum, Jungle, Storm), fanned hand on its
+- **A 3D card table.** Perspective camera over a themed playmat (Sanctum, Jungle, Storm), fanned hand on its
   own overlay camera, lands and tokens grouped into "x4" stacks, piles with counters, a stack column and a big
   hover preview.
 - **Art-framed battlefield cards.** A custom WGSL material puts the art crop in a frame coloured by the card's
   colours, with name bars, P/T plates (buffs blue, damage red), loyalty and counter badges, and glow rims for
   playable, selected and targetable cards.
-- **Readable interaction.** Glowing bezier targeting arrows, attack and block ribbons, the Arena orange action
+- **Readable interaction.** Glowing bezier targeting arrows, attack and block ribbons, the orange action
   button ("Next / To Combat", "Attack with 3", "No Blocks"…), phase track with stop toggles, auto-yield per
   stack item, a game log and undo.
 - **Every prompt kind.** Confirm, options, ability choice, card trays, ordering triggers, combat damage
@@ -55,11 +57,11 @@ Play 1v1 against the Forge AI in **60-card Constructed** or **Commander**.
   banners, victory confetti, synthesized sound effects and ambient music that crossfades between menus and
   matches.
 - **Decks.** Four Constructed and two Commander starter decks, Forge's precon and theme decks, and an importer
-  for pasted lists (Arena/MTGO/Moxfield formats) that shows unresolved names with suggestions.
+  for pasted lists (MTGO, Moxfield and other common export formats) that shows unresolved names with suggestions.
 - **Sleeves, deckboxes and playmats** (CUSTOMIZE in the main menu or on the deck screen). The Design Studio
   ships presets and lets you design your own from patterns, colours, emblems, frames and finishes, with a live
   3D preview. Choices can be a default or per deck. Deck tiles show each deck's box, and the AI gets its own
-  sleeve. Designs are painted procedurally and saved to `~/.config/mtg-arena/designs.json`.
+  sleeve. Designs are painted procedurally and saved to `~/.config/mtg-duelstone/designs.json`.
 - **Deck builder & tester** (NEW DECK / EDIT DECK on the deck screen).
   - *Search:* the whole card pool, with filters for name, rules text, colour, type, mana value and commander
     eligibility.
@@ -74,7 +76,19 @@ Play 1v1 against the Forge AI in **60-card Constructed** or **Commander**.
   - *Testing:* sample hands with mulligan and draw. PLAY saves the deck and starts a match with it; the engine
     validates the deck after every edit.
 
-## Quick start
+## Download
+
+| | |
+|---|---|
+| **Mac** (Apple chip, macOS 12+) | [mtg-duelstone-macos-arm64.dmg](https://github.com/birkmann/mtg-duelstone/releases/latest/download/mtg-duelstone-macos-arm64.dmg): open it and drag MTG Duelstone into Applications. The app is not notarized, so on first launch allow it under System Settings → Privacy & Security → **Open Anyway**. |
+| **Linux** (x86_64) | [mtg-duelstone-x86_64.AppImage](https://github.com/birkmann/mtg-duelstone/releases/latest/download/mtg-duelstone-x86_64.AppImage): `chmod +x` it and run it. Needs Vulkan graphics drivers. |
+
+Both bundle the engine, Forge's card data and a Java runtime, so there is nothing else to install. The first
+match needs network access to fetch card images. Releases are built by
+[`.github/workflows/release.yml`](.github/workflows/release.yml) when a `v*` tag is pushed; the scripts are in
+[`packaging/`](packaging).
+
+## Build from source
 
 You need Rust (edition 2024), the usual Bevy system libraries (ALSA, udev, Vulkan), JDK 17 + Maven for the
 engine and about 1 GB of disk for Forge.
@@ -185,5 +199,4 @@ scripts in `crates/arena/assets/tools/`.
 Magic: The Gathering, its card names, art and images are © Wizards of the Coast. This is an unofficial fan
 project, not affiliated with or endorsed by Wizards of the Coast, and is intended to fall under the
 [Fan Content Policy](https://company.wizards.com/en/legal/fancontentpolicy). **No card images are included or
-redistributed**: they are fetched at runtime from [Scryfall](https://scryfall.com). "MTG Arena" refers only to
-the interface style that inspired this client.
+redistributed**: they are fetched at runtime from [Scryfall](https://scryfall.com).

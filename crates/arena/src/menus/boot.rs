@@ -27,13 +27,13 @@ struct RetryRow;
 #[derive(Component)]
 struct Shimmer;
 
-/// The big "MTG ARENA" wordmark, shared with the main menu.
+/// The big "MTG DUELSTONE" wordmark, shared with the main menu.
 pub fn logo(parent: &mut ChildSpawnerCommands, fonts: &ArenaFonts, size: f32) {
     parent
         .spawn(Node { flex_direction: FlexDirection::Column, align_items: AlignItems::Center, ..default() })
         .with_children(|c| {
             c.spawn((
-                Text::new("MTG ARENA"),
+                Text::new("MTG DUELSTONE"),
                 text_font(&fonts.title, size),
                 TextColor(GOLD_BRIGHT),
                 TextShadow { offset: Vec2::new(0.0, 4.0), color: Color::srgba(0.0, 0.0, 0.0, 0.85) },

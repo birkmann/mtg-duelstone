@@ -6,7 +6,7 @@
 //! Coordinate system (table / TABLE_LAYER): X right, Y up, +Z toward the local player. The mat is
 //! `TABLE_HALF_W × TABLE_HALF_D` around the origin. The local player owns z>0, the opponent z<0.
 //! Cards lie flat (rotation `Rx(-90°)`: front faces +Y, card "up" points to -Z for both seats —
-//! Arena does not turn the opponent's cards around). Tapped = extra `-90°` yaw.
+//! the opponent's cards are not turned around). Tapped = extra `-90°` yaw.
 //!
 //! HAND_LAYER is a separate orthographic world: `HAND_VIEW_H` units tall (y∈[-H/2,H/2], centred on
 //! 0), `HAND_VIEW_H*aspect` wide, cards face +Z.

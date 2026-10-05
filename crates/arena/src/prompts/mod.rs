@@ -1,4 +1,4 @@
-//! Blocking engine prompts as Arena-styled modals, the non-modal `trayCards` pick tray and the
+//! Blocking engine prompts as ornate modals, the non-modal `trayCards` pick tray and the
 //! mulligan overlay.
 //!
 //! The engine decides everything; every dialog just collects an answer in the exact JSON shape

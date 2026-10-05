@@ -1,4 +1,4 @@
-// Arena-style battlefield card face: coloured frame, pale name bar, art-crop window, state rims.
+// Battlefield card face: coloured frame, pale name bar, art-crop window, state rims.
 // Extends StandardMaterial so scene lighting/tonemapping treat it like the full-card faces.
 #import bevy_pbr::{
     pbr_fragment::pbr_input_from_standard_material,
@@ -100,7 +100,7 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
     col = mix(col, vec3<f32>(0.03, 0.02, 0.015), bar_key * 0.85);
 
     // ---- states -----------------------------------------------------------------------------
-    // tapped: drained and darkened (Arena greys tapped permanents)
+    // tapped: drained and darkened (greyed out so tapped permanents read at a glance)
     let g = luma(col);
     col = mix(col, vec3<f32>(g) * 0.9, params.misc.x * 0.55);
     col = col * (1.0 - 0.32 * params.misc.x);

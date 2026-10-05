@@ -1,4 +1,4 @@
-//! Glowing bezier ribbon arrows (Arena's targeting / combat / stack arrows).
+//! Glowing bezier ribbon arrows (targeting / combat / stack arrows).
 //!
 //! Any system pushes `Arrow`s into `ArrowQueue` during `Update`; one renderer in `PostUpdate`
 //! turns them into camera-facing triangle-strip meshes (additive, vertex-coloured, unlit), reusing

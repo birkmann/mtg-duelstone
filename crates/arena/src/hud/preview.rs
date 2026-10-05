@@ -1,4 +1,4 @@
-//! Large hover preview on the right screen edge (Arena's "Frilled Deathspitter" shot) and the
+//! Large hover preview on the right screen edge and the
 //! right-click inspector. Shows the Large scryfall image; rules text is drawn as a fallback until
 //! the image arrives; double-faced / split cards show the other face too.
 

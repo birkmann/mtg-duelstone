@@ -1,4 +1,4 @@
-//! Persisted user settings (`~/.config/mtg-arena/settings.json`).
+//! Persisted user settings (`~/.config/mtg-duelstone/settings.json`).
 //!
 //! Why here: every other module just reads `Res<Settings>`; this plugin loads it before any
 //! Startup system runs, writes it back (debounced) after menus edit it, and applies the
@@ -24,7 +24,7 @@ impl Plugin for SettingsPlugin {
 }
 
 pub fn settings_path() -> Option<PathBuf> {
-    directories::ProjectDirs::from("", "", "mtg-arena").map(|d| d.config_dir().join("settings.json"))
+    directories::ProjectDirs::from("", "", "mtg-duelstone").map(|d| d.config_dir().join("settings.json"))
 }
 
 fn load() -> Settings {

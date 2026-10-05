@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Synthesise the arena's sound effects + ambient loop (numpy → wav → ffmpeg → ogg vorbis)."""
+"""Synthesise the game's sound effects + ambient loop (numpy → wav → ffmpeg → ogg vorbis)."""
 import os, subprocess, tempfile, wave
 import numpy as np
 

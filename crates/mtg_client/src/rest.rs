@@ -13,7 +13,7 @@ pub enum ImageVersion {
     Normal,
     /// ~672×936 full card (hover preview)
     Large,
-    /// art only (Arena-style battlefield frames)
+    /// art only (battlefield frames)
     ArtCrop,
 }
 

@@ -3,7 +3,7 @@
 //! The playmat's texture comes from `Cosmetics` (the equipped playmat: shipped art or a painted
 //! design); until it lands the mat shows a plain dark felt.
 //!
-//! The camera pitch is fixed (~57°) like Arena's; only the distance changes so the whole mat fits
+//! The camera pitch is fixed (~57°); only the distance changes so the whole mat fits
 //! any window aspect (`fit_distance`). A hair of cursor parallax makes the scene feel alive.
 
 use bevy::camera::visibility::RenderLayers;

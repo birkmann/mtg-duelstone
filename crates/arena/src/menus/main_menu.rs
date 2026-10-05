@@ -106,7 +106,7 @@ fn spawn_main_menu(mut commands: Commands, fonts: Res<ArenaFonts>, settings: Res
                         BoxShadow::new(Color::NONE, Val::Px(0.0), Val::Px(0.0), Val::Px(LOGO_SIZE * 0.4), Val::Px(LOGO_SIZE * 1.3)),
                         Pickable::IGNORE,
                     ));
-                    c.spawn((anim(1.7, 0.5, Fx::Fade(GOLD_BRIGHT)), Text::new("MTG ARENA"), text_font(&fonts.title, LOGO_SIZE), TextColor(Color::NONE), shadow));
+                    c.spawn((anim(1.7, 0.5, Fx::Fade(GOLD_BRIGHT)), Text::new("MTG DUELSTONE"), text_font(&fonts.title, LOGO_SIZE), TextColor(Color::NONE), shadow));
                     c.spawn((
                         anim(2.15, 0.65, Fx::Grow(logo_w)),
                         Node { width: Val::Px(0.0), height: Val::Px(3.0), margin: UiRect::top(Val::Px(4.0)), ..default() },

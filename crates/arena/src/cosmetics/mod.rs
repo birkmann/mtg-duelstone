@@ -1,5 +1,5 @@
 //! Cosmetics: sleeves, deckboxes and playmats. Owns the design library (presets + the player's
-//! own designs in `~/.config/mtg-arena/designs.json`), paints designs into textures, and publishes
+//! own designs in `~/.config/mtg-duelstone/designs.json`), paints designs into textures, and publishes
 //! what is currently equipped as [`Cosmetics`] for the table, the cards and the menus.
 //!
 //! Why a texture cache keyed by design fingerprint: the studio edits designs many times a second

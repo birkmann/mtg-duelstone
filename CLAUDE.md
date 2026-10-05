@@ -1,11 +1,11 @@
-# MTG Arena (Rust + Bevy) — working notes
+# MTG Duelstone (Rust + Bevy) — working notes
 
-Arena-style MTG client in Bevy 0.19 on top of the Forge rules engine (Java, `engine/`). Read `PLAN.md` first.
+3D MTG client in Bevy 0.19 on top of the Forge rules engine (Java, `engine/`). Read `PLAN.md` first.
 
 ## Layout
 - `crates/mtg_protocol` — serde mirror of `engine/docs/protocol.md`. No Bevy.
 - `crates/mtg_client` — WS link (thread + channels), REST, engine launcher, recorder/replayer, `autoplay` policy, `autopilot` bin. No Bevy.
-- `crates/arena` — the Bevy app (bin `mtg-arena`). One `Plugin` per module; modules talk ONLY through `src/shared.rs` (the contract — append-only, each item names its owner).
+- `crates/arena` — the Bevy app (bin `mtg-duelstone`). One `Plugin` per module; modules talk ONLY through `src/shared.rs` (the contract — append-only, each item names its owner).
 - `engine/` — forge-ws-server (Java 17, GPL-3), copied from ~/Gits/mtg-cmd and extended (format, art_crop, events).
 - `forge/` — Forge checkout (symlink to ~/Gits/mtg-cmd/forge or clone via `tools/setup-forge.sh`; gitignored).
 

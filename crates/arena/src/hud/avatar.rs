@@ -208,7 +208,7 @@ pub fn position_avatars(
 ) {
     let Ok(win) = windows.single() else { return };
     let have = view.has_state();
-    // a raised hand card should cover my avatar like in Arena (UI would otherwise draw over it)
+    // a raised hand card should cover my avatar (UI would otherwise draw over it)
     let hand_hot = hovered_hand.iter().any(|l| l.zone == mtg_protocol::ZoneKind::Hand && l.mine);
     for (a, mut n, mut vis) in &mut q {
         let world = anchors.avatar(a.mine);

@@ -1,0 +1,143 @@
+name: Release
+
+# Builds the Linux AppImage and the macOS disk image. On a version tag (v*) both are attached to a
+# GitHub release; a manual run keeps them as workflow artifacts.
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  engine:
+    # The engine jar and Forge's data are the same on every platform: build them once.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: actions/cache@v4
+        with:
+          path: ~/.m2/repository
+          key: m2-${{ hashFiles('tools/setup-forge.sh', 'engine/pom.xml') }}
+          restore-keys: m2-
+      - name: Build Forge and the engine
+        run: |
+          tools/setup-forge.sh
+          (cd engine && mvn -q -B package)
+      - name: Pack
+        # Only what stage-bundle.sh copies; Adventure mode alone is 150 MB.
+        run: |
+          tar -czf engine-bundle.tar.gz \
+            --exclude=forge/forge-gui/res/adventure --exclude=forge/forge-gui/res/music \
+            --exclude=forge/forge-gui/res/sound --exclude=forge/forge-gui/res/skins \
+            engine/target/forge-ws-server.jar forge/forge-gui/res forge/forge-gui/LICENSE.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: engine-bundle
+          path: engine-bundle.tar.gz
+          compression-level: 0
+          retention-days: 3
+
+  appimage:
+    # An older Ubuntu keeps the glibc requirement low (2.35).
+    runs-on: ubuntu-22.04
+    needs: engine
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: engine-bundle
+      - run: tar -xzf engine-bundle.tar.gz && rm engine-bundle.tar.gz
+      - name: Install system packages
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential pkg-config libasound2-dev libudev-dev libwayland-dev libxkbcommon-dev file
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Build AppImage
+        run: ./packaging/appimage/build-appimage.sh
+      - name: Smoke test
+        # The packaged engine boots from the bundle alone, with its own Java.
+        run: |
+          ./mtg-duelstone-x86_64.AppImage --appimage-extract >/dev/null
+          res=squashfs-root/usr/share/mtg-duelstone
+          "$res/jre/bin/java" -Djava.awt.headless=true -jar "$res/engine/forge-ws-server.jar" \
+            --port 8099 --assets "$res/forge" > engine.log 2>&1 &
+          for _ in $(seq 60); do curl -sf http://127.0.0.1:8099/api/health && exit 0; sleep 2; done
+          cat engine.log; exit 1
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mtg-duelstone-x86_64.AppImage
+          path: mtg-duelstone-x86_64.AppImage
+          compression-level: 0
+
+  macos:
+    # Apple silicon.
+    runs-on: macos-15
+    needs: engine
+    env:
+      MACOSX_DEPLOYMENT_TARGET: '12.0'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: engine-bundle
+      - run: tar -xzf engine-bundle.tar.gz && rm engine-bundle.tar.gz
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Build app and disk image
+        run: ./packaging/macos/build-app.sh
+      - name: Smoke test
+        run: |
+          res="target/macos/MTG Duelstone.app/Contents/Resources"
+          "$res/jre/bin/java" -Djava.awt.headless=true -jar "$res/engine/forge-ws-server.jar" \
+            --port 8099 --assets "$res/forge" > engine.log 2>&1 &
+          for _ in $(seq 60); do curl -sf http://127.0.0.1:8099/api/health && exit 0; sleep 2; done
+          cat engine.log; exit 1
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mtg-duelstone-macos-arm64.dmg
+          path: target/macos/mtg-duelstone-macos-*.dmg
+          compression-level: 0
+
+  release:
+    # Publishes whatever was built, so one failing package does not hold back the other;
+    # re-running a failed job afterwards adds its file.
+    if: startsWith(github.ref, 'refs/tags/v') && !cancelled()
+    needs: [appimage, macos]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: mtg-duelstone-*
+          path: dist
+          merge-multiple: true
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          shopt -s nullglob
+          files=(dist/*.AppImage dist/*.dmg)
+          if (( ${#files[@]} == 0 )); then echo "Nothing was built."; exit 1; fi
+          if gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release upload "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --clobber "${files[@]}"
+          else
+            gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" \
+              --title "MTG Duelstone ${GITHUB_REF_NAME#v}" --generate-notes "${files[@]}"
+          fi

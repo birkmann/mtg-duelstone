@@ -1,4 +1,4 @@
-//! UI style kit: fonts, the Arena palette and ornate panel/button builders.
+//! UI style kit: fonts, the game palette and ornate panel/button builders.
 //!
 //! Why a shared kit: menus, HUD, prompts and the in-world overlays should read as one product.
 //! Everything here is plain functions returning bundles (no hidden systems beyond the button
@@ -23,7 +23,7 @@ pub const BROWN_LIGHT: Color = Color::srgb(0.30, 0.19, 0.10);
 pub const PARCHMENT: Color = Color::srgb(0.93, 0.87, 0.72);
 pub const TEXT: Color = Color::srgb(0.95, 0.92, 0.84);
 pub const TEXT_DIM: Color = Color::srgb(0.66, 0.60, 0.50);
-/// Arena's "Next / Pass" pill.
+/// The "Next / Pass" pill.
 pub const ORANGE: Color = Color::srgb(0.95, 0.46, 0.13);
 pub const ORANGE_HI: Color = Color::srgb(1.0, 0.64, 0.28);
 pub const ORANGE_LO: Color = Color::srgb(0.72, 0.28, 0.07);
@@ -111,7 +111,7 @@ pub fn heading(fonts: &ArenaFonts, s: impl Into<String>, size: f32) -> impl Bund
 // Panels
 // ---------------------------------------------------------------------------------------------
 
-/// Ornate Arena panel: deep brown body, gold hairline border, rounded corners, soft drop shadow.
+/// Ornate panel: deep brown body, gold hairline border, rounded corners, soft drop shadow.
 pub fn ornate_panel(node: Node) -> impl Bundle {
     (
         Node {
@@ -155,7 +155,7 @@ pub fn divider() -> impl Bundle {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ButtonKind {
-    /// Arena orange pill ("Play", "Next").
+    /// Orange pill ("Play", "Next").
     Primary,
     /// Brown/gold plate.
     Secondary,

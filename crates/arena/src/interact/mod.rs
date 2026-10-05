@@ -402,7 +402,7 @@ fn ease_hover(
         }
         let a = hp.amt;
         hp.pose = if tp.layer == HAND_LAYER && loc.mine {
-            // Arena: the card rises fully into view, un-rolls and grows.
+            // The card rises fully into view, un-rolls and grows.
             let h = CARD_H * tp.scale * 1.4;
             let bottom_to_center = h / 2.0;
             let lift = (-HAND_VIEW_H / 2.0 + bottom_to_center + 0.18) - tp.translation.y;

@@ -1,4 +1,4 @@
-//! MTG Arena–style client for the Forge engine. One plugin per module; modules talk only via
+//! MTG Duelstone: a 3D client for the Forge engine. One plugin per module; modules talk only via
 //! `shared` (the cross-plugin contract). See PLAN.md for the architecture.
 #![allow(clippy::too_many_arguments, clippy::type_complexity)]
 
