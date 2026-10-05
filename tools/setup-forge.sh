@@ -3,7 +3,7 @@
 # Usage: tools/setup-forge.sh            (idempotent; re-run after bumping FORGE_TAG)
 set -euo pipefail
 cd "$(dirname "$0")/.."
-FORGE_TAG="${FORGE_TAG:-forge-2.0.14}"     # keep in sync with <forge.version> in forge-ws-server/pom.xml
+FORGE_TAG="${FORGE_TAG:-forge-2.0.14}"     # keep in sync with <forge.version> in engine/pom.xml
 source tools/env.sh 2>/dev/null || true
 
 if ! command -v java >/dev/null || ! command -v mvn >/dev/null; then
@@ -11,10 +11,10 @@ if ! command -v java >/dev/null || ! command -v mvn >/dev/null; then
   exit 1
 fi
 
-if [ ! -d forge/.git ]; then
+if [ ! -e forge ]; then
   git clone --depth 1 --branch "$FORGE_TAG" https://github.com/Card-Forge/forge.git forge
 else
-  (cd forge && git fetch --depth 1 origin "refs/tags/$FORGE_TAG:refs/tags/$FORGE_TAG" && git checkout -q "$FORGE_TAG")
+  echo "./forge already exists (checkout or symlink) — leaving it untouched"
 fi
 
 cd forge

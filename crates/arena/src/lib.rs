@@ -49,8 +49,12 @@ impl Plugin for ArenaPlugin {
             table::TablePlugin,
             hand_camera::HandCameraPlugin,
             debug::DebugPlugin,
-        ))
-        .add_plugins((
+        ));
+        // Dev flag: board core only (no HUD/menus/fx) for isolating rendering problems.
+        if std::env::var("ARENA_CORE_ONLY").is_ok() {
+            return;
+        }
+        app.add_plugins((
             interact::InteractPlugin,
             hud::HudPlugin,
             prompts::PromptsPlugin,

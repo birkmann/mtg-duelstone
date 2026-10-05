@@ -117,14 +117,15 @@ public final class EngineServer {
             final arena.engine.deck.CardCatalog catalog = arena.engine.deck.CardCatalog.get();
             switch (m + " " + path) {
                 // ---- engine / images -------------------------------------------------------------
-                case "GET /health" -> { final JsonObject o = new JsonObject(); o.addProperty("ok", true); o.addProperty("cards", StaticData.instance().getCommonCards().getAllCards().size()); json(resp, 200, o); }
+                case "GET /health" -> { final JsonObject o = new JsonObject(); o.addProperty("ok", true); o.addProperty("protocol", 2); o.addProperty("cards", StaticData.instance().getCommonCards().getAllCards().size()); json(resp, 200, o); }
                 case "GET /img" -> {
                     final String name = req.getParameter("name");
                     if (name == null || name.isBlank()) throw new IllegalArgumentException("name required");
-                    final File f = images.get(name, req.getParameter("set"), "1".equals(req.getParameter("back")));
+                    final String version = ImageCache.version(req.getParameter("version"));
+                    final File f = images.get(name, req.getParameter("set"), "1".equals(req.getParameter("back")), version);
                     cors(resp);
                     if (f == null) { resp.setStatus(404); return true; }
-                    resp.setStatus(200); resp.setContentType("image/jpeg");
+                    resp.setStatus(200); resp.setContentType("png".equals(version) ? "image/png" : "image/jpeg");
                     resp.setHeader("Cache-Control", "public, max-age=31536000, immutable");
                     resp.setContentLengthLong(f.length());
                     java.nio.file.Files.copy(f.toPath(), resp.getOutputStream());
@@ -149,7 +150,8 @@ public final class EngineServer {
                     final String human = Json.str(b, "humanDeck"), ai = Json.str(b, "aiDeck");
                     if (human == null || ai == null) throw new IllegalArgumentException("humanDeck and aiDeck refs required");
                     final Integer seedI = b.has("seed") && !b.get("seed").isJsonNull() ? b.get("seed").getAsInt() : null;
-                    json(resp, 201, matches.create(human, ai, seedI == null ? null : seedI.longValue(), Json.str(b, "humanName")).describe());
+                    final String fmt = DeckSource.format(Json.str(b, "format"));
+                    json(resp, 201, matches.create(human, ai, fmt, seedI == null ? null : seedI.longValue(), Json.str(b, "humanName")).describe());
                 }
                 // ---- cards ----------------------------------------------------------------------------
                 case "GET /cards/search" -> {
@@ -161,25 +163,28 @@ public final class EngineServer {
                     if (pc == null) json(resp, 404, err("unknown card")); else json(resp, 200, catalog.cardJson(pc));
                 }
                 // ---- decks ----------------------------------------------------------------------------
-                case "GET /decks" -> { // lobby list; ?kind=user|precon|all
+                case "GET /decks" -> { // lobby list; ?format=constructed|commander (default commander); ?kind=user|all
+                    final String fmt = DeckSource.format(req.getParameter("format"));
                     final String kind = req.getParameter("kind") == null ? "all" : req.getParameter("kind");
-                    if ("user".equals(kind)) json(resp, 200, deckStore.list());
-                    else json(resp, 200, DeckSource.list());
+                    if ("user".equals(kind)) json(resp, 200, deckStore.list(fmt));
+                    else json(resp, 200, DeckSource.list(fmt));
                 }
                 case "GET /deck" -> {
                     final String ref = req.getParameter("ref");
                     if (ref == null) throw new IllegalArgumentException("ref required");
-                    json(resp, 200, deckStore.full(ref, deckStore.get(ref)));
+                    final String fmt = req.getParameter("format") == null ? null : DeckSource.format(req.getParameter("format"));
+                    final forge.deck.Deck d = deckStore.get(ref, fmt);
+                    json(resp, 200, deckStore.full(ref, d, fmt != null ? fmt : d.getCommanders().isEmpty() ? DeckSource.CONSTRUCTED : DeckSource.COMMANDER));
                 }
                 case "GET /deck/export" -> {
                     final String ref = req.getParameter("ref");
-                    final forge.deck.Deck d = deckStore.get(ref);
+                    final forge.deck.Deck d = deckStore.get(ref, req.getParameter("format") == null ? null : DeckSource.format(req.getParameter("format")));
                     text(resp, deckStore.export(d), d.getName() + ".dck");
                 }
                 case "POST /deck" -> { final JsonObject b = body(req); json(resp, 200, deckStore.save(b, Json.str(b, "previousName"))); }
                 case "POST /deck/validate" -> json(resp, 200, deckStore.validate(body(req)));
-                case "DELETE /deck" -> { deckStore.delete(req.getParameter("name")); json(resp, 200, new JsonObject()); }
-                case "POST /deck/import" -> { final JsonObject b = body(req); json(resp, 200, importer.parse(Json.str(b, "text") == null ? "" : Json.str(b, "text"))); }
+                case "DELETE /deck" -> { deckStore.delete(req.getParameter("name"), DeckSource.format(req.getParameter("format"))); json(resp, 200, new JsonObject()); }
+                case "POST /deck/import" -> { final JsonObject b = body(req); json(resp, 200, importer.parse(Json.str(b, "text") == null ? "" : Json.str(b, "text"), DeckSource.format(Json.str(b, "format")))); }
                 // ---- collection ------------------------------------------------------------------------
                 case "GET /collection" -> {
                     final JsonObject o = new JsonObject();

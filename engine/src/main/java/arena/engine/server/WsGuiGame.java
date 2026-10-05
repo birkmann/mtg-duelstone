@@ -83,6 +83,11 @@ public class WsGuiGame extends AbstractGuiGame {
     private volatile boolean stateDirty, inputDirty;
     private int logSent = 0;
     private long stateSeq = 0;
+    private long eventsSeq = 0;
+    private final EventCollector events = new EventCollector(this::scheduleFlush);
+
+    /** The Forge event-bus subscriber that produces {@code events} frames (register with Game#subscribeToEvents). */
+    public Object eventSubscriber() { return events; }
 
     public WsGuiGame(final Consumer<JsonObject> out) {
         this.out = out;
@@ -133,6 +138,13 @@ public class WsGuiGame extends AbstractGuiGame {
     public synchronized void flush() {
         flushScheduled.set(false);
         if (getGameView() == null) return;
+        final JsonArray cues = events.drain();
+        if (cues != null) { // cues first, so the client can start an animation before the state that reflects it lands
+            final JsonObject ef = Json.frame("events");
+            ef.addProperty("seq", ++eventsSeq);
+            ef.add("items", cues);
+            out.accept(ef);
+        }
         if (stateDirty) { stateDirty = false; out.accept(stateFrame()); }
         if (inputDirty) { inputDirty = false; out.accept(inputFrame()); }
         final JsonObject log = newLogFrame();

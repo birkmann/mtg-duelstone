@@ -10,10 +10,14 @@ fn main() {
     App::new()
         .add_plugins(
             DefaultPlugins
+                .set(bevy::asset::AssetPlugin {
+                    file_path: arena::images::assets_dir().to_string_lossy().into_owned(),
+                    ..default()
+                })
                 .set(WindowPlugin {
                     primary_window: Some(Window {
                         title: "MTG Arena".into(),
-                        resolution: WindowResolution::new(1600, 900),
+                        resolution: std::env::var("ARENA_WIN").ok().and_then(|s| s.split_once('x').and_then(|(w, h)| Some((w.parse().ok()?, h.parse().ok()?)))).map(|(w, h): (u32, u32)| WindowResolution::new(w, h)).unwrap_or_else(|| WindowResolution::new(1600, 900)),
                         ..default()
                     }),
                     ..default()

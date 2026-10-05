@@ -41,9 +41,19 @@ public final class ImageCache {
     }
 
     /** Returns the cached file, fetching it if needed; null if Scryfall has no such image. */
-    public File get(final String name, final String set, final boolean back) throws IOException, InterruptedException {
-        final String key = key(name, set, back);
-        final File f = dir.resolve(key + ".jpg").toFile();
+    public static String version(final String v) {
+        if (v == null) return "normal";
+        return switch (v.toLowerCase()) {
+            case "normal", "large", "art_crop", "png", "small", "border_crop" -> v.toLowerCase();
+            default -> throw new IllegalArgumentException("unknown image version: " + v + " (normal|large|art_crop|png)");
+        };
+    }
+
+    public File get(final String name, final String set, final boolean back) throws IOException, InterruptedException { return get(name, set, back, "normal"); }
+
+    public File get(final String name, final String set, final boolean back, final String version) throws IOException, InterruptedException {
+        final String key = key(name, set, back, version);
+        final File f = dir.resolve(key + ("png".equals(version) ? ".png" : ".jpg")).toFile();
         if (f.isFile() && f.length() > 0) return f;
         final Long neg = negative.get(key);
         if (neg != null && System.currentTimeMillis() - neg < 6 * 3600_000L) return null;
@@ -51,8 +61,10 @@ public final class ImageCache {
         fetchLock.lock();
         try {
             if (f.isFile() && f.length() > 0) return f; // another thread fetched it meanwhile
-            byte[] bytes = fetch(name, set, back);
-            if (bytes == null && set != null && !set.isBlank()) bytes = fetch(name, null, back); // other printing
+            byte[] bytes = fetch(name, set, back, version);
+            if (bytes == null && set != null && !set.isBlank()) bytes = fetch(name, null, back, version); // other printing
+            // Forge names tokens "Goblin Token"; Scryfall's token printings are just "Goblin".
+            if (bytes == null && name.endsWith(" Token")) bytes = fetch(name.substring(0, name.length() - " Token".length()), null, back, version);
             if (bytes == null) { negative.put(key, System.currentTimeMillis()); return null; }
             final Path tmp = dir.resolve(key + ".tmp");
             Files.write(tmp, bytes);
@@ -63,8 +75,8 @@ public final class ImageCache {
         }
     }
 
-    private byte[] fetch(final String name, final String set, final boolean back) throws IOException, InterruptedException {
-        final StringBuilder url = new StringBuilder("https://api.scryfall.com/cards/named?format=image&version=normal&exact=")
+    private byte[] fetch(final String name, final String set, final boolean back, final String version) throws IOException, InterruptedException {
+        final StringBuilder url = new StringBuilder("https://api.scryfall.com/cards/named?format=image&version=" + version + "&exact=")
                 .append(URLEncoder.encode(name, StandardCharsets.UTF_8));
         if (set != null && !set.isBlank()) url.append("&set=").append(URLEncoder.encode(set.toLowerCase(), StandardCharsets.UTF_8));
         if (back) url.append("&face=back");
@@ -96,7 +108,7 @@ public final class ImageCache {
 
     /** Scryfall rulings for a card as JSON text: {"rulings":[{"date","comment"}], "scryfallUri"} — cached on disk. */
     public String rulings(final String name) throws IOException, InterruptedException {
-        final String key = key("rulings:" + name, null, false);
+        final String key = key("rulings:" + name, null, false, "normal");
         final Path f = dir.resolveSibling("rulings").resolve(key + ".json");
         if (Files.isRegularFile(f)) return Files.readString(f);
         final Long neg = negative.get(key);
@@ -148,10 +160,10 @@ public final class ImageCache {
         return null;
     }
 
-    private static String key(final String name, final String set, final boolean back) {
+    private static String key(final String name, final String set, final boolean back, final String version) {
         try {
             final MessageDigest md = MessageDigest.getInstance("SHA-1");
-            final byte[] d = md.digest((name + "|" + (set == null ? "" : set.toLowerCase()) + "|" + (back ? "b" : "f")).getBytes(StandardCharsets.UTF_8));
+            final byte[] d = md.digest((name + "|" + (set == null ? "" : set.toLowerCase()) + "|" + (back ? "b" : "f") + ("normal".equals(version) ? "" : "|" + version)).getBytes(StandardCharsets.UTF_8));
             final StringBuilder sb = new StringBuilder();
             for (final byte b : d) sb.append(String.format("%02x", b));
             return sb.toString();

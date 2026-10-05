@@ -14,6 +14,11 @@ pub enum ServerFrame {
         human_deck: String,
         #[serde(default)]
         ai_deck: String,
+        /// v2: display names of the decks (`humanDeck`/`aiDeck` are refs).
+        #[serde(default)]
+        human_deck_name: Option<String>,
+        #[serde(default)]
+        ai_deck_name: Option<String>,
         /// v2: "constructed" | "commander"
         #[serde(default)]
         format: Option<String>,

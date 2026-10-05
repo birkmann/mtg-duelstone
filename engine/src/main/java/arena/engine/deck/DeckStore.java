@@ -11,6 +11,7 @@ import forge.deck.io.DeckSerializer;
 import forge.item.PaperCard;
 import forge.model.FModel;
 import forge.util.storage.IStorage;
+import arena.engine.server.DeckSource;
 
 import java.io.File;
 import java.io.IOException;
@@ -28,31 +29,30 @@ public final class DeckStore {
     private static final Object LOCK = new Object();
     private final CardCatalog catalog = CardCatalog.get();
 
-    private static IStorage<Deck> store() { return FModel.getDecks().getCommander(); }
+    private static IStorage<Deck> store(final String format) {
+        return DeckSource.CONSTRUCTED.equals(format) ? FModel.getDecks().getConstructed() : FModel.getDecks().getCommander();
+    }
 
     // ---- read ---------------------------------------------------------------------------------
 
-    public JsonArray list() {
+    public JsonArray list(final String format) {
         synchronized (LOCK) {
             final JsonArray a = new JsonArray();
-            for (final Deck d : store()) a.add(summary("user:" + d.getName(), d));
+            for (final Deck d : store(format)) a.add(summary("user:" + d.getName(), d, format));
             return a;
         }
     }
 
-    public JsonObject summary(final String ref, final Deck d) {
-        final JsonObject o = arena.engine.server.DeckSource.describe(ref, d);
-        o.addProperty("problem", problem(d));
+    public JsonObject summary(final String ref, final Deck d, final String format) {
+        final JsonObject o = DeckSource.describe(ref, d, format);
+        o.addProperty("problem", problem(d, format));
         return o;
     }
 
-    public static String problem(final Deck d) {
-        try { return DeckFormat.Commander.getDeckConformanceProblem(d); }
-        catch (final Exception e) { return "could not validate: " + e.getMessage(); }
-    }
+    public static String problem(final Deck d, final String format) { return DeckSource.problem(d, format); }
 
-    public JsonObject full(final String ref, final Deck d) {
-        final JsonObject o = summary(ref, d);
+    public JsonObject full(final String ref, final Deck d, final String format) {
+        final JsonObject o = summary(ref, d, format);
         o.add("commanders", catalog.cardsJson(d.getCommanders()));
         o.add("main", pool(d.getMain()));
         o.add("sideboard", pool(d.get(DeckSection.Sideboard)));
@@ -71,8 +71,9 @@ public final class DeckStore {
         return a;
     }
 
-    public Deck get(final String name) {
-        synchronized (LOCK) { return arena.engine.server.DeckSource.load(name.startsWith("user:") || name.startsWith("precon:") || name.startsWith("file:") ? name : "user:" + name); }
+    /** format may be null (search commander, then constructed). */
+    public Deck get(final String name, final String format) {
+        synchronized (LOCK) { return DeckSource.load(name.contains(":") ? name : "user:" + name, format); }
     }
 
     // ---- write --------------------------------------------------------------------------------
@@ -95,20 +96,25 @@ public final class DeckStore {
     /** {problem: string|null} for an unsaved deck body. */
     public JsonObject validate(final JsonObject body) {
         final JsonObject o = new JsonObject();
-        o.addProperty("problem", problem(build(body)));
+        o.addProperty("problem", problem(build(body), formatOf(body)));
         return o;
     }
 
     /** Body: {name, commanders:[name], main:[{name, qty, set?}], sideboard?:[{name, qty}]} → saves and returns the full deck JSON. */
+    public static String formatOf(final JsonObject body) {
+        return DeckSource.format(body.has("format") && !body.get("format").isJsonNull() ? body.get("format").getAsString() : null);
+    }
+
     public JsonObject save(final JsonObject body, final String previousName) {
+        final String format = formatOf(body);
         final String name = body.get("name").getAsString().trim();
         if (name.isEmpty()) throw new IllegalArgumentException("deck name required");
         final Deck d = build(body);
         synchronized (LOCK) {
-            if (previousName != null && !previousName.equals(name)) store().delete(previousName);
-            store().add(d);
+            if (previousName != null && !previousName.equals(name)) store(format).delete(previousName);
+            store(format).add(d);
         }
-        return full("user:" + name, d);
+        return full("user:" + name, d, format);
     }
 
     private void addPool(final CardPool pool, final JsonElement arr, final List<String> missing) {
@@ -126,8 +132,8 @@ public final class DeckStore {
         }
     }
 
-    public void delete(final String name) {
-        synchronized (LOCK) { store().delete(name); }
+    public void delete(final String name, final String format) {
+        synchronized (LOCK) { store(format).delete(name); }
     }
 
     /** Forge .dck text for download/export. */

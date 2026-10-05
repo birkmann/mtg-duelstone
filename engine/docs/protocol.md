@@ -11,10 +11,14 @@ decisions arrive as `prompt` frames listing the legal options; the client answer
 
 | Method | Path | Body / params | Returns |
 |---|---|---|---|
-| GET | `/api/health` | | `{ok, cards}` |
-| GET | `/api/decks` | | `[ {ref, name, commanders[], mainCount, colorIdentity} ]` — `ref` = `precon:<name>` / `user:<name>` / `file:<path>` |
+| GET | `/api/health` | | `{ok, cards, protocol: 2}` |
+| GET | `/api/decks` | `?format=constructed\|commander` (default `commander`), `?kind=user` | `[ {ref, name, commanders[], mainCount, colorIdentity, format, problem} ]` — `ref` = `starter:<name>` (repo `decks/<format>/*.dck`) / `precon:<name>` (commander) / `theme:<name>` (Forge's bundled 60-card constructed decks) / `user:<name>` / `file:<path>`; `problem` is null for legal decks (Forge `DeckFormat` check). The special ref `random` (in `POST /api/match`) picks a legal deck of the match format (starters favoured). |
+| GET | `/api/deck`, `/api/deck/export` | `?ref=…&format=?` | full deck / `.dck` text |
+| POST | `/api/deck`, `/api/deck/validate`, `/api/deck/import` | body gains `format?` (default commander); constructed decks save to `~/.forge/decks/constructed` and need no `commanders` | as before |
+| DELETE | `/api/deck` | `?name=…&format=?` | |
+| GET | `/api/img` | `?name=&set?&back?&version=normal\|large\|art_crop\|png` (default `normal`; `small`/`border_crop` also accepted) | the cached Scryfall image; version is part of the cache key (`png` is served as `image/png`) |
 | GET | `/api/matches` | | `[ matchInfo ]` |
-| POST | `/api/match` | `{humanDeck, aiDeck, seed?, humanName?}` | `matchInfo` (`{id, humanDeck, aiDeck, started, over, sockets, turn, gameOver}`) |
+| POST | `/api/match` | `{humanDeck, aiDeck, format?, seed?, humanName?}` — `format` is `"constructed"` (60-card main deck, 20 life, `GameType.Constructed`) or `"commander"` (default; 100 cards, 40 life) | `matchInfo` (`{id, humanDeck, aiDeck, humanDeckName, aiDeckName, format, started, over, sockets, turn, gameOver}`) |
 | GET | `/api/match/{id}` | | `matchInfo` |
 | DELETE | `/api/match/{id}` | | |
 | GET | `/api/engine/cards?names=a|b|c` | | `{name: bool}` — can Forge play this card? |
@@ -24,7 +28,7 @@ decisions arrive as `prompt` frames listing the legal options; the client answer
 All frames: `{"t": <type>, ...}`.
 
 ### `hello`
-`{t:"hello", matchId, humanDeck, aiDeck}` — first frame after connect; followed by a snapshot (`state`, `input`, `log`, and a pending `prompt` if any).
+`{t:"hello", matchId, humanDeck, aiDeck, humanDeckName, aiDeckName, format: "constructed"|"commander", protocol: 2}` — first frame after connect; followed by a snapshot (`state`, `input`, `log`, and a pending `prompt` if any).
 
 ### `state` — full game view (hidden info redacted for the human seat)
 ```jsonc
@@ -88,6 +92,26 @@ Common fields: `id`, `kind`, `title?`, `message?`. Options are `{ i, type, label
 | `assignCombatDamage` | `attacker`, `blockers: [card]`, `damage`, `defender`, `overrideOrder`, `maySkip` | `{ "<blockerCardId>": n, "defender"?: n }` summing to `damage`; null only when `maySkip` = "assign another attacker first" (the engine re-asks later — never answer null for every attacker) |
 | `assignAmount` | `source`, `amount`, `atLeastOne`, `label`, `options` (+`current`) | `{ "<i>": n }` |
 | `manipulateCards` | `cards`, `manipulable: [ids]`, `toTop`, `toBottom`, `toAnywhere` | `[cardId...]` new order |
+
+### `events` — animation cues (protocol v2)
+`{t:"events", seq, items:[ cue ]}` — derived from Forge's game event bus (the same events its desktop GUI animates from). `seq` counts events frames.
+One frame per EDT flush; it is sent **before** the `state` frame that reflects the changes, so a client can start an animation and
+then see the new state. Ids are the same trackable card/player ids as in `state`. Unknown kinds must be ignored. Not part of a
+`resync` snapshot (cues are transient). A cue is `{kind, card?, source?, targetCard?, targetPlayer?, amount?, zoneFrom?, zoneTo?, label?}`:
+
+| kind | fields |
+|---|---|
+| `damage` | `source` → `targetCard` or `targetPlayer`, `amount`; `label:"combat"` for combat damage to a player |
+| `lifeChanged` | `targetPlayer`, `amount` = signed delta |
+| `zoneChange` | `card`, `zoneFrom?`, `zoneTo?` (Forge `ZoneType` names: `Library`, `Hand`, `Battlefield`, `Graveyard`, `Exile`, `Stack`, `Command`…; from absent for newly created cards) |
+| `spellCast` | `card` (source of the spell/ability on the stack), `label` = `spell`/`ability`/`trigger`, `targetCard`/`targetPlayer` = first target if any |
+| `attack` | `card` → `targetPlayer` or `targetCard` (planeswalker/battle); one cue per attacker |
+| `block` | `card` (blocker) → `targetCard` (attacker); unblocked attackers produce no cue |
+| `counters` | `card`, `amount` = signed delta, `label` = counter type |
+| `tap` / `untap` | `card` |
+| `tokenCreated` | `card` (token entering the battlefield; also preceded by its `zoneChange`) |
+| `destroyed` / `sacrificed` | `card` (battlefield → graveyard; derived from the zone change, `sacrificed` when Forge announced a sacrifice; tokens excluded) |
+| `turnBegan` | `targetPlayer`, `amount` = turn number |
 
 ### Others
 `{t:"log", entries:[{i, type, text}]}` (incremental) · `{t:"message", title, text, error}` · `{t:"gameOver", winner, youWon}` ·

@@ -16,8 +16,9 @@ public final class Main {
             switch (args[i]) {
                 case "--port" -> port = Integer.parseInt(args[++i]);
                 case "--static" -> staticDir = new File(args[++i]);
+                case "--decks" -> arena.engine.server.DeckSource.setDecksRoot(new File(args[++i]));
                 case "--assets" -> System.setProperty("forge.assets", args[++i]);
-                case "-h", "--help" -> { System.out.println("usage: forge-ws-server [--port N] [--static DIR] [--assets FORGE_GUI_DIR]"); return; }
+                case "-h", "--help" -> { System.out.println("usage: forge-ws-server [--port N] [--static DIR] [--assets FORGE_GUI_DIR] [--decks DIR]"); return; }
                 default -> System.err.println("ignoring unknown arg " + args[i]);
             }
         }

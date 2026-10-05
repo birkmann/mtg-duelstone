@@ -1,6 +1,13 @@
 //! Start the Java engine as a child process when nothing answers `/api/health`.
 
-use std::path::PathBuf;
+use std::fs::OpenOptions;
+use std::path::{Path, PathBuf};
+use std::process::{Command, Stdio};
+use std::time::{Duration, Instant};
+
+use anyhow::{Context, anyhow, bail};
+
+use crate::rest::Rest;
 
 #[derive(Debug, Clone)]
 pub struct LaunchConfig {
@@ -28,7 +35,155 @@ impl Drop for EngineProcess {
     }
 }
 
+/// `~/.local/share/mtg-arena/engine.log` (platform data dir).
+pub fn log_path() -> PathBuf {
+    directories::ProjectDirs::from("", "", "mtg-arena")
+        .map(|d| d.data_dir().to_path_buf())
+        .unwrap_or_else(std::env::temp_dir)
+        .join("engine.log")
+}
+
+/// Locate a Java binary following the documented search order.
+pub fn find_java(cfg: &LaunchConfig) -> PathBuf {
+    if let Some(j) = &cfg.java {
+        return j.clone();
+    }
+    if let Some(h) = std::env::var_os("JAVA_HOME") {
+        let p = Path::new(&h).join("bin/java");
+        if p.is_file() {
+            return p;
+        }
+    }
+    if let Some(home) = std::env::var_os("HOME") {
+        let opt = Path::new(&home).join(".local/opt");
+        if let Ok(rd) = std::fs::read_dir(&opt) {
+            let mut cands: Vec<PathBuf> = rd
+                .flatten()
+                .filter(|e| e.file_name().to_string_lossy().starts_with("jdk-17"))
+                .map(|e| e.path().join("bin/java"))
+                .filter(|p| p.is_file())
+                .collect();
+            cands.sort();
+            if let Some(p) = cands.pop() {
+                return p;
+            }
+        }
+    }
+    PathBuf::from("java")
+}
+
+/// Resolve a jar path: absolute as-is; relative against cwd and then each parent directory.
+pub fn find_jar(jar: &Path) -> Option<PathBuf> {
+    if jar.is_absolute() {
+        return jar.is_file().then(|| jar.to_path_buf());
+    }
+    let mut dir = std::env::current_dir().ok();
+    while let Some(d) = dir {
+        let p = d.join(jar);
+        if p.is_file() {
+            return Some(p);
+        }
+        dir = d.parent().map(Path::to_path_buf);
+    }
+    None
+}
+
 /// Blocks until healthy or timeout. `progress` gets human-readable status lines for a splash screen.
-pub fn ensure_engine(_cfg: &LaunchConfig, _progress: &mut dyn FnMut(&str)) -> anyhow::Result<Option<EngineProcess>> {
-    todo!("implemented by the mtg_client work package")
+pub fn ensure_engine(cfg: &LaunchConfig, progress: &mut dyn FnMut(&str)) -> anyhow::Result<Option<EngineProcess>> {
+    let rest = Rest::new(cfg.base_url.clone());
+    if rest.health().unwrap_or(false) {
+        return Ok(None);
+    }
+    let java = find_java(cfg);
+    let jar = find_jar(&cfg.jar).ok_or_else(|| anyhow!("engine jar not found: {} (build it with `cd engine && mvn -q -B package`)", cfg.jar.display()))?;
+    progress("Starting engine…");
+
+    let log = log_path();
+    if let Some(dir) = log.parent() {
+        std::fs::create_dir_all(dir).ok();
+    }
+    let out = OpenOptions::new().create(true).write(true).truncate(true).open(&log).with_context(|| format!("open {}", log.display()))?;
+    let err = out.try_clone()?;
+    let mut cmd = Command::new(&java);
+    cmd.arg("-jar").arg(&jar).arg("--port").arg(cfg.port.to_string());
+    if let Some(a) = &cfg.assets {
+        let a = find_jar_dir(a);
+        cmd.arg("--assets").arg(a);
+    }
+    cmd.stdin(Stdio::null()).stdout(Stdio::from(out)).stderr(Stdio::from(err));
+    // If we die without running destructors (Ctrl+C, crash, process::exit), take the engine with
+    // us instead of leaving an orphaned JVM holding the port.
+    #[cfg(target_os = "linux")]
+    unsafe {
+        use std::os::unix::process::CommandExt;
+        cmd.pre_exec(|| {
+            libc::prctl(libc::PR_SET_PDEATHSIG, libc::SIGTERM);
+            Ok(())
+        });
+    }
+    let child = spawn_from_long_lived_thread(cmd).with_context(|| format!("spawn {} -jar {}", java.display(), jar.display()))?;
+    let mut proc = EngineProcess { child };
+
+    let t0 = Instant::now();
+    let timeout = Duration::from_secs(cfg.health_timeout_secs.max(1));
+    let mut last_msg = "Starting engine…";
+    loop {
+        if let Some(status) = proc.child.try_wait()? {
+            bail!("engine exited early ({status}); see {}", log.display());
+        }
+        if rest.health().unwrap_or(false) {
+            progress("Engine ready");
+            return Ok(Some(proc));
+        }
+        if t0.elapsed() > timeout {
+            bail!("engine did not become healthy within {}s; see {}", timeout.as_secs(), log.display());
+        }
+        let msg = if t0.elapsed() < Duration::from_secs(1) { "Starting engine…" } else { "Loading card database…" };
+        if msg != last_msg {
+            progress(msg);
+            last_msg = msg;
+        }
+        std::thread::sleep(Duration::from_millis(250));
+    }
+}
+
+/// `PR_SET_PDEATHSIG` fires when the *thread* that forked the child exits, not the process, so
+/// children must be spawned from a thread that lives as long as the process — not from the
+/// short-lived boot thread that calls [`ensure_engine`].
+fn spawn_from_long_lived_thread(cmd: Command) -> std::io::Result<std::process::Child> {
+    use std::sync::{Mutex, OnceLock, mpsc};
+    type Req = (Command, mpsc::Sender<std::io::Result<std::process::Child>>);
+    static SPAWNER: OnceLock<Mutex<mpsc::Sender<Req>>> = OnceLock::new();
+    let tx = SPAWNER.get_or_init(|| {
+        let (tx, rx) = mpsc::channel::<Req>();
+        std::thread::Builder::new()
+            .name("engine-spawner".into())
+            .spawn(move || {
+                for (mut cmd, reply) in rx {
+                    let _ = reply.send(cmd.spawn());
+                }
+                // Sender lives in a static, so this thread parks in `recv` for the process lifetime.
+            })
+            .expect("spawn engine-spawner thread");
+        Mutex::new(tx)
+    });
+    let (reply_tx, reply_rx) = mpsc::channel();
+    tx.lock().expect("spawner lock").send((cmd, reply_tx)).map_err(std::io::Error::other)?;
+    reply_rx.recv().map_err(std::io::Error::other)?
+}
+
+/// Like [`find_jar`] but for directories (the Forge assets dir).
+fn find_jar_dir(p: &Path) -> PathBuf {
+    if p.is_absolute() {
+        return p.to_path_buf();
+    }
+    let mut dir = std::env::current_dir().ok();
+    while let Some(d) = dir {
+        let c = d.join(p);
+        if c.is_dir() {
+            return c;
+        }
+        dir = d.parent().map(Path::to_path_buf);
+    }
+    p.to_path_buf()
 }

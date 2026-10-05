@@ -426,3 +426,85 @@ pub struct ArenaFonts {
     /// Bold numerals for life / P/T
     pub numbers: Handle<Font>,
 }
+
+// =============================================================================================
+// Meta (owner: menus)
+// =============================================================================================
+
+/// Written by menus when the user presses "Retry" on the boot splash after `BootStatus.error`
+/// was set. app_state should clear the error and retry connecting/launching the engine.
+/// Owner: menus (writer). Reader: app_state.
+#[derive(Message, Debug, Clone, Copy)]
+pub struct RetryBoot;
+
+/// Ask menus to show the settings overlay (any state). menus also opens it on F10.
+/// Owner: menus (reader). Any plugin may write.
+#[derive(Message, Debug, Clone, Copy)]
+pub struct OpenSettings;
+
+/// Display names of the decks of the current `MatchConfig` (filled by menus when the user hits
+/// Play, so Loading/HUD can show "Deck A vs Deck B" without re-querying the engine).
+/// Owner: menus.
+#[derive(Resource, Debug, Clone, Default)]
+pub struct MatchDeckNames {
+    pub human: String,
+    pub ai: String,
+}
+
+// =============================================================================================
+// Visual-feedback hooks (owner: fx)
+// =============================================================================================
+
+/// Request a screen/world visual effect. Owner: fx (reader). Any plugin may write.
+#[derive(Message, Debug, Clone)]
+pub enum FxRequest {
+    /// Floating number at a world position (`positive` = heal/green, else damage/red).
+    FloatingNumber { world: Vec3, amount: i32, positive: bool },
+    /// Spark/impact burst at a world position.
+    Impact { world: Vec3, strength: f32 },
+    /// Pulse the "YOUR TURN"-style banner with arbitrary text.
+    Banner { text: String },
+}
+
+// =============================================================================================
+// Pose composition (owner: interact)
+// =============================================================================================
+
+/// Transient pose contribution from fx (shake, hit recoil…). `interact` composes the single
+/// `PoseOffset` motion reads as `hover ∘ combat ∘ FxPose`, so fx should write THIS component (not
+/// `PoseOffset`, which interact overwrites every frame). Writer: fx. Composer: interact.
+#[derive(Component, Debug, Clone, Copy, PartialEq)]
+pub struct FxPose(pub PoseOffset);
+
+impl Default for FxPose {
+    fn default() -> Self {
+        Self(PoseOffset::default())
+    }
+}
+
+// =============================================================================================
+// Audio (owner: audio)
+// =============================================================================================
+
+/// One-shot sound effects. Owner: audio (player). Any plugin may write `PlaySfx`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum Sfx {
+    CardDraw,
+    CardPlay,
+    LandDrop,
+    SpellCast,
+    Resolve,
+    AttackWhoosh,
+    HitImpact,
+    LifeLoss,
+    LifeGain,
+    TurnStart,
+    ButtonClick,
+    HoverTick,
+    Victory,
+    Defeat,
+}
+
+/// Play a sound (rate-limited per kind by audio). Owner: audio (reader).
+#[derive(Message, Debug, Clone, Copy)]
+pub struct PlaySfx(pub Sfx);

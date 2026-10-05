@@ -14,3 +14,10 @@ crossbeam-channel.workspace = true
 tungstenite.workspace = true
 ureq.workspace = true
 directories.workspace = true
+
+[[bin]]
+name = "autopilot"
+path = "src/bin/autopilot.rs"
+
+[target.'cfg(target_os = "linux")'.dependencies]
+libc = "0.2"

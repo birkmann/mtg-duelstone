@@ -7,3 +7,4 @@
 /tools/*.log
 *.jsonl
 !crates/**/fixtures/*.jsonl
+!crates/arena/tests/replays/*.jsonl

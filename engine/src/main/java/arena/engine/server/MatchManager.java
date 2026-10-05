@@ -21,10 +21,10 @@ public final class MatchManager {
         }
     }
 
-    public MatchSession create(final String humanDeckRef, final String aiDeckRef, final Long seed, final String humanName) {
+    public MatchSession create(final String humanDeckRef, final String aiDeckRef, final String format, final Long seed, final String humanName) {
         prune();
         final String id = "m" + counter.incrementAndGet() + "-" + Long.toString(System.currentTimeMillis() % 100000, 36);
-        final MatchSession m = new MatchSession(id, humanDeckRef, aiDeckRef);
+        final MatchSession m = new MatchSession(id, humanDeckRef, aiDeckRef, format);
         matches.put(id, m);
         m.start(seed, humanName);
         return m;

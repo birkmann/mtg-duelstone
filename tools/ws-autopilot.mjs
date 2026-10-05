@@ -1,20 +1,23 @@
 // Throwaway protocol exerciser: plays a match over the WebSocket protocol with a "first option / OK" policy.
-// usage: node tools/ws-autopilot.mjs [humanDeckRef] [aiDeckRef] [--verbose] [--cards]   (--cards: click cards in hand on priority)
+// usage: node tools/ws-autopilot.mjs [humanDeckRef] [aiDeckRef] [--format=constructed|commander] [--verbose] [--cards]   (--cards: click cards in hand on priority)
+// ENGINE=http://localhost:18081 selects the engine; deck specs: 'random', a name fragment, or a ref.
 const BASE = process.env.ENGINE || 'http://localhost:8080';
 const args = process.argv.slice(2);
 const verbose = args.includes('--verbose');
 const clickCards = args.includes('--cards');
 const pos = args.filter(a => !a.startsWith('--'));
-const decks = await (await fetch(`${BASE}/api/decks`)).json();
+const format = (args.find(a => a.startsWith('--format=')) || '--format=commander').slice(9);
+const decks = (await (await fetch(`${BASE}/api/decks?format=${format}`)).json()).filter(d => !d.problem);
 const pick = (spec, dflt) => spec === 'random' ? decks[Math.floor(Math.random() * decks.length)].ref : spec ? decks.find(d => d.name.toLowerCase().includes(spec.toLowerCase()))?.ref : dflt;
 const human = pick(pos[0], decks[0].ref);
 const ai = pick(pos[1], decks[1].ref);
-const m = await (await fetch(`${BASE}/api/match`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ humanDeck: human, aiDeck: ai, humanName: 'Tester' }) })).json();
+const m = await (await fetch(`${BASE}/api/match`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ humanDeck: human, aiDeck: ai, format, humanName: 'Tester' }) })).json();
 console.log('match', m);
 
 const ws = new WebSocket(`${BASE.replace('http', 'ws')}/ws/match/${m.id}`);
 const hist = {};
 const count = (k) => (hist[k] = (hist[k] || 0) + 1);
+const evSeqs = [];
 let state = null, frames = 0, lastInputKey = '', clicks = 0, t0 = Date.now();
 const send = (o) => ws.send(JSON.stringify(o));
 const myId = () => state?.you;
@@ -24,7 +27,9 @@ ws.onmessage = (ev) => {
   const f = JSON.parse(ev.data); frames++;
   if (f.t === 'state') { state = f; if (verbose) console.log(`state seq=${f.seq} turn=${f.game.turn} phase=${f.game.phase} stack=${f.game.stack.length}`); return; }
   if (f.t === 'log') { if (verbose) for (const e of f.entries) console.log('   log:', e.type, e.text); return; }
-  if (f.t === 'hello' || f.t === 'pong' || f.t === 'alert') return;
+  if (f.t === 'hello') { console.log('hello', JSON.stringify(f)); return; }
+  if (f.t === 'events') { for (const it of f.items) count('ev:' + it.kind); if (verbose) console.log('  EVENTS seq=' + f.seq, JSON.stringify(f.items).slice(0, 300)); evSeqs.push(f.seq); return; }
+  if (f.t === 'pong' || f.t === 'alert') return;
   if (f.t === 'flash') { count('flash'); if (lastInput) setTimeout(() => decide(lastInput, true), 5); return; }
   if (f.t === 'message') { count('message'); console.log('  message:', f.title, f.text); return; }
   if (f.t === 'error') { console.log('  ERROR frame:', f.text); return; }

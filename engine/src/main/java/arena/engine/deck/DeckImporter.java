@@ -29,7 +29,10 @@ public final class DeckImporter {
 
     private final CardCatalog catalog = CardCatalog.get();
 
-    public JsonObject parse(final String text) {
+    public JsonObject parse(final String text) { return parse(text, "commander"); }
+
+    public JsonObject parse(final String text, final String format) {
+        final boolean constructed = "constructed".equals(format);
         final Map<String, Integer> main = new LinkedHashMap<>(), side = new LinkedHashMap<>();
         final List<String> commanders = new ArrayList<>();
         final List<JsonObject> unresolved = new ArrayList<>();
@@ -90,9 +93,10 @@ public final class DeckImporter {
         }
         // No explicit commander: suggest legal commanders found in the list (legendary creatures etc.)
         final JsonArray candidates = new JsonArray();
-        if (commanders.isEmpty()) for (final String n : main.keySet()) { final PaperCard pc = catalog.resolveExact(n); if (pc != null && catalog.canBeCommander(pc)) candidates.add(n); }
+        if (commanders.isEmpty() && !constructed) for (final String n : main.keySet()) { final PaperCard pc = catalog.resolveExact(n); if (pc != null && catalog.canBeCommander(pc)) candidates.add(n); }
         final int total = main.values().stream().mapToInt(Integer::intValue).sum() + commanders.size();
-        if (total != 100 && unresolved.isEmpty()) warnings.add("Deck has " + total + " cards (Commander needs 100 including the commander).");
+        if (constructed) { if (total < 60 && unresolved.isEmpty()) warnings.add("Deck has " + total + " cards (Constructed needs at least 60)."); }
+        else if (total != 100 && unresolved.isEmpty()) warnings.add("Deck has " + total + " cards (Commander needs 100 including the commander).");
         return result(commanders, main, side, unresolved, candidates, warnings);
     }
 

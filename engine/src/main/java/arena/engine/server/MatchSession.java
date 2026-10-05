@@ -30,16 +30,18 @@ import java.util.concurrent.CopyOnWriteArraySet;
  */
 public final class MatchSession {
     public final String id;
-    public final String humanDeckRef, aiDeckRef;
+    public final String humanDeckRef, aiDeckRef, format;
     public final long createdAt = System.currentTimeMillis();
     private final Set<Session> sockets = new CopyOnWriteArraySet<>();
     private final WsGuiGame gui;
     private final HostedMatch hosted = new HostedMatch();
     private volatile boolean started, over;
+    private volatile String humanDeckName, aiDeckName; // resolved names (a "random" ref has no name until loaded)
     private volatile long finishedAt;
 
-    public MatchSession(final String id, final String humanDeckRef, final String aiDeckRef) {
+    public MatchSession(final String id, final String humanDeckRef, final String aiDeckRef, final String format) {
         this.id = id;
+        this.format = DeckSource.format(format);
         this.humanDeckRef = humanDeckRef;
         this.aiDeckRef = aiDeckRef;
         this.gui = new WsGuiGame(this::broadcast);
@@ -54,14 +56,19 @@ public final class MatchSession {
         if (started) return;
         started = true;
         if (seed != null) MyRandom.setRandom(new Random(seed));
-        final Deck dHuman = DeckSource.load(humanDeckRef);
-        final Deck dAi = DeckSource.load(aiDeckRef);
-        final RegisteredPlayer human = RegisteredPlayer.forCommander(dHuman);
+        final boolean commander = DeckSource.COMMANDER.equals(format);
+        final Deck dHuman = DeckSource.load(humanDeckRef, format);
+        final Deck dAi = DeckSource.load(aiDeckRef, format);
+        humanDeckName = dHuman.getName(); aiDeckName = dAi.getName();
+        final RegisteredPlayer human = commander ? RegisteredPlayer.forCommander(dHuman) : new RegisteredPlayer(dHuman); // 20 life, main section
         human.setPlayer(new LobbyPlayerHuman(humanName == null || humanName.isBlank() ? "You" : humanName));
-        final RegisteredPlayer ai = RegisteredPlayer.forCommander(dAi);
+        final RegisteredPlayer ai = commander ? RegisteredPlayer.forCommander(dAi) : new RegisteredPlayer(dAi);
         ai.setPlayer(GamePlayerUtil.createAiPlayer("Forge AI", 1));
         hosted.setEndGameHook(() -> { over = true; finishedAt = System.currentTimeMillis(); gui.flush(); });
-        hosted.startMatch(GameType.Commander, Set.of(GameType.Commander), List.of(human, ai), human, gui);
+        final GameType gt = commander ? GameType.Commander : GameType.Constructed;
+        hosted.startMatch(gt, commander ? Set.of(GameType.Commander) : Set.<GameType>of(), List.of(human, ai), human, gui);
+        final Game g = hosted.getGame();
+        if (g != null) g.subscribeToEvents(gui.eventSubscriber());
     }
 
     public JsonObject describe() {
@@ -69,6 +76,9 @@ public final class MatchSession {
         o.addProperty("id", id);
         o.addProperty("humanDeck", humanDeckRef);
         o.addProperty("aiDeck", aiDeckRef);
+        o.addProperty("format", format);
+        o.addProperty("humanDeckName", humanDeckName);
+        o.addProperty("aiDeckName", aiDeckName);
         o.addProperty("started", started);
         o.addProperty("over", over);
         o.addProperty("sockets", sockets.size());
@@ -88,6 +98,10 @@ public final class MatchSession {
         hello.addProperty("matchId", id);
         hello.addProperty("humanDeck", humanDeckRef);
         hello.addProperty("aiDeck", aiDeckRef);
+        hello.addProperty("format", format);
+        hello.addProperty("humanDeckName", humanDeckName);
+        hello.addProperty("aiDeckName", aiDeckName);
+        hello.addProperty("protocol", 2);
         send(s, hello);
         for (final JsonObject f : gui.snapshot()) send(s, f);
     }

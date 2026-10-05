@@ -3637,6 +3637,7 @@ dependencies = [
  "anyhow",
  "crossbeam-channel",
  "directories",
+ "libc",
  "mtg_protocol",
  "serde",
  "serde_json",
