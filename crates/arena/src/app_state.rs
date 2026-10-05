@@ -21,16 +21,24 @@ pub struct AppStatePlugin;
 
 impl Plugin for AppStatePlugin {
     fn build(&self, app: &mut App) {
+        // The engine config must exist before the first frame: Bevy runs the initial state's OnEnter (Boot,
+        // which contacts the engine) before even PreStartup, so a Startup system would be too late.
+        let cfg = {
+            let world = app.world();
+            engine_config(
+                &world.get_resource::<CliArgs>().cloned().unwrap_or_default(),
+                &world.get_resource::<Settings>().cloned().unwrap_or_default(),
+            )
+        };
         app.init_resource::<BootStatus>()
             .init_resource::<MatchConfig>()
-            .init_resource::<EngineConfig>()
+            .insert_resource(cfg)
             .init_resource::<Settings>()
             .init_resource::<MatchMode>()
             .init_resource::<SeatTicket>()
             .init_resource::<LobbyView>()
             .init_resource::<ServerFacts>()
             .add_message::<RetryBoot>()
-            .add_systems(Startup, build_engine_config)
             .add_systems(Update, retry_boot)
             .add_systems(OnEnter(AppState::Boot), start_boot)
             .add_systems(Update, poll_boot.run_if(in_state(AppState::Boot)))
@@ -90,11 +98,12 @@ fn locate(rel: &str) -> Option<PathBuf> {
     find_up(&cwd, rel).or_else(|| find_up(Path::new(env!("CARGO_MANIFEST_DIR")), rel))
 }
 
-fn build_engine_config(cli: Res<CliArgs>, settings: Res<Settings>, mut cfg: ResMut<EngineConfig>) {
+fn engine_config(cli: &CliArgs, settings: &Settings) -> EngineConfig {
+    let mut cfg = EngineConfig::default();
     if let Some(origin) = crate::platform::page_origin() {
         cfg.base_url = origin;
         cfg.autolaunch = false;
-        return;
+        return cfg;
     }
     cfg.base_url = cli.engine_url.clone().unwrap_or_else(|| settings.engine_url.clone());
     cfg.autolaunch = !cli.no_autolaunch && settings.autolaunch;
@@ -102,6 +111,7 @@ fn build_engine_config(cli: Res<CliArgs>, settings: Res<Settings>, mut cfg: ResM
     if let Some(jar) = locate("engine/target/forge-ws-server.jar") {
         cfg.jar = jar;
     }
+    cfg
 }
 
 #[derive(Resource)]
@@ -204,6 +214,7 @@ fn poll_boot(
                     human_deck: cli.deck.clone().unwrap_or_default(),
                     ai_deck: cli.ai_deck.clone().unwrap_or_default(),
                     seed: cli.seed,
+                    setup: Default::default(),
                 };
                 next.set(AppState::Loading);
             } else {
@@ -238,6 +249,7 @@ fn start_loading(
     mut lobby: ResMut<LobbyView>,
     mut ticket: ResMut<SeatTicket>,
     mut next: ResMut<NextState<AppState>>,
+    pending: Option<Res<PendingEventMatch>>,
 ) {
     commands.remove_resource::<NetLink>();
     status.error = None;
@@ -282,7 +294,7 @@ fn start_loading(
                         ai = pool.get(1).map(|d| d.deck_ref.clone()).unwrap_or_else(|| "random".into());
                     }
                 }
-                api.create_match(&CreateMatch { human_deck: human, ai_deck: ai, format: mc.format, seed: mc.seed, human_name: name })
+                api.create_match(&CreateMatch { human_deck: human, ai_deck: ai, format: mc.format, setup: mc.setup.clone(), seed: mc.seed, human_name: name })
                     .await
                     .map(Created::Match)
                     .map_err(|e| format!("{e:#}"))
@@ -292,12 +304,26 @@ fn start_loading(
             status.message = "Opening your table…".into();
             let req = CreateLobby {
                 format: mc.format,
+                setup: mc.setup.clone(),
                 players: players.clamp(2, 4) as i64,
                 name: name.unwrap_or_else(|| "Host".into()),
                 deck: if mc.human_deck.is_empty() { "random".into() } else { mc.human_deck.clone() },
             };
             mtg_client::spawn(async move { api.create_lobby(&req).await.map(Created::Seat).map_err(|e| format!("{e:#}")) })
         }
+        MatchMode::Event { .. } => match pending {
+            // a game the pod dealt us: connect to it like a lobby seat (it starts once everyone is in)
+            Some(p) => {
+                status.message = "Joining your game…".into();
+                let t = p.0.clone();
+                commands.remove_resource::<PendingEventMatch>();
+                mtg_client::spawn(async move { Ok(Created::Seat(t)) })
+            }
+            None => {
+                next.set(AppState::Event);
+                return;
+            }
+        },
         MatchMode::Join { code } => {
             status.message = format!("Taking a seat at table {code}…");
             let req = JoinLobby {

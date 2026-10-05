@@ -57,6 +57,14 @@ Play 1v1 against the Forge AI in **60-card Constructed** or **Commander**.
 - **Multiplayer, up to 4 players.** Host a table, send the invite link, and friends join from any browser —
   no install. Empty seats can be filled with the Forge AI; three- and four-player games lay the opponents out in
   columns across the far side of the table. Constructed and Commander (free-for-all).
+- **Formats and variants.** Constructed with Standard, Pioneer, Modern, Legacy, Vintage or Pauper legality checks
+  (the engine generates a legal opponent deck when none is saved), Commander, Brawl and Oathbreaker, plus Planechase,
+  Archenemy, Momir Basic and 2v2 teams — vs the AI or at a multiplayer table.
+- **Cube draft, set draft and sealed.** Draft any of Forge's ~95 cubes (MTGO Legacy and Vintage cubes, Pauper Cube,
+  Peasant, Arena…), a real set, or your own cube with up to 3 friends in a pod of 8; Forge AI drafters fill the empty
+  seats. Build a 40-card deck (or take the engine's suggestion) and play the pod.
+- **Cube designer.** Browse every bundled cube, start your own from search or a pasted CubeCobra/MTGO list, save it,
+  and draft it.
 - **Runs in the browser.** The same Bevy client compiles to WebAssembly (WebGL2); the engine serves it.
 - **Decks.** Four Constructed and two Commander starter decks, Forge's precon and theme decks, and an importer
   for pasted lists (Arena/MTGO/Moxfield formats) that shows unresolved names with suggestions.
@@ -83,6 +91,21 @@ Skip the menus and jump straight into a game:
 ./run.sh --quick --format constructed --deck starter:gruul-dinosaurs --ai-deck random
 ./run.sh --quick --format commander --deck starter:lathril-elves
 ```
+
+## Modes, drafts and cubes
+
+**PLAY** opens the mode screen: pick a format (Constructed, Commander, Brawl, Oathbreaker), a Constructed legality
+(Casual · Standard · Pioneer · Modern · Legacy · Vintage · Pauper) and any casual variants (Planechase, Archenemy,
+Momir Basic, 2v2 Teams), then a deck. The deck list only offers decks legal for that choice, plus a generated
+"Random deck".
+
+**Limited** tiles open a pod: choose a cube (or set), the pod size, then share the pod's invite link — friends join
+from a browser, empty seats become AI drafters. Draft by clicking cards; after the third pack build your deck
+(click cards in/out, add basics, or *Suggest a deck*), submit, and the host deals 1v1 duels or a free-for-all.
+After each game *Return to pod* to play again with the same decks.
+
+**CUBES** (main menu) is the cube designer: open any bundled cube, edit a copy or start a new one, add cards by
+search or by pasting a list, save, and *Draft this cube*.
 
 ## Multiplayer
 

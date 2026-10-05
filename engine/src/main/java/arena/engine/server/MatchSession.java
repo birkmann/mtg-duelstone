@@ -45,6 +45,12 @@ public final class MatchSession {
 
     public final String id;
     public final String format;
+    /** Format + legality + variants (see GameSetup). */
+    final GameSetup setup;
+    /** Event tables start by themselves once every seated human has connected. */
+    private volatile boolean autoStart;
+    /** Called once when the game ends (events record results). */
+    private volatile Runnable onOver;
     public final boolean lobby;
     public final long createdAt = System.currentTimeMillis();
     private final List<Seat> seats = new ArrayList<>();
@@ -56,16 +62,29 @@ public final class MatchSession {
     /** Seat that may edit seats and start; moves on if the host leaves the lobby. */
     private volatile int hostSeat = 0;
 
-    private MatchSession(final String id, final String format, final boolean lobby, final String inviteBase) {
+    private MatchSession(final String id, final GameSetup setup, final boolean lobby, final String inviteBase) {
         this.id = id;
-        this.format = DeckSource.format(format);
+        this.setup = setup;
+        this.format = setup.format;
         this.lobby = lobby;
         this.inviteBase = inviteBase;
     }
 
     /** 1 human vs. 1 AI, started immediately (the original single-player flow). */
-    static MatchSession classic(final String id, final String humanDeckRef, final String aiDeckRef, final String format, final Long seed, final String humanName) {
-        final MatchSession m = new MatchSession(id, format, false, null);
+    static MatchSession classic(final String id, final String humanDeckRef, final String aiDeckRef, final GameSetup setup, final Long seed, final String humanName) {
+        final MatchSession m = new MatchSession(id, setup, false, null);
+        if (setup.variants.contains("teams")) {
+            // 2v2 against the AI: you + an AI partner vs two AI opponents (seats alternate teams)
+            final Seat h = m.addSeat(Seat.Kind.HUMAN);
+            h.name = humanName == null || humanName.isBlank() ? "You" : humanName.trim();
+            h.deckRef = humanDeckRef;
+            final String[] names = { "Forge AI", "Forge Ally", "Forge AI (2)" };
+            for (final String n : names) { final Seat a = m.addSeat(Seat.Kind.AI); a.name = n; a.deckRef = "random"; }
+            m.seats.get(1).deckRef = aiDeckRef;
+            m.seed = seed;
+            m.start();
+            return m;
+        }
         final Seat human = m.addSeat(Seat.Kind.HUMAN);
         human.name = humanName == null || humanName.isBlank() ? "You" : humanName.trim();
         human.deckRef = humanDeckRef;
@@ -78,14 +97,47 @@ public final class MatchSession {
     }
 
     /** A lobby with the host in seat 0 and {@code players - 1} open seats. */
-    static MatchSession lobby(final String id, final String format, final int players, final String hostName, final String hostDeck, final String inviteBase) {
+    static MatchSession lobby(final String id, final GameSetup setup, final int players, final String hostName, final String hostDeck, final String inviteBase) {
         if (players < 2 || players > MAX_SEATS) throw new IllegalArgumentException("players must be 2.." + MAX_SEATS);
-        final MatchSession m = new MatchSession(id, format, true, inviteBase);
+        final String pp = setup.playerProblem(players);
+        if (pp != null) throw new IllegalArgumentException(pp);
+        final MatchSession m = new MatchSession(id, setup, true, inviteBase);
         final Seat host = m.addSeat(Seat.Kind.HUMAN);
         host.name = cleanName(hostName, "Host");
         m.setDeck(host, hostDeck);
         for (int i = 1; i < players; i++) m.addSeat(Seat.Kind.OPEN);
         return m;
+    }
+
+    /** One seat of a table dealt by a limited event: a prebuilt deck, human (token issued) or AI. */
+    record EventPlayer(String name, Deck deck, boolean human) {}
+
+    /**
+     * A table dealt from a draft/sealed event: decks are already built, humans get seat tokens (see
+     * {@link #tokenOf}) and the game starts as soon as all of them are connected.
+     */
+    static MatchSession event(final String id, final List<EventPlayer> players, final Runnable onOver) {
+        final MatchSession m = new MatchSession(id, GameSetup.of(DeckSource.LIMITED), true, null);
+        for (final EventPlayer p : players) {
+            final Seat s = m.addSeat(p.human() ? Seat.Kind.HUMAN : Seat.Kind.AI);
+            s.name = p.name();
+            s.deck = p.deck();
+            s.deckRef = "event";
+            s.deckName = p.deck().getName();
+            if (p.human()) s.goneSince = System.currentTimeMillis();
+        }
+        m.autoStart = true;
+        m.onOver = onOver;
+        return m;
+    }
+
+    String tokenOf(final int seat) { return seats.get(seat).token; }
+    int seatCount() { return seats.size(); }
+    String seatName(final int seat) { return seats.get(seat).name; }
+    /** Winner's name once the game is over (null while running / on a draw). */
+    String winnerName() {
+        final Game g = hosted.getGame();
+        try { return g == null ? null : g.getView().getWinningPlayerName(); } catch (final Exception e) { return null; }
     }
 
     private Seat addSeat(final Seat.Kind kind) {
@@ -116,7 +168,8 @@ public final class MatchSession {
     private void setDeck(final Seat s, final String ref) {
         final String r = ref == null || ref.isBlank() ? "random" : ref.trim();
         if (r.startsWith("file:")) throw new IllegalArgumentException("file: deck refs are not allowed in a lobby");
-        final Deck d = DeckSource.load(r, format);
+        if (setup.decksIgnored()) { s.deckRef = "random"; s.deckName = "Momir Basic"; return; }
+        final Deck d = setup.loadDeck(r); // enforces the table's legality
         s.deckRef = r;
         s.deckName = "random".equals(r) ? "Random deck" : d.getName();
     }
@@ -168,7 +221,7 @@ public final class MatchSession {
 
     private void fillLobby(final JsonObject o, final Seat viewer) {
         o.addProperty("id", id);
-        o.addProperty("format", format);
+        setup.fill(o);
         o.addProperty("maxPlayers", seats.size());
         o.addProperty("host", hostSeat);
         o.addProperty("started", started);
@@ -248,15 +301,18 @@ public final class MatchSession {
     private synchronized void start() {
         if (started) return;
         if (seed != null) MyRandom.setRandom(new Random(seed));
-        final boolean commander = DeckSource.COMMANDER.equals(format);
+        int filled = 0;
+        for (final Seat s : seats) if (s.filled()) filled++;
+        final String pp = setup.playerProblem(filled);
+        if (pp != null) throw new IllegalArgumentException(pp);
         final List<RegisteredPlayer> players = new ArrayList<>();
         final Map<RegisteredPlayer, IGuiGame> guis = new LinkedHashMap<>();
-        int aiN = 0;
+        int aiN = 0, order = 0;
         for (final Seat s : seats) {
             if (!s.filled()) continue;
-            final Deck d = DeckSource.load(s.deckRef, format);
+            final Deck d = s.deck != null ? s.deck : setup.loadDeck(s.deckRef);
             if (s.deckName == null || "random".equals(s.deckRef)) s.deckName = d.getName();
-            final RegisteredPlayer rp = commander ? RegisteredPlayer.forCommander(d) : new RegisteredPlayer(d); // 40 / 20 life
+            final RegisteredPlayer rp = setup.register(d, filled, order++);
             if (s.kind == Seat.Kind.HUMAN) {
                 rp.setPlayer(new LobbyPlayerHuman(s.name));
                 guis.put(rp, s.gui);
@@ -271,9 +327,10 @@ public final class MatchSession {
         hosted.setEndGameHook(() -> {
             over = true; finishedAt = System.currentTimeMillis();
             for (final Seat s : seats) if (s.kind == Seat.Kind.HUMAN) s.gui.flush();
+            final Runnable r = onOver;
+            if (r != null) try { r.run(); } catch (final Exception e) { System.err.println("[match " + id + "] onOver: " + e); }
         });
-        final GameType gt = commander ? GameType.Commander : GameType.Constructed;
-        hosted.startMatch(gt, commander ? Set.of(GameType.Commander) : Set.<GameType>of(), players, guis);
+        hosted.startMatch(setup.baseType(), setup.applied(), players, guis);
         final Game g = hosted.getGame();
         if (g != null) for (final Seat s : seats) if (s.kind == Seat.Kind.HUMAN) g.subscribeToEvents(s.gui.eventSubscriber());
     }
@@ -317,8 +374,8 @@ public final class MatchSession {
         hello.addProperty("humanDeckName", s.deckName);
         // "aiDeck" = the (first) opponent's deck, as single-player clients expect
         for (final Seat o : seats) if (o != s && o.filled()) { hello.addProperty("aiDeck", o.deckRef); hello.addProperty("aiDeckName", o.deckName); break; }
-        hello.addProperty("format", format);
-        hello.addProperty("protocol", 2);
+        setup.fill(hello);
+        hello.addProperty("protocol", 3);
         hello.addProperty("seat", s.index);
         int n = 0; for (final Seat o : seats) if (o.filled()) n++;
         hello.addProperty("players", n);
@@ -328,6 +385,14 @@ public final class MatchSession {
     public synchronized void attach(final Seat seat, final Session s) {
         seat.sockets.add(s);
         seat.goneSince = 0;
+        if (!started && autoStart) {
+            boolean all = true;
+            for (final Seat o : seats) if (o.kind == Seat.Kind.HUMAN && !o.connected()) all = false;
+            if (all) {
+                try { start(); } catch (final RuntimeException e) { e.printStackTrace(); send(s, error("could not start: " + e.getMessage())); }
+                if (started) return; // hello + snapshot went out from start()
+            }
+        }
         if (!started) { broadcastLobby(); return; }
         send(s, hello(seat));
         for (final JsonObject f : seat.gui.snapshot()) send(s, f);

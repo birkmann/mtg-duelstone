@@ -157,3 +157,56 @@ and `players`) followed by its seat's normal snapshot; open seats are left out o
 Game thread = Forge's; it blocks inside `prompt`s and inside Inputs. Clicks are applied on the headless "EDT"
 (single thread) exactly like Forge's own GUIs do. State frames are coalesced and read snapshot collections,
 so they may lag a few ms behind the engine; a prompt is always preceded by a fresh state.
+
+## Protocol v3: formats, variants, limited events, cubes
+
+`hello.protocol` / `/api/health.protocol` = 3. Everything below is additive; v2 clients keep working.
+
+### Game setup (`POST /api/match`, `POST /api/lobby`)
+Extra body fields, echoed in `hello`, `lobby` frames and `matchInfo`:
+- `format`: `constructed` | `commander` | `brawl` (60-card singleton commander, Standard pool, 25 life) | `oathbreaker`
+  (planeswalker + signature spell, both in the deck's Commander section) | `limited` (event tables only).
+- `legality` (constructed only): `standard` | `pioneer` | `modern` | `legacy` | `vintage` | `pauper`, null = casual.
+  Decks are checked twice — construction (`DeckFormat`: size, copies) and card pool (`GameFormat`: sets, bans,
+  restricted list, Pauper's commons rule). An illegal deck ref is refused with 400 and the reason.
+- `variants`: any of `planechase` (generated planar decks; roll the planar die by activating the "Planar Dice" card
+  in your command zone), `archenemy` (seat 0 is the archenemy: generated scheme deck, 40 life, goes first; everyone
+  else is one team), `momir` (generated 60-basics decks + Momir avatar; deck refs are ignored), `teams` (2v2: seats
+  alternate teams, exactly 4 players; Forge has no Two-Headed Giant rules, so teammates keep their own life and turns).
+  `archenemy` and `teams` exclude each other; `momir` needs `constructed`.
+- `GET /api/decks?format=…&legality=…` marks illegal decks via `problem` and always lists the pseudo-deck
+  `{ref:"random", generated:true}`: a random legal saved deck, or one Forge generates (Pauper, Brawl, Oathbreaker…).
+- `GET /api/formats` → `{formats, legalities, variants}` (`[{id, name, description}]`).
+
+### Cubes
+| Method | Path | Body / params | Returns |
+|---|---|---|---|
+| GET | `/api/cubes` | | `[{ref, name, size, user}]` — `bundled:<name>` = Forge's res/draft cubes (MTGO Legacy/Vintage, Pauper, Peasant, Arena…), `user:<name>` = `~/.forge/arena-cubes/*.json` |
+| GET | `/api/cube` | `?ref=` | `{ref, name, description?, packs, packSize, cards:[catalog card + qty]}` |
+| POST | `/api/cube` | `{name, description?, packs?(3), packSize?(15), cards:[{name, set?, qty?}], previousName?}` | the saved cube (+ `size`, `fullPodCards` = cards an 8-player draft needs); bundled names are refused |
+| DELETE | `/api/cube` | `?name=` | |
+| POST | `/api/cube/import` | `{text}` (one card per line: `1 Name`, `2x Name`, `Name (SET)`) | `{cards:[…], unresolved:[{line, suggestions}]}` |
+| GET | `/api/sets` | | draftable sets with boosters, newest first `[{code, name, date}]` |
+| GET | `/api/cards/search` | `?q=&limit=` | catalog cards (cube designer search) |
+
+### Limited events (cube draft, set draft, sealed)
+- `POST /api/event` `{kind: "cubeDraft"|"setDraft"|"sealed", source: <cube ref or set code>, podSize: 2..8, name, seed?}`
+  → the host's seat ticket `{id, seat: 0, token, invite}`; `invite` = `publicUrl/?event=<id>`.
+- `GET /api/event/{id}` → the pod (event frame body without your pack/pool); `POST /api/event/{id}/join {name}` →
+  seat ticket (409 when started or 4 humans are already in: games seat at most 4).
+- Socket: `ws://host/ws/event/{id}?token=…`. Frames:
+  - `{t:"event", id, kind, source, sourceName, phase: "lobby"|"drafting"|"building"|"ready", host, you, invite, minDeck: 40,
+    round, rounds, pick, passLeft, seats:[{seat, kind, name, connected, you, picked, thinking, deckReady}],
+    pack:[card + id], pool:[card + id], deck?: LimitedDeck, canStart, games:[{matchId, players, over, winner?}]}` —
+    on every change. Cards are catalog cards (`name, manaCost, cmc, type, colors, set, rarity, …`) with an `id`.
+  - `{t:"deckSuggestion", deck}` — answer to `suggestDeck` (Forge's sealed deck builder over your pool).
+  - `{t:"eventMatch", id, seat, token, name, format:"limited"}` — the host dealt you a game: connect to
+    `/ws/match/{id}?token=` (it starts when every seated human is connected; return to the event socket afterwards).
+- Client → server: `{t:"eventSeat", seat, kind:"ai"|"open"}` (host, lobby) · `{t:"startEvent"}` (host; open seats become
+  AI drafters) · `{t:"pick", id}` · `{t:"suggestDeck"}` · `{t:"submitDeck", deck: {main:[pool ids], basics:{"W":n,…}}}`
+  (≥ 40 cards; resubmitting replaces) · `{t:"dealGames", pairing:"duels"|"table", tableSize: 2..4}` (host, once all decks are in;
+  duels pair humans, the odd one out plays an AI drafter; table = everyone plus AI drafters up to `tableSize`).
+- Drafting: three packs passed left/right/left; every seat picks at its own pace, AI drafters pick as soon as they hold a
+  pack (Forge's `LimitedPlayerAI` with the cube's rankings). Pick ids are `packId*1000 + index`; a seat's head pack only
+  changes on its own pick. A drafter disconnected for 60 s gets their picks made for them. Sealed: everyone opens
+  six packs (cubes: 3–6 depending on the cube).

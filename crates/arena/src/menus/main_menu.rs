@@ -125,7 +125,7 @@ fn spawn_main_menu(mut commands: Commands, fonts: Res<ArenaFonts>, settings: Res
                 ));
                 let p = spawn_button(col, &fonts, ButtonKind::Primary, "PLAY", Vec2::new(340.0, 72.0));
                 col.commands().entity(p).insert((MenuAction::Play, anim(2.55, 0.75, Fx::SlideX(-640.0))));
-                for (i, (label, act)) in [("MULTIPLAYER", MenuAction::Multiplayer), ("DECKS", MenuAction::Decks), ("SETTINGS", MenuAction::OpenSettings), ("QUIT", MenuAction::Quit)]
+                for (i, (label, act)) in [("MULTIPLAYER", MenuAction::Multiplayer), ("CUBES", MenuAction::Cubes), ("DECKS", MenuAction::Decks), ("SETTINGS", MenuAction::OpenSettings), ("QUIT", MenuAction::Quit)]
                     .into_iter()
                     // a browser tab can't quit itself
                     .filter(|(_, a)| !(crate::platform::WEB && *a == MenuAction::Quit))

@@ -8,7 +8,8 @@ use std::time::Duration;
 
 use anyhow::{Context, Result};
 use mtg_protocol::{
-    CreateLobby, CreateMatch, DeckInfo, Format, JoinLobby, LobbyFrame, MatchInfo, SeatTicket, ServerInfo,
+    CreateEvent, CreateLobby, CreateMatch, Cube, CubeCard, CubeInfo, DeckInfo, EventFrame, Format, FormatsInfo, JoinLobby,
+    LobbyFrame, MatchInfo, SeatTicket, ServerInfo, SetInfo,
 };
 
 use crate::http::{HttpResponse, query, request};
@@ -82,7 +83,15 @@ impl Api {
     }
     /// Decks usable in `format` (decks that declare a different format are dropped client-side).
     pub async fn decks(&self, format: Format) -> Result<Vec<DeckInfo>> {
-        let all: Vec<DeckInfo> = self.get("/api/decks", &[("format", format.as_str())], 10).await?.ok("decks")?.json("decks")?;
+        self.decks_for(format, None).await
+    }
+    /// Decks for a format and Constructed legality; illegal ones come back with `problem` set.
+    pub async fn decks_for(&self, format: Format, legality: Option<&str>) -> Result<Vec<DeckInfo>> {
+        let mut q = vec![("format", format.as_str())];
+        if let Some(l) = legality {
+            q.push(("legality", l));
+        }
+        let all: Vec<DeckInfo> = self.get("/api/decks", &q, 20).await?.ok("decks")?.json("decks")?;
         Ok(all.into_iter().filter(|d| d.format.is_none_or(|f| f == format)).collect())
     }
     pub async fn create_match(&self, req: &CreateMatch) -> Result<MatchInfo> {
@@ -129,6 +138,51 @@ impl Api {
     pub async fn join_lobby(&self, code: &str, req: &JoinLobby) -> Result<SeatTicket> {
         self.post(&format!("/api/lobby/{}/join", code.trim()), req, 30).await?.ok("join")?.json("seat ticket")
     }
+
+    // ---- v3: formats, cubes, sets, events --------------------------------------------------------
+
+    pub async fn formats(&self) -> Result<FormatsInfo> {
+        self.get("/api/formats", &[], 10).await?.ok("formats")?.json("formats")
+    }
+    pub async fn cubes(&self) -> Result<Vec<CubeInfo>> {
+        self.get("/api/cubes", &[], 60).await?.ok("cubes")?.json("cubes")
+    }
+    pub async fn cube(&self, cube_ref: &str) -> Result<Cube> {
+        self.get("/api/cube", &[("ref", cube_ref)], 60).await?.ok("cube")?.json("cube")
+    }
+    pub async fn save_cube(&self, cube: &Cube) -> Result<Cube> {
+        self.post("/api/cube", cube, 60).await?.ok("save cube")?.json("cube")
+    }
+    pub async fn delete_cube(&self, name: &str) -> Result<()> {
+        let url = format!("{}{}", self.url("/api/cube"), query(&[("name", name)]));
+        request("DELETE", &url, None, Duration::from_secs(10)).await?.ok("delete cube").map(|_| ())
+    }
+    /// Pasted list → `{cards: [CubeCard], unresolved: [{line, suggestions}]}`.
+    pub async fn import_cube(&self, text: &str) -> Result<serde_json::Value> {
+        self.post("/api/cube/import", &serde_json::json!({ "text": text }), 60).await?.ok("import cube")?.json("import")
+    }
+    /// Catalog search (name/type/text), for the cube designer.
+    pub async fn search_cards(&self, q: &str, limit: u32) -> Result<Vec<CubeCard>> {
+        let limit = limit.to_string();
+        self.get("/api/cards/search", &[("q", q), ("limit", &limit)], 20).await?.ok("card search")?.json("cards")
+    }
+    pub async fn sets(&self) -> Result<Vec<SetInfo>> {
+        self.get("/api/sets", &[], 20).await?.ok("sets")?.json("sets")
+    }
+    /// Open a pod; the host's seat ticket (with `invite`).
+    pub async fn create_event(&self, req: &CreateEvent) -> Result<SeatTicket> {
+        self.post("/api/event", req, 60).await?.ok("create event")?.json("event ticket")
+    }
+    pub async fn event(&self, code: &str) -> Result<EventFrame> {
+        self.get(&format!("/api/event/{}", code.trim()), &[], 10).await?.ok("event")?.json("event")
+    }
+    pub async fn join_event(&self, code: &str, name: &str) -> Result<SeatTicket> {
+        self.post(&format!("/api/event/{}/join", code.trim()), &serde_json::json!({ "name": name }), 30).await?.ok("join event")?.json("seat ticket")
+    }
+    /// `ws://…/ws/event/{id}?token=…`
+    pub fn event_ws_url(&self, event_id: &str, token: &str) -> String {
+        format!("{}/ws/event/{event_id}{}", self.base.replacen("http", "ws", 1), query(&[("token", token)]))
+    }
 }
 
 /// An invite pasted by a player: a full link (`http://host:8080/?join=ABC123`) or just the code.
@@ -138,7 +192,7 @@ pub fn parse_invite(text: &str) -> Option<(Option<String>, String)> {
     if t.is_empty() {
         return None;
     }
-    if let Some(pos) = t.find("join=") {
+    if let Some(pos) = t.find("join=").or_else(|| t.find("event=").map(|p| p + 1)) {
         let code: String = t[pos + 5..].chars().take_while(|c| c.is_ascii_alphanumeric() || *c == '-').collect();
         if code.is_empty() {
             return None;

@@ -7,12 +7,14 @@
 
 mod card;
 mod cmd;
+mod event;
 mod frames;
 mod game;
 mod prompt;
 
 pub use card::*;
 pub use cmd::*;
+pub use event::*;
 pub use frames::*;
 pub use game::*;
 pub use prompt::*;

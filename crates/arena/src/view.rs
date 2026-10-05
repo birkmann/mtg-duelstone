@@ -172,7 +172,13 @@ fn apply_frames(
             }
             ServerFrame::Error { text } => warn!("engine error: {text}"),
             // lobby frames are app_state's (LobbyView); the game view starts with `hello`
-            ServerFrame::Pong | ServerFrame::Lobby(_) | ServerFrame::Unknown => {}
+            // lobby/event frames belong to app_state and the event screens; the game view starts with `hello`
+            ServerFrame::Pong
+            | ServerFrame::Lobby(_)
+            | ServerFrame::Event(_)
+            | ServerFrame::EventMatch(_)
+            | ServerFrame::DeckSuggestion { .. }
+            | ServerFrame::Unknown => {}
         }
     }
 }

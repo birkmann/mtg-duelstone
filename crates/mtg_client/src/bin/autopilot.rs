@@ -50,6 +50,8 @@ struct Args {
     bots: u32,
     /// `--seat CODE:TOKEN`
     seat: Option<String>,
+    /// `--legality pauper`, `--variant planechase` (repeatable)
+    setup: mtg_protocol::GameSetup,
 }
 
 fn parse_args() -> Result<Args> {
@@ -71,6 +73,7 @@ fn parse_args() -> Result<Args> {
         join: None,
         bots: 1,
         seat: None,
+        setup: Default::default(),
     };
     let mut it = std::env::args().skip(1);
     while let Some(k) = it.next() {
@@ -78,10 +81,10 @@ fn parse_args() -> Result<Args> {
         match k.as_str() {
             "--engine" => a.engine = val("--engine")?,
             "--format" => {
-                a.format = match val("--format")?.as_str() {
-                    "constructed" => Format::Constructed,
-                    "commander" => Format::Commander,
-                    o => bail!("unknown format {o}"),
+                let f = val("--format")?;
+                a.format = match Format::parse(&f) {
+                    Some(f) => f,
+                    None => bail!("unknown format {f}"),
                 }
             }
             "--games" => a.games = val("--games")?.parse()?,
@@ -99,6 +102,12 @@ fn parse_args() -> Result<Args> {
             "--join" => a.join = Some(val("--join")?),
             "--bots" => a.bots = val("--bots")?.parse()?,
             "--seat" => a.seat = Some(val("--seat")?),
+            "--legality" => a.setup.legality = Some(val("--legality")?),
+            "--variant" => {
+                let v = val("--variant")?;
+                let var = mtg_protocol::Variant::ALL.into_iter().find(|x| x.as_str().eq_ignore_ascii_case(&v)).ok_or_else(|| anyhow::anyhow!("unknown variant {v}"))?;
+                a.setup.variants.push(var);
+            }
             "-h" | "--help" => {
                 println!("autopilot [--engine URL] [--format constructed|commander] [--games N] [--seed S] [--deck REF] [--ai-deck REF] [--launch] [--jar PATH] [--record DIR] [--game-timeout SECS] [--max-turns N] [--verbose] [--players N [--humans H]] [--join INVITE [--bots N]] [--seat CODE:TOKEN]");
                 std::process::exit(0);
@@ -127,7 +136,11 @@ fn pick_deck(decks: &[DeckInfo], spec: Option<&str>, rng: &mut Rng, avoid: Optio
         // Unknown to the listing (e.g. a file: ref): pass through verbatim.
         return Ok(s.to_string());
     }
-    let ok: Vec<&DeckInfo> = decks.iter().filter(|d| d.problem.is_none() && Some(d.deck_ref.as_str()) != avoid).collect();
+    let mut ok: Vec<&DeckInfo> = decks.iter().filter(|d| d.problem.is_none() && Some(d.deck_ref.as_str()) != avoid).collect();
+    if ok.is_empty() {
+        // only one usable deck (often just the engine's generated "random"): both sides may use it
+        ok = decks.iter().filter(|d| d.problem.is_none()).collect();
+    }
     if ok.is_empty() {
         bail!("no usable decks reported by the engine");
     }
@@ -156,6 +169,7 @@ fn play_game(args: &Args, rest: &Rest, n: u32, human: &str, ai: &str, hist: &mut
         format: args.format,
         seed: Some((args.seed as i64).wrapping_add(n as i64)),
         human_name: Some("Tester".into()),
+        setup: args.setup.clone(),
     }) {
         Ok(m) => m,
         Err(e) => {
@@ -362,7 +376,7 @@ fn play_table(args: &Args, rest: &Rest, n: u32, decks: &[String], hist: &mut BTr
     let players = args.players.clamp(2, 4);
     let humans = args.humans.unwrap_or(players).clamp(1, players);
     let fail = |msg: String| GameResult { failure: Some(msg), secs: t0.elapsed().as_secs_f32(), ..Default::default() };
-    let host = match rest.create_lobby(&CreateLobby { format: args.format, players: players as i64, name: "Bot 1".into(), deck: decks[0].clone() }) {
+    let host = match rest.create_lobby(&CreateLobby { format: args.format, setup: args.setup.clone(), players: players as i64, name: "Bot 1".into(), deck: decks[0].clone() }) {
         Ok(t) => t,
         Err(e) => return fail(format!("create lobby: {e:#}")),
     };
@@ -589,7 +603,8 @@ fn run(args: &Args) -> Result<bool> {
     if args.join.is_some() || args.seat.is_some() {
         return sit_in(args, &rest);
     }
-    let decks = rest.decks(args.format)?;
+    // A legality filters the engine's list; illegal decks come back with `problem` set and are skipped.
+    let decks = if let Some(l) = &args.setup.legality { rest.decks_for(args.format, Some(l))? } else { rest.decks(args.format)? };
     println!("engine ok, {} {} decks", decks.len(), args.format.as_str());
     let mut rng = Rng(args.seed.wrapping_mul(0x9E37_79B9_7F4A_7C15) | 1);
     let mut hist = BTreeMap::new();

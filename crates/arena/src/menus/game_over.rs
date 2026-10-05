@@ -67,6 +67,11 @@ fn spawn_overlay(mut commands: Commands, fonts: Res<ArenaFonts>, result: Res<Gam
                     b.spawn(ui_text(&fonts.body, sub, 20.0, TEXT));
                 });
             root.spawn(Node { column_gap: Val::Px(22.0), ..default() }).with_children(|r| {
+                if let MatchMode::Event { .. } = *mode {
+                    // the pod is still there: build again, play the next game
+                    let b = spawn_button(r, &fonts, ButtonKind::Primary, "RETURN TO POD", Vec2::new(300.0, 64.0));
+                    r.commands().entity(b).insert(MenuAction::ReturnToPod);
+                }
                 // a table can't be re-dealt from one seat; its host opens a new one
                 if !mode.is_multiplayer() {
                     let b = spawn_button(r, &fonts, ButtonKind::Primary, "REMATCH", Vec2::new(280.0, 64.0));

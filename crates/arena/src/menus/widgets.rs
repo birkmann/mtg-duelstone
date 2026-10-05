@@ -17,13 +17,19 @@ pub enum Field {
     ImportName,
     /// Multiplayer: pasted invite link or table code.
     Invite,
+    /// Event setup: filter the cube / set list.
+    SourceFilter,
+    /// Cube designer: card search, cube name, pasted list.
+    CubeSearch,
+    CubeName,
+    CubeImportText,
 }
 
 pub struct WidgetsPlugin;
 
 impl Plugin for WidgetsPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(Update, (field_focus_style, commit_fields, slider_input, slider_visual));
+        app.add_systems(Update, (field_focus_style, commit_fields, slider_input, slider_visual, wheel_scroll));
     }
 }
 
@@ -196,5 +202,34 @@ fn slider_visual(
         if text.0 != s {
             text.0 = s;
         }
+    }
+}
+
+/// Marks a scroll container that follows the mouse wheel while hovered (needs `ScrollPosition` and
+/// `RelativeCursorPosition`; bevy_ui scrolls only programmatically).
+#[derive(Component, Debug, Clone, Copy, Default)]
+pub struct WheelScroll;
+
+fn wheel_scroll(
+    mut wheel: MessageReader<bevy::input::mouse::MouseWheel>,
+    mut q: Query<(&RelativeCursorPosition, &ComputedNode, &mut ScrollPosition), With<WheelScroll>>,
+) {
+    use bevy::input::mouse::MouseScrollUnit;
+    let mut dy = 0.0;
+    for e in wheel.read() {
+        dy += match e.unit {
+            MouseScrollUnit::Line => e.y * 42.0,
+            MouseScrollUnit::Pixel => e.y,
+        };
+    }
+    if dy == 0.0 {
+        return;
+    }
+    for (rel, node, mut sp) in &mut q {
+        if !rel.cursor_over {
+            continue;
+        }
+        let max = ((node.content_size().y - node.size().y) * node.inverse_scale_factor()).max(0.0);
+        sp.y = (sp.y - dy).clamp(0.0, max);
     }
 }

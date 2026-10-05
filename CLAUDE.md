@@ -18,6 +18,10 @@ Arena-style MTG client in Bevy 0.19 on top of the Forge rules engine (Java, `eng
 - Keep the tree compiling: `cargo check -p arena` before leaving a file — and `cargo check -p arena --target wasm32-unknown-unknown`
   for anything that runs on the browser too. In code shared with wasm: no `std::thread`, `SystemTime::now`, `Instant::now`
   or files — use `mtg_client::spawn(async { api.x().await })`, `mtg_client::now_millis()`, `crate::platform`.
+- Modes (v3): `GameSetup` (engine) maps format + legality + variants onto Forge's `RegisteredPlayer.forVariants`;
+  limited events are `EventSession` (engine, own socket `/ws/event/{id}`) → `menus/event.rs`; cubes are `CubeStore`
+  (bundled res/draft + `~/.forge/arena-cubes/*.json`) → `menus/cubes.rs`. Forge's draft statics (land set, AI rankings)
+  are global: touch draft state only under `EventSession.DRAFT_LOCK`. Dev jumps: `ARENA_MENU_SCREEN=modes|cubes|draft`.
 - Multiplayer: never assume one opponent. Seats are slots (`GameView::seat_order`: 0 = you), anchors per seat
   (`BoardAnchors::seats` / `avatar_of`). Engine-side, every human seat is its own `WsGuiGame`.
 
@@ -30,6 +34,7 @@ cargo run -p arena -- --quick                         # straight into a match (a
 cargo run -p arena -- --quick --autoplay --screenshot shots/a.png --exit-after 40   # unattended screenshot
 cargo run -p mtg_client --bin autopilot -- --format constructed --games 5
 cargo run -p mtg_client --bin autopilot -- --engine http://127.0.0.1:8080 --players 4 --games 2   # multiplayer soak
+cargo run -p mtg_client --bin autopilot -- --engine http://127.0.0.1:8080 --legality pauper --variant planechase  # modes soak
 tools/build-web.sh [--dev]                            # browser client → web/dist (served by the engine)
 ./run.sh --serve                                      # engine only; play at http://<host>:8080/
 cargo test --workspace

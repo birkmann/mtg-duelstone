@@ -36,8 +36,11 @@ pub(super) fn handle_actions(
         match act {
             MenuAction::Play => {
                 *mode = MatchMode::VsAi;
-                next.set(AppState::DeckSelect);
+                next.set(AppState::ModeSelect);
             }
+            MenuAction::ChangeMode => next.set(AppState::ModeSelect),
+            MenuAction::ReturnToPod => next.set(AppState::Event),
+            MenuAction::Cubes => next.set(AppState::CubeDesigner),
             MenuAction::Decks => {
                 menu.import_open = false;
                 next.set(AppState::DeckSelect);
@@ -51,8 +54,13 @@ pub(super) fn handle_actions(
             }
             MenuAction::Back => {
                 menu.import_open = false;
-                let from_table = *state.get() == AppState::DeckSelect && mode.is_multiplayer();
-                next.set(if from_table { AppState::Multiplayer } else { AppState::MainMenu });
+                // deck select is reached through the mode screen (joiners come from the multiplayer screen)
+                let target = match (*state.get(), &*mode) {
+                    (AppState::DeckSelect, MatchMode::Join { .. }) => AppState::Multiplayer,
+                    (AppState::DeckSelect, _) => AppState::ModeSelect,
+                    _ => AppState::MainMenu,
+                };
+                next.set(target);
             }
             MenuAction::FormatConstructed | MenuAction::FormatCommander => {
                 let f = if *act == MenuAction::FormatCommander { Format::Commander } else { Format::Constructed };
@@ -85,7 +93,7 @@ pub(super) fn handle_actions(
                 settings.last_format = list.format;
                 names.human = list.name_of(&human);
                 names.ai = list.name_of(&ai);
-                *cfg_match = MatchConfig { format: list.format, human_deck: human, ai_deck: ai, seed: None };
+                *cfg_match = MatchConfig { format: list.format, human_deck: human, ai_deck: ai, seed: None, setup: cfg_match.setup.clone() };
                 next.set(AppState::Loading);
             }
             MenuAction::CloseSettings => menu.settings_open = false,
@@ -103,6 +111,7 @@ pub(super) fn handle_actions(
             | MenuAction::SeatOpen(_)
             | MenuAction::StartTable
             | MenuAction::LeaveTable => {} // multiplayer::handle_mp_actions
+            _ => {} // modes / event_setup / event / cubes handle their own
         }
     }
 }
@@ -149,6 +158,9 @@ pub(super) fn debug_jump(
         }
         "settings" => menu.settings_open = true,
         "multiplayer" => next.set(AppState::Multiplayer),
+        "modes" => next.set(AppState::ModeSelect),
+        "cubes" => next.set(AppState::CubeDesigner),
+        "draft" => next.set(AppState::EventSetup),
         _ => {}
     }
 }

@@ -34,6 +34,14 @@ pub enum AppState {
     Multiplayer,
     /// Seated at a multiplayer table, waiting for players / the host's start. Socket is open.
     Lobby,
+    /// v3: pick the format / legality / variants (or a limited event) before choosing a deck. Owner: menus.
+    ModeSelect,
+    /// v3: choose the cube or set and pod size for a draft / sealed event. Owner: menus.
+    EventSetup,
+    /// v3: in a limited event (pod lobby → draft → deck building → games). Owner: menus (event).
+    Event,
+    /// v3: browse, design and import cubes. Owner: menus.
+    CubeDesigner,
 }
 
 /// Parsed command line. Owner: main.rs (inserted before the app runs).
@@ -91,6 +99,8 @@ pub struct MatchConfig {
     pub human_deck: String,
     pub ai_deck: String,
     pub seed: Option<i64>,
+    /// v3: constructed legality + casual variants
+    pub setup: mtg_protocol::GameSetup,
 }
 
 /// Status line for splash/loading screens. Owner: app_state.
@@ -448,6 +458,9 @@ pub struct Settings {
     pub player_name: String,
     pub last_format: Format,
     pub last_deck: HashMap<String, String>,
+    /// v3: last Constructed legality (None = casual) and casual variants chosen on the mode screen.
+    pub last_legality: Option<String>,
+    pub last_variants: Vec<mtg_protocol::Variant>,
 }
 
 impl Default for Settings {
@@ -464,6 +477,8 @@ impl Default for Settings {
             player_name: "You".into(),
             last_format: Format::Constructed,
             last_deck: HashMap::new(),
+            last_legality: None,
+            last_variants: Vec::new(),
         }
     }
 }
@@ -575,6 +590,8 @@ pub enum MatchMode {
     Host { players: u8 },
     /// Take a seat at someone's table (`EngineConfig.base_url` already points at their engine).
     Join { code: String },
+    /// A game dealt by a limited event (`code` = event id): GameOver leads back to the pod.
+    Event { code: String },
 }
 
 impl MatchMode {
@@ -598,3 +615,16 @@ pub struct LobbyView {
 /// Engine facts from `/api/health` (public invite URL, whether it serves the browser client).
 #[derive(Resource, Debug, Clone, Default)]
 pub struct ServerFacts(pub Option<mtg_protocol::ServerInfo>);
+
+// =============================================================================================
+// Limited events & cubes (v3; owner: menus)
+// =============================================================================================
+
+/// Which event the event-setup screen opens (cube draft / set draft / sealed). Writer: menus (modes,
+/// cube designer). Reader: event setup.
+#[derive(Resource, Debug, Clone, Default)]
+pub struct EventSetupChoice(pub mtg_protocol::EventKind, pub Option<String>);
+
+/// A game the event dealt us, waiting for Loading to connect it (writer: event, reader: app_state).
+#[derive(Resource, Debug, Clone)]
+pub struct PendingEventMatch(pub mtg_protocol::SeatTicket);

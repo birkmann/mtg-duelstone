@@ -71,6 +71,12 @@ pub enum ServerFrame {
     },
     /// Multiplayer: the lobby before the host starts the game (sent on every seat change).
     Lobby(LobbyFrame),
+    /// v3 events: the pod's state as this seat sees it.
+    Event(crate::EventFrame),
+    /// v3 events: a game was dealt — connect to it like a lobby seat (`id` = match id).
+    EventMatch(crate::SeatTicket),
+    /// v3 events: the engine's deck suggestion for your pool.
+    DeckSuggestion { deck: crate::LimitedDeck },
     #[serde(other)]
     Unknown,
 }
@@ -169,6 +175,9 @@ pub struct LobbyFrame {
     pub seats: Vec<SeatInfo>,
     /// ≥ 2 filled seats and every seated human connected.
     pub can_start: bool,
+    /// v3: the table's legality / variants (joiners pick a deck for these)
+    #[serde(flatten)]
+    pub setup: crate::GameSetup,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]

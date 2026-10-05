@@ -54,7 +54,8 @@ fn parse_args() -> CliArgs {
         ai_deck: query_param("ai-deck"),
         seed: query_param("seed").and_then(|s| s.parse().ok()),
         quick: query_param("quick").is_some(),
-        join: query_param("join").filter(|j| !j.is_empty()),
+        // `?join=` is a table, `?event=` a draft pod: the multiplayer screen looks up either
+        join: query_param("join").or_else(|| query_param("event")).filter(|j| !j.is_empty()),
         autoplay: query_param("autoplay").is_some(),
         // there is nothing to launch: the engine served this page
         no_autolaunch: true,

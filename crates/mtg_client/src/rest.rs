@@ -75,6 +75,15 @@ impl Rest {
         let all: Vec<DeckInfo> = resp.body_mut().read_json().context("parse decks")?;
         Ok(all.into_iter().filter(|d| d.format.is_none_or(|f| f == format)).collect())
     }
+    /// Decks with legality problems marked (`?legality=pauper` …).
+    pub fn decks_for(&self, format: Format, legality: Option<&str>) -> Result<Vec<DeckInfo>> {
+        let mut r = agent(Duration::from_secs(20)).get(self.url("/api/decks")).query("format", format.as_str());
+        if let Some(l) = legality {
+            r = r.query("legality", l);
+        }
+        let mut resp = check(r.call().context("GET /api/decks")?, "decks")?;
+        resp.body_mut().read_json().context("parse decks")
+    }
     pub fn create_match(&self, req: &CreateMatch) -> Result<MatchInfo> {
         let resp = agent(Duration::from_secs(30)).post(self.url("/api/match")).send_json(req).context("POST /api/match")?;
         let mut resp = check(resp, "create match")?;

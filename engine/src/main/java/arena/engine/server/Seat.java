@@ -23,6 +23,8 @@ final class Seat {
     volatile String name;
     volatile String deckRef;
     volatile String deckName;
+    /** Prebuilt deck (limited events); null = load {@link #deckRef}. */
+    volatile forge.deck.Deck deck;
     /** Secret that binds a socket to this seat (hex). Regenerated when the seat is reopened (kick). */
     volatile String token = newToken();
     /** When the last socket of a seated human went away (0 = connected / never). */

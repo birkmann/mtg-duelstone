@@ -14,9 +14,13 @@ mod backdrop;
 mod boot;
 mod deck_select;
 mod game_over;
+mod cubes;
+mod event;
+mod event_setup;
 mod loading;
 mod lobby;
 mod main_menu;
+mod modes;
 mod multiplayer;
 mod settings_ui;
 mod showcase;
@@ -73,6 +77,40 @@ pub enum MenuAction {
     SeatOpen(i64),
     StartTable,
     LeaveTable,
+    // mode select (handled in `modes`)
+    SetFormat(mtg_protocol::Format),
+    SetLegality(Option<String>),
+    ToggleVariant(mtg_protocol::Variant),
+    OpenEvent(mtg_protocol::EventKind),
+    ModeBack,
+    ModeContinue,
+    /// deck select: back to the mode screen
+    ChangeMode,
+    // event setup / event (handled in `event_setup` / `event`)
+    PickSource(String),
+    SetPodSize(u8),
+    OpenPod,
+    EventStart,
+    EventSeat(i64, bool),
+    Pick(i64),
+    ToggleMain(i64),
+    Basic(char, i32),
+    SuggestDeck,
+    SubmitDeck,
+    DealGames(mtg_protocol::Pairing, u8),
+    LeaveEvent,
+    ReturnToPod,
+    // cube designer (handled in `cubes`)
+    Cubes,
+    CubeOpen(String),
+    CubeNew,
+    CubeAdd(String),
+    CubeRemove(String),
+    CubeSearch,
+    CubeImport,
+    CubeSave,
+    CubeDelete,
+    CubeDraft,
 }
 
 /// UI-only state shared by the screens.
@@ -103,11 +141,24 @@ impl Plugin for MenusPlugin {
                 stage::StagePlugin,
             ))
             .add_plugins((multiplayer::MultiplayerPlugin, lobby::LobbyPlugin))
+            .add_plugins((modes::ModesPlugin, event_setup::EventSetupPlugin, event::EventPlugin, cubes::CubesPlugin))
+            .init_resource::<crate::shared::EventSetupChoice>()
             .add_systems(Update, (actions::handle_actions, actions::debug_jump));
     }
 }
 
 /// Menu-ish states where the animated 2D backdrop is visible. The main menu has its own 3D stage.
 pub(crate) fn backdrop_state(s: AppState) -> bool {
-    matches!(s, AppState::Boot | AppState::DeckSelect | AppState::Loading | AppState::Multiplayer | AppState::Lobby)
+    matches!(
+        s,
+        AppState::Boot
+            | AppState::DeckSelect
+            | AppState::Loading
+            | AppState::Multiplayer
+            | AppState::Lobby
+            | AppState::ModeSelect
+            | AppState::EventSetup
+            | AppState::Event
+            | AppState::CubeDesigner
+    )
 }

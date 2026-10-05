@@ -35,7 +35,7 @@ struct MpState {
     status: String,
     error: bool,
     /// Engine base the pending lookup goes to, and the lookup itself.
-    lookup: Option<(String, Receiver<Result<LobbyFrame, String>>)>,
+    lookup: Option<(String, Receiver<Result<Found, String>>)>,
     used_cli_join: bool,
     /// `/api/health` when boot couldn't fetch it (the note under HOST needs the public URL).
     facts: Option<Receiver<Option<mtg_protocol::ServerInfo>>>,
@@ -45,6 +45,13 @@ impl Default for MpState {
     fn default() -> Self {
         Self { players: 4, status: String::new(), error: false, lookup: None, used_cli_join: false, facts: None }
     }
+}
+
+/// What an invite code turned out to be.
+enum Found {
+    Table(LobbyFrame),
+    /// a draft/sealed pod: we already took a seat (no deck to choose — it comes from the draft)
+    Pod(mtg_protocol::SeatTicket),
 }
 
 #[derive(Component)]
@@ -128,7 +135,7 @@ fn spawn_screen(mut commands: Commands, fonts: Res<ArenaFonts>, settings: Res<Se
 }
 
 /// `--join` / `?join=`: fill the field and start the lookup once.
-fn auto_join(cli: Res<CliArgs>, mut st: ResMut<MpState>, cfg: Res<EngineConfig>, mut fields: Query<(&Field, &mut EditableText)>) {
+fn auto_join(cli: Res<CliArgs>, mut st: ResMut<MpState>, cfg: Res<EngineConfig>, settings: Res<Settings>, mut fields: Query<(&Field, &mut EditableText)>) {
     if st.used_cli_join {
         return;
     }
@@ -140,11 +147,11 @@ fn auto_join(cli: Res<CliArgs>, mut st: ResMut<MpState>, cfg: Res<EngineConfig>,
             t.editor_mut().set_text(&invite);
         }
     }
-    start_lookup(&mut st, &cfg.base_url, &invite);
+    start_lookup(&mut st, &cfg.base_url, &invite, &settings.player_name);
 }
 
 /// Resolve an invite to (engine base, lobby) in the background.
-fn start_lookup(st: &mut MpState, current_base: &str, invite: &str) {
+fn start_lookup(st: &mut MpState, current_base: &str, invite: &str, name: &str) {
     let Some((base, code)) = parse_invite(invite) else {
         st.status = "That doesn't look like an invite link or table code.".into();
         st.error = true;
@@ -156,41 +163,73 @@ fn start_lookup(st: &mut MpState, current_base: &str, invite: &str) {
     st.status = format!("Looking for table {code}…");
     st.error = false;
     let api = Api::new(base.clone());
-    st.lookup = Some((base, mtg_client::spawn(async move { api.lobby(&code).await.map_err(|e| format!("{e:#}")) })));
+    let name = name.to_string();
+    st.lookup = Some((
+        base,
+        mtg_client::spawn(async move {
+            match api.lobby(&code).await {
+                Ok(l) => Ok(Found::Table(l)),
+                // not a table: maybe a draft pod
+                Err(e) if format!("{e:#}").contains("404") => match api.join_event(&code, &name).await {
+                    Ok(t) => Ok(Found::Pod(t)),
+                    Err(e) => Err(format!("{e:#}")),
+                },
+                Err(e) => Err(format!("{e:#}")),
+            }
+        }),
+    ));
 }
 
 fn poll_lookup(
+    mut commands: Commands,
     mut st: ResMut<MpState>,
     mut cfg: ResMut<EngineConfig>,
     mut settings: ResMut<Settings>,
     mut mode: ResMut<MatchMode>,
     mut next: ResMut<NextState<AppState>>,
+    mut match_cfg: ResMut<MatchConfig>,
 ) {
     let Some((base, rx)) = &st.lookup else { return };
     let Ok(res) = rx.try_recv() else { return };
     let base = base.clone();
     st.lookup = None;
     match res {
-        Ok(l) if l.started => {
+        Ok(Found::Pod(t)) => {
+            if cfg.base_url != base {
+                cfg.base_url = base;
+            }
+            *mode = MatchMode::Event { code: t.id.clone() };
+            commands.insert_resource(super::event_setup::EventTicket(t));
+            next.set(AppState::Event);
+        }
+        Ok(Found::Table(l)) if l.started => {
             st.status = format!("Table {} has already started.", l.id);
             st.error = true;
         }
-        Ok(l) if !l.seats.iter().any(|s| s.kind == SeatKind::Open) => {
+        Ok(Found::Table(l)) if !l.seats.iter().any(|s| s.kind == SeatKind::Open) => {
             st.status = format!("Table {} is full.", l.id);
             st.error = true;
         }
-        Ok(l) => {
+        Ok(Found::Table(l)) => {
             // From here on decks, images and the socket all come from the host's engine.
             if cfg.base_url != base {
                 info!("joining a table on {base}");
                 cfg.base_url = base;
             }
             settings.last_format = l.format.unwrap_or(Format::Constructed);
+            match_cfg.format = settings.last_format;
+            match_cfg.setup = l.setup.clone();
             *mode = MatchMode::Join { code: l.id.clone() };
             next.set(AppState::DeckSelect);
         }
         Err(e) => {
-            st.status = if e.contains("404") { "No table with that code (it may have finished).".into() } else { format!("Couldn't reach the table: {e}") };
+            st.status = if e.contains("404") {
+                "No table or draft pod with that code (it may have finished).".into()
+            } else if e.contains("409") {
+                format!("Can't join: {}", e.rsplit(": ").next().unwrap_or(&e))
+            } else {
+                format!("Couldn't reach the table: {e}")
+            };
             st.error = true;
         }
     }
@@ -238,6 +277,7 @@ fn handle_mp_actions(
     mut focus: ResMut<InputFocus>,
     lobby: Res<LobbyView>,
     match_cfg: Res<MatchConfig>,
+    settings: Res<Settings>,
     mut out: MessageWriter<SendCmd>,
     mut clipboard: ResMut<bevy::clipboard::Clipboard>,
     mut copied: ResMut<super::lobby::CopyFeedback>,
@@ -251,12 +291,12 @@ fn handle_mp_actions(
             MenuAction::SetTableSize(n) => st.players = (*n).clamp(2, 4),
             MenuAction::HostTable => {
                 *mode = MatchMode::Host { players: st.players };
-                next.set(AppState::DeckSelect);
+                next.set(AppState::ModeSelect);
             }
             MenuAction::JoinTable => {
                 let text = fields.iter().find(|(f, _)| **f == Field::Invite).map(|(_, t)| t.value().to_string()).unwrap_or_default();
                 focus.clear();
-                start_lookup(&mut st, &cfg.base_url, &text);
+                start_lookup(&mut st, &cfg.base_url, &text, &settings.player_name);
             }
             MenuAction::CopyInvite => {
                 if let Some(link) = lobby.frame.as_ref().and_then(|l| l.invite.clone()) {

@@ -1,6 +1,7 @@
 package arena.engine.server;
 
 import com.google.gson.JsonArray;
+import com.google.gson.JsonObject;
 
 import java.security.SecureRandom;
 import java.util.Map;
@@ -34,6 +35,7 @@ public final class MatchManager {
             try {
                 final long now = System.currentTimeMillis();
                 for (final MatchSession m : matches.values()) m.reapAbandoned(now);
+                for (final EventSession e : events.values()) e.tick(now);
             } catch (final Throwable t) { System.err.println("[matches] reaper: " + t); }
         }, 2, 2, TimeUnit.SECONDS); // also the pace an abandoned seat answers at
     }
@@ -48,25 +50,59 @@ public final class MatchManager {
         }
     }
 
-    public MatchSession create(final String humanDeckRef, final String aiDeckRef, final String format, final Long seed, final String humanName) {
+    public MatchSession create(final String humanDeckRef, final String aiDeckRef, final GameSetup setup, final Long seed, final String humanName) {
         prune();
         final String id = "m" + counter.incrementAndGet() + "-" + Long.toString(System.currentTimeMillis() % 100000, 36);
-        final MatchSession m = MatchSession.classic(id, humanDeckRef, aiDeckRef, format, seed, humanName);
+        final MatchSession m = MatchSession.classic(id, humanDeckRef, aiDeckRef, setup, seed, humanName);
         matches.put(id, m);
         return m;
     }
 
-    public MatchSession createLobby(final String format, final int players, final String hostName, final String hostDeck, final String inviteBase) {
+    public MatchSession createLobby(final GameSetup setup, final int players, final String hostName, final String hostDeck, final String inviteBase) {
         prune();
+        final String id = newCode();
+        final MatchSession m = MatchSession.lobby(id, setup, players, hostName, hostDeck, inviteBase);
+        matches.put(id, m);
+        return m;
+    }
+
+    /** A fresh 6-letter code, unique across matches and events (they share the namespace of invite links). */
+    synchronized String newCode() {
         String id;
         do {
             final StringBuilder sb = new StringBuilder(6);
             for (int i = 0; i < 6; i++) sb.append(CODE_ALPHABET.charAt(rng.nextInt(CODE_ALPHABET.length())));
             id = sb.toString();
-        } while (matches.containsKey(id));
-        final MatchSession m = MatchSession.lobby(id, format, players, hostName, hostDeck, inviteBase);
-        matches.put(id, m);
-        return m;
+        } while (matches.containsKey(id) || events.containsKey(id));
+        return id;
+    }
+
+    /** Tables dealt by an event are registered like any match. */
+    public void register(final MatchSession m) { prune(); matches.put(m.id, m); }
+
+    // ---- limited events ------------------------------------------------------------------------
+
+    private final Map<String, EventSession> events = new ConcurrentHashMap<>();
+
+    public EventSession createEvent(final JsonObject body, final String inviteBase) {
+        pruneEvents();
+        final String id = newCode();
+        final EventSession e = new EventSession(this, id, body, inviteBase);
+        events.put(id, e);
+        return e;
+    }
+
+    public EventSession event(final String id) {
+        if (id == null) return null;
+        final EventSession e = events.get(id);
+        return e != null ? e : events.get(id.trim().toUpperCase());
+    }
+
+    private static final long KEEP_IDLE_EVENT_MS = 6 * 60 * 60_000L;
+
+    private void pruneEvents() {
+        final long now = System.currentTimeMillis();
+        for (final EventSession e : events.values()) if (e.socketCount() == 0 && now - e.lastActivity() > KEEP_IDLE_EVENT_MS) events.remove(e.id);
     }
 
     /** Lookup by id; lobby codes are case-insensitive because people type them. */

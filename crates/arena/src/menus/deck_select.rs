@@ -20,7 +20,7 @@ use serde_json::Value;
 use super::widgets::{Field, text_field};
 use super::{MenuAction, MenuState};
 use crate::images::CardImages;
-use crate::shared::{AppState, ArenaFonts, EngineConfig, MatchMode, Settings};
+use crate::shared::{AppState, ArenaFonts, EngineConfig, MatchConfig, MatchMode, Settings};
 use crate::style::*;
 
 pub struct DeckSelectPlugin;
@@ -128,12 +128,14 @@ fn start_fetches(
     mut fetch: ResMut<DeckFetch>,
     cfg: Option<Res<EngineConfig>>,
     settings: Res<Settings>,
+    match_cfg: Res<MatchConfig>,
 ) {
     let Some(RefreshDecks(fmt)) = reqs.read().last().copied() else { return };
     let base = rest_base(&cfg, &settings);
     list.format = fmt;
     list.status = Fetch::Loading;
-    fetch.rx = Some(mtg_client::spawn(async move { (fmt, Api::new(base).decks(fmt).await.map_err(|e| format!("{e:#}"))) }));
+    let legality = match_cfg.setup.legality.clone().filter(|_| fmt == Format::Constructed);
+    fetch.rx = Some(mtg_client::spawn(async move { (fmt, Api::new(base).decks_for(fmt, legality.as_deref()).await.map_err(|e| format!("{e:#}"))) }));
 }
 
 fn poll_fetch(
@@ -195,11 +197,14 @@ struct PlayButton;
 #[derive(Component)]
 struct ArtFade(Handle<Image>);
 
-fn spawn_screen(mut commands: Commands, fonts: Res<ArenaFonts>, mode: Res<MatchMode>) {
+fn spawn_screen(mut commands: Commands, fonts: Res<ArenaFonts>, mode: Res<MatchMode>, cfg: Res<MatchConfig>) {
+    let mode_label = super::modes::setup_label(cfg.format, &cfg.setup);
+    let can_change = !matches!(*mode, MatchMode::Join { .. });
     let (play_label, side_heading) = match *mode {
         MatchMode::VsAi => ("PLAY", "OPPONENT"),
         MatchMode::Host { .. } => ("HOST TABLE", "AI SEATS"),
         MatchMode::Join { .. } => ("TAKE SEAT", "AI SEATS"),
+        MatchMode::Event { .. } => ("PLAY", "OPPONENT"),
     };
     commands
         .spawn((
@@ -215,12 +220,12 @@ fn spawn_screen(mut commands: Commands, fonts: Res<ArenaFonts>, mode: Res<MatchM
                     bar.commands().entity(b).insert(MenuAction::Back);
                     bar.spawn(Node { flex_grow: 1.0, justify_content: JustifyContent::Center, ..default() })
                         .with_child(heading(&fonts, "CHOOSE YOUR DECK", 44.0));
-                    for (fmt, label, act) in [
-                        (Format::Constructed, "CONSTRUCTED", MenuAction::FormatConstructed),
-                        (Format::Commander, "COMMANDER", MenuAction::FormatCommander),
-                    ] {
-                        let b = spawn_button(bar, &fonts, ButtonKind::Secondary, label, Vec2::new(190.0, 46.0));
-                        bar.commands().entity(b).insert((act, FormatButton(fmt)));
+                    // the mode (format · legality · variants) was chosen on the previous screen
+                    bar.spawn(chip(Node { padding: UiRect::axes(Val::Px(16.0), Val::Px(8.0)), ..default() }))
+                        .with_child(ui_text(&fonts.title, mode_label.to_uppercase(), 16.0, GOLD));
+                    if can_change {
+                        let b = spawn_button(bar, &fonts, ButtonKind::Secondary, "CHANGE MODE", Vec2::new(190.0, 46.0));
+                        bar.commands().entity(b).insert(MenuAction::ChangeMode);
                     }
                 });
             // ---- middle

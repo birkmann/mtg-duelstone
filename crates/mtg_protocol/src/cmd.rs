@@ -35,6 +35,22 @@ pub enum ClientFrame {
         #[serde(skip_serializing_if = "Option::is_none", default)]
         seed: Option<i64>,
     },
+    /// Event: take this card from the current pack.
+    Pick { id: i64 },
+    /// Event: submit (or update) your limited deck.
+    SubmitDeck { deck: crate::LimitedDeck },
+    /// Event: ask the engine's limited deck builder for a suggestion (answered with `deckSuggestion`).
+    SuggestDeck,
+    /// Event (host): start drafting / opening (fills open seats with AI drafters).
+    StartEvent,
+    /// Event (host): fill or reopen a seat.
+    EventSeat { seat: i64, kind: crate::SeatKind },
+    /// Event (host): deal games from the submitted decks.
+    DealGames {
+        pairing: crate::Pairing,
+        /// players per table for `table` pairing (2..=4)
+        table_size: i64,
+    },
 }
 
 impl ClientFrame {
@@ -88,20 +104,56 @@ pub enum Format {
     #[default]
     Constructed,
     Commander,
+    /// 60-card singleton with a commander, Standard card pool (v3).
+    Brawl,
+    /// 60-card singleton led by a planeswalker plus its signature spell (v3).
+    Oathbreaker,
+    /// 40-card decks built from a draft/sealed pool; only reachable through an event (v3).
+    Limited,
 }
 
 impl Format {
+    /// Formats a player picks a deck for (Limited decks come from events).
+    pub const PICKABLE: [Format; 4] = [Format::Constructed, Format::Commander, Format::Brawl, Format::Oathbreaker];
+
     pub fn as_str(self) -> &'static str {
         match self {
             Self::Constructed => "constructed",
             Self::Commander => "commander",
+            Self::Brawl => "brawl",
+            Self::Oathbreaker => "oathbreaker",
+            Self::Limited => "limited",
+        }
+    }
+    pub fn parse(s: &str) -> Option<Self> {
+        Some(match s.trim().to_ascii_lowercase().as_str() {
+            "constructed" => Self::Constructed,
+            "commander" => Self::Commander,
+            "brawl" => Self::Brawl,
+            "oathbreaker" => Self::Oathbreaker,
+            "limited" => Self::Limited,
+            _ => return None,
+        })
+    }
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Constructed => "Constructed",
+            Self::Commander => "Commander",
+            Self::Brawl => "Brawl",
+            Self::Oathbreaker => "Oathbreaker",
+            Self::Limited => "Limited",
         }
     }
     pub fn starting_life(self) -> i32 {
         match self {
-            Self::Constructed => 20,
             Self::Commander => 40,
+            Self::Brawl => 25,
+            Self::Constructed | Self::Oathbreaker | Self::Limited => 20,
         }
+    }
+    /// Has a command zone with commanders (or an oathbreaker + signature spell).
+    pub fn has_commander(self) -> bool {
+        matches!(self, Self::Commander | Self::Brawl | Self::Oathbreaker)
     }
 }
 
@@ -125,6 +177,9 @@ pub struct CreateMatch {
     pub human_deck: String,
     pub ai_deck: String,
     pub format: Format,
+    /// v3: legality / variants
+    #[serde(flatten)]
+    pub setup: crate::GameSetup,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub seed: Option<i64>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -164,6 +219,9 @@ pub struct ServerInfo {
 #[serde(rename_all = "camelCase")]
 pub struct CreateLobby {
     pub format: Format,
+    /// v3: legality / variants
+    #[serde(flatten)]
+    pub setup: crate::GameSetup,
     /// Table size including the host, 2..=4.
     pub players: i64,
     pub name: String,
