@@ -171,6 +171,7 @@ public final class DeckSource {
             rnd.add("commanders", new JsonArray());
             rnd.addProperty("mainCount", hasCommander(format) && !COMMANDER.equals(format) ? 60 : COMMANDER.equals(format) ? 100 : 60);
             rnd.addProperty("colorIdentity", "WUBRG");
+            rnd.addProperty("cover", RANDOM_COVER);
             rnd.addProperty("format", format);
             rnd.add("problem", com.google.gson.JsonNull.INSTANCE);
             rnd.addProperty("generated", true);
@@ -253,7 +254,44 @@ public final class DeckSource {
             o.addProperty("colorIdentity", arena.engine.view.ViewJson.colors(ColorSet.fromMask(mask)));
         }
         o.addProperty("format", format);
+        final PaperCard cover = cover(d);
+        if (cover != null) o.addProperty("cover", cover.getName());
         return o;
+    }
+
+    /** Art for the "Random deck" tile: there are no cards to choose from until it's generated. */
+    private static final String RANDOM_COVER = "Chaos Warp";
+
+    /**
+     * The card whose art stands for a deck on the deck select screen (clients may override it):
+     * the commander, else the deck's signature card - the rarest non-land, creatures and
+     * planeswalkers first, then the most copies, then the biggest. Deterministic, so a deck keeps its face.
+     */
+    public static PaperCard cover(final Deck d) {
+        if (!d.getCommanders().isEmpty()) return d.getCommanders().get(0);
+        PaperCard best = null;
+        long bestScore = Long.MIN_VALUE;
+        for (final Map.Entry<PaperCard, Integer> e : d.getMain()) {
+            final PaperCard pc = e.getKey();
+            final forge.card.CardType t = pc.getRules().getType();
+            final long score = (t.isLand() ? 0 : 1L << 40)
+                    + (long) rarityRank(pc.getRarity()) * (1L << 32)
+                    + ((t.isCreature() || t.isPlaneswalker()) ? 1L << 28 : 0)
+                    + Math.min(e.getValue(), 255) * (1L << 16)
+                    + Math.max(0, pc.getRules().getManaCost().getCMC());
+            if (score > bestScore || (score == bestScore && pc.getName().compareTo(best.getName()) < 0)) { best = pc; bestScore = score; }
+        }
+        return best;
+    }
+
+    private static int rarityRank(final forge.card.CardRarity r) {
+        return switch (r) {
+            case MythicRare -> 5;
+            case Rare, Special -> 4;
+            case Uncommon -> 3;
+            case Common -> 2;
+            default -> 1;
+        };
     }
 
     // ---- loading ----------------------------------------------------------------------------

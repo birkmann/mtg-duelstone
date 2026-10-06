@@ -59,6 +59,8 @@ public final class EventSession {
         final int index;
         volatile Seat.Kind kind;
         volatile String name;
+        /** Chosen portrait, relayed to the tables this seat is dealt into; AI drafters get theirs from their deck there. */
+        volatile JsonObject avatar;
         volatile String token = Seat.newToken();
         final Set<Session> sockets = new CopyOnWriteArraySet<>();
         volatile long goneSince;
@@ -121,6 +123,7 @@ public final class EventSession {
         for (int i = 0; i < n; i++) seats.add(new ESeat(i, i == 0 ? Seat.Kind.HUMAN : Seat.Kind.OPEN));
         seats.get(0).name = cleanName(Json.str(b, "name"), "Host");
         seats.get(0).goneSince = System.currentTimeMillis();
+        seats.get(0).avatar = Avatars.clean(b.get("avatar"));
         if (isCube()) checkCubeSize(CubeStore.limited(source), n);
     }
 
@@ -171,7 +174,7 @@ public final class EventSession {
         return o;
     }
 
-    synchronized JsonObject join(final String name) {
+    synchronized JsonObject join(final String name, final JsonObject avatar) {
         if (!"lobby".equals(phase)) throw new IllegalStateException("the event has already started");
         int humans = 0;
         for (final ESeat s : seats) if (s.kind == Seat.Kind.HUMAN) humans++;
@@ -184,6 +187,7 @@ public final class EventSession {
             String n = cleanName(name, "Player " + (s.index + 1));
             for (int i = 2; taken.contains(n.toLowerCase()); i++) n = cleanName(name, "Player") + " (" + i + ")";
             s.name = n;
+            s.avatar = Avatars.clean(avatar);
             s.goneSince = System.currentTimeMillis();
             broadcast();
             return ticket(s);
@@ -252,6 +256,7 @@ public final class EventSession {
         }
         s.kind = "ai".equals(Json.str(f, "kind")) ? Seat.Kind.AI : Seat.Kind.OPEN;
         s.name = s.kind == Seat.Kind.AI ? "AI Drafter " + (s.index + 1) : null;
+        s.avatar = null;
         broadcast();
     }
 
@@ -518,7 +523,7 @@ public final class EventSession {
             }
             for (final List<ESeat> t : tables) {
                 final List<MatchSession.EventPlayer> ps = new ArrayList<>();
-                for (final ESeat s : t) ps.add(new MatchSession.EventPlayer(s.name, s.deck, s.kind == Seat.Kind.HUMAN));
+                for (final ESeat s : t) ps.add(new MatchSession.EventPlayer(s.name, s.deck, s.kind == Seat.Kind.HUMAN, s.kind == Seat.Kind.HUMAN ? s.avatar : null));
                 final String mid = mgr.newCode();
                 final JsonObject g = new JsonObject();
                 g.addProperty("matchId", mid);
@@ -611,6 +616,8 @@ public final class EventSession {
             if (drafting) { final DraftPack h = draft.getAllPlayers().get(s.index).nextChoice(); thinking = h != null && !h.isEmpty(); }
             o.addProperty("thinking", thinking);
             o.addProperty("deckReady", s.deck != null);
+            final JsonObject av = s.avatar;
+            if (av != null) o.add("avatar", av.deepCopy());
             ss.add(o);
             if (s.kind == Seat.Kind.HUMAN && !s.connected()) canStart = false;
         }

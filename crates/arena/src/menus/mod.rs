@@ -10,9 +10,11 @@
 //! (MainMenu → DeckSelect → Loading, GameOver → Loading/MainMenu).
 
 mod actions;
+mod avatar_studio;
 mod backdrop;
 mod boot;
 mod builder;
+mod deck_art;
 mod deck_select;
 mod designer;
 mod game_over;
@@ -67,6 +69,8 @@ pub enum MenuAction {
     ToggleFullscreen,
     ToggleAutolaunch,
     SetTheme(&'static str),
+    /// Open the avatar studio (main menu player chip).
+    Avatar,
     // design studio
     Customize,
     CloseDesigner,
@@ -151,8 +155,8 @@ impl Plugin for MenusPlugin {
                 showcase::ShowcasePlugin,
                 stage::StagePlugin,
             ))
-            .add_plugins(builder::BuilderPlugin)
-            .add_plugins(designer::DesignerPlugin)
+            .add_plugins((builder::BuilderPlugin, deck_art::DeckArtPlugin))
+            .add_plugins((designer::DesignerPlugin, avatar_studio::AvatarStudioPlugin))
             .add_plugins((multiplayer::MultiplayerPlugin, lobby::LobbyPlugin))
             .add_plugins((modes::ModesPlugin, event_setup::EventSetupPlugin, event::EventPlugin, cubes::CubesPlugin))
             .init_resource::<crate::shared::EventSetupChoice>()
@@ -174,5 +178,6 @@ pub(crate) fn backdrop_state(s: AppState) -> bool {
             | AppState::Event
             | AppState::CubeDesigner
             | AppState::DeckBuilder
+            | AppState::AvatarStudio
     )
 }

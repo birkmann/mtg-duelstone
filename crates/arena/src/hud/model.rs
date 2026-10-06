@@ -90,8 +90,13 @@ pub fn primary_model(view: &GameView, input: &CurrentInput) -> PrimaryModel {
     } else if is_mana_payment(msg) {
         (if raw.eq_ignore_ascii_case("auto") { "Auto Pay".into() } else { raw.to_string() }, Some("Pay mana".into()), false)
     } else if my_turn && phase == Some(PhaseType::CombatDeclareAttackers) && raw.eq_ignore_ascii_case("ok") {
-        // A defending planeswalker is highlighted too; only my own picked creatures are attackers.
-        let n = f.highlighted.iter().filter(|&&id| view.card(id).is_some_and(|c| c.controller.is_some_and(|p| view.is_me(p)))).count();
+        // Forge only highlights attackers while banding; the declared ones live in `combat`. A defending
+        // planeswalker is highlighted too, so of the highlights count only my own creatures.
+        let mut ids: Vec<i64> = view.game.combat.as_ref().map(|c| c.attackers.iter().map(|a| a.attacker).collect()).unwrap_or_default();
+        ids.extend(f.highlighted.iter().copied().filter(|&id| view.card(id).is_some_and(|c| c.controller.is_some_and(|p| view.is_me(p)))));
+        ids.sort_unstable();
+        ids.dedup();
+        let n = ids.len();
         if n == 0 { ("No Attack".into(), None, false) } else { ("Attack".into(), Some(format!("with {n}")), false) }
     } else if !my_turn && phase == Some(PhaseType::CombatDeclareBlockers) && raw.eq_ignore_ascii_case("ok") {
         let n = count_blockers(view);
@@ -275,7 +280,7 @@ pub fn short_label(p: PhaseType) -> &'static str {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use mtg_protocol::{ButtonState, Card, Game, Player, Zones};
+    use mtg_protocol::{AttackerInfo, ButtonState, Card, Combat, Game, Player, Zones};
 
     fn view(phase: PhaseType, my_turn: bool) -> GameView {
         GameView {
@@ -329,6 +334,11 @@ mod tests {
         let m = primary_model(&v, &i);
         assert_eq!((m.label.as_str(), m.subtitle.as_deref()), ("Attack", Some("with 2")));
         assert_eq!(secondary_model(&i).unwrap().kind, SecondaryKind::AttackAll);
+        // a plain (non-banding) declare is in combat only, not highlighted
+        i.frame.as_mut().unwrap().highlighted = vec![9];
+        v.game.combat = Some(Combat { attackers: vec![AttackerInfo { attacker: 5, ..Default::default() }] });
+        let m = primary_model(&v, &i);
+        assert_eq!((m.label.as_str(), m.subtitle.as_deref()), ("Attack", Some("with 1")));
         let b = primary_model(&view(PhaseType::CombatDeclareBlockers, false), &input("Declare blockers", "OK", "Cancel"));
         assert_eq!(b.label, "No Blocks");
     }

@@ -18,23 +18,23 @@ decisions arrive as `prompt` frames listing the legal options; the client answer
 | Method | Path | Body / params | Returns |
 |---|---|---|---|
 | GET | `/api/health` | | `{ok, cards, protocol: 2, publicUrl, web, maxPlayers}` — `publicUrl` = base other machines reach this engine at (invite links: `--public-url`, `$MTG_DUELSTONE_PUBLIC_URL`, else the first LAN IPv4); `web` = the browser client is served at `/` |
-| GET | `/api/decks` | `?format=constructed\|commander` (default `commander`), `?kind=user` | `[ {ref, name, commanders[], mainCount, colorIdentity, format, problem} ]` — `ref` = `starter:<name>` (repo `decks/<format>/*.dck`) / `precon:<name>` (commander) / `theme:<name>` (Forge's bundled 60-card constructed decks) / `user:<name>` / `file:<path>`; `problem` is null for legal decks (Forge `DeckFormat` check). The special ref `random` (in `POST /api/match`) picks a legal deck of the match format (starters favoured). |
+| GET | `/api/decks` | `?format=constructed\|commander` (default `commander`), `?kind=user` | `[ {ref, name, commanders[], mainCount, colorIdentity, format, problem, cover?} ]` — `cover` = card name whose art stands for the deck (commander, else its signature card; clients may override it); `ref` = `starter:<name>` (repo `decks/<format>/*.dck`) / `precon:<name>` (commander) / `theme:<name>` (Forge's bundled 60-card constructed decks) / `user:<name>` / `file:<path>`; `problem` is null for legal decks (Forge `DeckFormat` check). The special ref `random` (in `POST /api/match`) picks a legal deck of the match format (starters favoured). |
 | GET | `/api/deck`, `/api/deck/export` | `?ref=…&format=?` | full deck / `.dck` text |
 | POST | `/api/deck`, `/api/deck/validate`, `/api/deck/import` | body gains `format?` (default commander); constructed decks save to `~/.forge/decks/constructed` and need no `commanders` | as before |
 | DELETE | `/api/deck` | `?name=…&format=?` | |
 | GET | `/api/img` | `?name=&set?&back?&version=normal\|large\|art_crop\|png` (default `normal`; `small`/`border_crop` also accepted) | JPEG from the offline pack (`offline/img`, filled by `tools/fetch-offline.sh`); never goes online. One printing per card, so `set` is ignored; `art_crop` is the art, every other version is the `large` scan. 404 if the pack has no image |
 | GET | `/api/rulings` | `?name=` | `{"scryfallUri","rulings":[{"date","comment"}]}` from `offline/data/rulings.json`; an empty list when the card has none |
 | GET | `/api/matches` | | `[ matchInfo ]` |
-| POST | `/api/match` | `{humanDeck, aiDeck, format?, seed?, humanName?}` — `format` is `"constructed"` (60-card main deck, 20 life, `GameType.Constructed`) or `"commander"` (default; 100 cards, 40 life) | `matchInfo` (`{id, humanDeck, aiDeck, humanDeckName, aiDeckName, format, started, over, sockets, turn, gameOver}`) |
+| POST | `/api/match` | `{humanDeck, aiDeck, format?, seed?, humanName?, humanAvatar?}` — `humanAvatar` = your [avatar](#avatars); `format` is `"constructed"` (60-card main deck, 20 life, `GameType.Constructed`) or `"commander"` (default; 100 cards, 40 life) | `matchInfo` (`{id, humanDeck, aiDeck, humanDeckName, aiDeckName, format, started, over, sockets, turn, gameOver}`) |
 | GET | `/api/match/{id}` | | `matchInfo` |
 | DELETE | `/api/match/{id}` | | |
 | GET | `/api/engine/cards?names=a|b|c` | | `{name: bool}` — can Forge play this card? |
 | GET | `/api/cards/search` | `?q=&ci=WUBG&type=&text=&commander=1&cmc=&tag=&sort=name\|popular&offset=0&limit=60` (limit ≤ 200). `cmc` = exact mana value, `7` means 7+. `tag` = one [card tag](#card-tags) key (unknown → 400). `sort` defaults to `name` (prefix matches first) when `q` is non-empty and to `popular` when it is empty | `[ card ]` (see `card` below) |
 | GET | `/api/cards/get` | `?name=` | `card` |
 | POST | `/api/deck/recommend` | see [Deck-builder recommendations](#deck-builder-recommendations) | `{format, colorIdentity, commanderDecks?, themes[], archetypes[], sections[], unresolved[]}` |
-| POST | `/api/lobby` | `{format, players: 2..4, name, deck}` | **seat ticket** for the host (seat 0): `{id, seat: 0, token, name, invite, …lobby}` — `id` is the 6-letter table code, `invite` = `publicUrl + "/?join=" + id` |
+| POST | `/api/lobby` | `{format, players: 2..4, name, deck, avatar?}` (`avatar` = the host's [avatar](#avatars)) | **seat ticket** for the host (seat 0): `{id, seat: 0, token, name, invite, …lobby}` — `id` is the 6-letter table code, `invite` = `publicUrl + "/?join=" + id` |
 | GET | `/api/lobby/{code}` | | lobby info (the `lobby` frame body without `you`); code is case-insensitive; 404 = no such table |
-| POST | `/api/lobby/{code}/join` | `{name, deck}` | seat ticket `{id, seat, token, name, format}`; 409 when full / started. Names are made unique at the table; `file:` deck refs are refused |
+| POST | `/api/lobby/{code}/join` | `{name, deck, avatar?}` | seat ticket `{id, seat, token, name, format}`; 409 when full / started. Names are made unique at the table; `file:` deck refs are refused |
 
 ## Deck-builder recommendations
 
@@ -97,6 +97,7 @@ All frames: `{"t": <type>, ...}`.
 
 ### `hello`
 `{t:"hello", matchId, humanDeck, aiDeck, humanDeckName, aiDeckName, format: "constructed"|"commander", protocol: 2}` — first frame after connect; followed by a snapshot (`state`, `input`, `log`, and a pending `prompt` if any).
+v3 adds `seat`, `players` and `seats: [ {seat, name, kind: "human"|"ai", avatar?} ]` (every filled seat; see [Avatars](#avatars)).
 
 ### `state` — full game view (hidden info redacted for the human seat)
 ```jsonc
@@ -182,7 +183,7 @@ then see the new state. Ids are the same trackable card/player ids as in `state`
 | `turnBegan` | `targetPlayer`, `amount` = turn number |
 
 ### `lobby` — a multiplayer table before the start (multiplayer)
-`{t:"lobby", id, format, maxPlayers, host: 0, started, invite, you: <your seat>, canStart, seats: [ {seat, kind: "human"|"ai"|"open", name, deck, deckName, connected, you} ]}`
+`{t:"lobby", id, format, maxPlayers, host: 0, started, invite, you: <your seat>, canStart, seats: [ {seat, kind: "human"|"ai"|"open", name, deck, deckName, avatar?, connected, you} ]}`
 — sent to every socket of the table on every change (join, seat edit, a player's socket opening/closing). `canStart` =
 ≥ 2 filled seats and every seated human connected. When the host starts, each socket receives `hello` (with `seat`
 and `players`) followed by its seat's normal snapshot; open seats are left out of the game.
@@ -198,7 +199,7 @@ and `players`) followed by its seat's normal snapshot; open seats are left out o
 - `{t:"settings", stops: { myTurn?: [PhaseType...], oppTurn?: [PhaseType...] }}` — PhaseType = UNTAP, UPKEEP, DRAW, MAIN1, COMBAT_BEGIN, COMBAT_DECLARE_ATTACKERS, COMBAT_DECLARE_BLOCKERS, COMBAT_FIRST_STRIKE_DAMAGE, COMBAT_DAMAGE, COMBAT_END, MAIN2, END_OF_TURN, CLEANUP
 - `{t:"concede"}` — takes effect at your seat's next input (conceding while rules resolve would race Forge's game thread); at a multiplayer table the game goes on without you
 - `{t:"resync"}` (re-send snapshot; in a lobby: the `lobby` frame) · `{t:"ping"}`
-- Lobby only: `{t:"lobbyDeck", deck}` (change your deck) · host: `{t:"lobbySeat", seat, kind: "ai"|"open", deck?}` (fill a seat with Forge AI, or reopen it — removes a human, whose token stops working) · host: `{t:"start", seed?}`
+- Lobby only: `{t:"lobbyDeck", deck}` (change your deck) · `{t:"lobbyAvatar", avatar}` (change your [avatar](#avatars); null clears it) · host: `{t:"lobbySeat", seat, kind: "ai"|"open", deck?}` (fill a seat with Forge AI, or reopen it — removes a human, whose token stops working) · host: `{t:"start", seed?}`
 
 ## Multiplayer
 
@@ -237,6 +238,24 @@ Extra body fields, echoed in `hello`, `lobby` frames and `matchInfo`:
   `{ref:"random", generated:true}`: a random legal saved deck, or one Forge generates (Pauper, Brawl, Oathbreaker…).
 - `GET /api/formats` → `{formats, legalities, variants}` (`[{id, name, description}]`).
 
+### Avatars
+A player's portrait: `{card, x, y, zoom}` — `card` = a card name whose `art_crop` is the picture, `x`/`y` = centre of the
+circular crop in the art (0..1 each), `zoom` ≥ 1 (1 = the circle spans the art's shorter side). Clients draw it; the
+engine only stores, sanitizes and relays it.
+- Set by: `POST /api/match` `humanAvatar`, `POST /api/lobby` / `POST /api/lobby/{code}/join` / `POST /api/event` /
+  `POST /api/event/{id}/join` `avatar`, and the lobby frame `{t:"lobbyAvatar", avatar}` (your own seat; rebroadcasts
+  `lobby`; after the start → `error`). A seat that becomes AI or open loses its avatar. Event avatars follow the
+  player into every table the host deals (`eventMatch`).
+- Sanitizing: anything that is not an object with a non-blank string `card` (≤ 200 chars, stripped) counts as "none";
+  `x`/`y` clamp to 0..1 (default 0.5 / 0.4 when missing or not a number), `zoom` clamps to 1..4 (default 1). The stored
+  object has exactly those four fields. The engine does not check that the card exists.
+- At the start every filled seat without one gets a portrait from its deck: the commander (first one), else a
+  planeswalker, else a legendary creature (most copies, then highest mana value), else the main deck's highest-mana-value
+  creature (then most copies); ties by name, framed `x: 0.5, y: 0.3, zoom: 1.5` (faces sit in the upper middle of most art). A deck with no creature keeps none.
+- Shown in: `lobby` frames / `GET /api/lobby/{code}` / `matchInfo` (`seats[].avatar`), `event` frames
+  (`seats[].avatar`), and `hello.seats[].avatar` (complete, including derived ones). `avatar` is omitted when there is
+  none. Clients map `state.game.players` to avatars by `name`: Forge's player name is the seat name, unique at the table.
+
 ### Cubes
 | Method | Path | Body / params | Returns |
 |---|---|---|---|
@@ -249,13 +268,13 @@ Extra body fields, echoed in `hello`, `lobby` frames and `matchInfo`:
 | GET | `/api/cards/search` | `?q=| GET | `/api/cards/search` | `?q=&limit=` | catalog cards (cube designer search) |limit=` | catalog cards (cube designer search; the full filter set is above) |
 
 ### Limited events (cube draft, set draft, sealed)
-- `POST /api/event` `{kind: "cubeDraft"|"setDraft"|"sealed", source: <cube ref or set code>, podSize: 2..8, name, seed?}`
+- `POST /api/event` `{kind: "cubeDraft"|"setDraft"|"sealed", source: <cube ref or set code>, podSize: 2..8, name, seed?, avatar?}`
   → the host's seat ticket `{id, seat: 0, token, invite}`; `invite` = `publicUrl/?event=<id>`.
-- `GET /api/event/{id}` → the pod (event frame body without your pack/pool); `POST /api/event/{id}/join {name}` →
+- `GET /api/event/{id}` → the pod (event frame body without your pack/pool); `POST /api/event/{id}/join {name, avatar?}` →
   seat ticket (409 when started or 4 humans are already in: games seat at most 4).
 - Socket: `ws://host/ws/event/{id}?token=…`. Frames:
   - `{t:"event", id, kind, source, sourceName, phase: "lobby"|"drafting"|"building"|"ready", host, you, invite, minDeck: 40,
-    round, rounds, pick, passLeft, seats:[{seat, kind, name, connected, you, picked, thinking, deckReady}],
+    round, rounds, pick, passLeft, seats:[{seat, kind, name, avatar?, connected, you, picked, thinking, deckReady}],
     pack:[card + id], pool:[card + id], deck?: LimitedDeck, canStart, games:[{matchId, players, over, winner?}]}` —
     on every change. Cards are catalog cards (`name, manaCost, cmc, type, colors, set, rarity, …`) with an `id`.
   - `{t:"deckSuggestion", deck}` — answer to `suggestDeck` (Forge's sealed deck builder over your pool).

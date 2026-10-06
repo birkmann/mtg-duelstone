@@ -29,6 +29,8 @@ pub enum Field {
     CubeSearch,
     CubeName,
     CubeImportText,
+    /// Avatar studio: card search.
+    AvatarSearch,
 }
 
 pub struct WidgetsPlugin;

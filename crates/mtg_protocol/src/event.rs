@@ -190,6 +190,8 @@ pub struct CreateEvent {
     pub name: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub seed: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub avatar: Option<crate::Avatar>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Serialize, Deserialize)]
@@ -220,6 +222,7 @@ pub struct EventSeat {
     pub seat: i64,
     pub kind: SeatKind,
     pub name: Option<String>,
+    pub avatar: Option<crate::Avatar>,
     pub connected: bool,
     pub you: bool,
     /// cards drafted so far (or pool size in sealed)

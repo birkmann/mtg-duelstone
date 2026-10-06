@@ -282,6 +282,7 @@ fn start_loading(
     let api = Api::new(cfg.base_url.clone());
     let mc = match_cfg.clone();
     let name = Some(settings.player_name.trim().to_string()).filter(|n| !n.is_empty());
+    let avatar = Some(settings.avatar.clone());
     let rx = match mode.clone() {
         MatchMode::VsAi => {
             status.message = "Creating match…".into();
@@ -299,7 +300,7 @@ fn start_loading(
                         ai = pool.get(1).map(|d| d.deck_ref.clone()).unwrap_or_else(|| "random".into());
                     }
                 }
-                api.create_match(&CreateMatch { human_deck: human, ai_deck: ai, format: mc.format, setup: mc.setup.clone(), seed: mc.seed, human_name: name })
+                api.create_match(&CreateMatch { human_deck: human, ai_deck: ai, format: mc.format, setup: mc.setup.clone(), seed: mc.seed, human_name: name, human_avatar: avatar })
                     .await
                     .map(Created::Match)
                     .map_err(|e| format!("{e:#}"))
@@ -313,6 +314,7 @@ fn start_loading(
                 players: players.clamp(2, 4) as i64,
                 name: name.unwrap_or_else(|| "Host".into()),
                 deck: if mc.human_deck.is_empty() { "random".into() } else { mc.human_deck.clone() },
+                avatar,
             };
             mtg_client::spawn(async move { api.create_lobby(&req).await.map(Created::Seat).map_err(|e| format!("{e:#}")) })
         }
@@ -334,6 +336,7 @@ fn start_loading(
             let req = JoinLobby {
                 name: name.unwrap_or_else(|| "Player".into()),
                 deck: if mc.human_deck.is_empty() { "random".into() } else { mc.human_deck.clone() },
+                avatar,
             };
             mtg_client::spawn(async move { api.join_lobby(&code, &req).await.map(Created::Seat).map_err(|e| format!("{e:#}")) })
         }

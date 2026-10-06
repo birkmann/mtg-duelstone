@@ -31,6 +31,10 @@ pub enum ServerFrame {
         /// Multiplayer: number of players at the table (humans + AI).
         #[serde(default)]
         players: Option<i64>,
+        /// Every filled seat with its portrait (the engine picks one from the deck for seats
+        /// that didn't choose). Players are matched by `name`.
+        #[serde(default)]
+        seats: Vec<SeatInfo>,
     },
     State(StateFrame),
     Input(InputFrame),
@@ -191,6 +195,7 @@ pub struct SeatInfo {
     pub deck_name: Option<String>,
     pub connected: bool,
     pub you: bool,
+    pub avatar: Option<crate::Avatar>,
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -228,6 +233,14 @@ mod lobby_tests {
     fn hello_carries_seat() {
         let f = ServerFrame::parse(r#"{"t":"hello","matchId":"K7QF2M","format":"constructed","protocol":2,"seat":2,"players":4}"#).unwrap();
         assert!(matches!(f, ServerFrame::Hello { seat: Some(2), players: Some(4), .. }));
+        let f = ServerFrame::parse(r#"{"t":"hello","seats":[{"seat":0,"kind":"human","name":"Ann","avatar":{"card":"Griselbrand","x":0.3,"y":0.2,"zoom":1.5}},{"seat":1,"kind":"ai","name":"Forge AI"}]}"#).unwrap();
+        let ServerFrame::Hello { seats, .. } = f else { panic!() };
+        assert_eq!(seats[0].avatar.as_ref().map(|a| (a.card.as_str(), a.zoom)), Some(("Griselbrand", 1.5)));
+        assert_eq!(seats[1].avatar, None);
+        assert_eq!(
+            ClientFrame::LobbyAvatar { avatar: crate::Avatar::of("Griselbrand") }.to_json(),
+            r#"{"t":"lobbyAvatar","avatar":{"card":"Griselbrand","x":0.5,"y":0.4,"zoom":1.0}}"#
+        );
     }
 
     #[test]

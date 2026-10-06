@@ -3,13 +3,16 @@
 //! projecting the layout's avatar anchors through the table camera (so the HUD follows the 3D
 //! table when the window resizes).
 //!
+//! Portraits are card art (`AvatarArt`): yours from settings, everyone else's from the `hello`
+//! frame's seats. The procedural silhouette stays underneath as the fallback while art loads.
+//!
 //! Every widget is keyed by *seat slot* (`GameView::seat_order`: 0 = you, 1.. = opponents left →
 //! right), so a four-player table is the same code as a duel: four avatars are spawned, the unused
 //! ones stay hidden, and opponents at a crowded table shrink to their column's `ui_scale`.
 
 use bevy::picking::Pickable;
 use bevy::prelude::*;
-use mtg_protocol::{Player, PlayerId};
+use mtg_protocol::{Avatar, Player, PlayerId};
 
 use super::kit::*;
 use super::portrait::make_portrait;
@@ -121,7 +124,8 @@ fn spawn_avatar(commands: &mut Commands, fonts: &ArenaFonts, slot: usize, portra
                     overflow: Overflow::clip(),
                     ..default()
                 },
-                ImageNode::new(portrait),
+                ImageNode::new(portrait.clone()),
+                AvatarArt { avatar: None, fallback: portrait },
                 BorderColor::all(GOLD),
                 AvatarPortrait(slot),
                 OnClick(Act::ClickPlayer(0)),
@@ -243,6 +247,34 @@ pub fn position_avatars(
 
 fn player_for(view: &GameView, slot: usize) -> Option<&Player> {
     if slot == 0 { view.me() } else { view.player_in_slot(slot) }
+}
+
+/// Whose face goes in each portrait: mine is always the one in settings (so a fresh pick shows up
+/// at once); others come from the engine. An engine too old to send portraits still shows a
+/// commander's art in Commander.
+fn portrait_of(view: &GameView, settings: &Settings, seats: &SeatAvatars, slot: usize) -> Option<Avatar> {
+    let p = player_for(view, slot)?;
+    if slot == 0 {
+        return Some(settings.avatar.clone());
+    }
+    if let Some(a) = seats.0.get(&p.name) {
+        return Some(a.clone());
+    }
+    let cmd = *p.commanders.first()?;
+    let card = p.zones.iter().find(|c| c.id == cmd)?;
+    Some(Avatar::framed(card.state.as_ref()?.name.clone()))
+}
+
+pub fn assign_portraits(view: Res<GameView>, settings: Res<Settings>, seats: Res<SeatAvatars>, mut q: Query<(&AvatarPortrait, &mut AvatarArt)>) {
+    if !(view.is_changed() || settings.is_changed() || seats.is_changed()) {
+        return;
+    }
+    for (slot, mut art) in &mut q {
+        let want = portrait_of(&view, &settings, &seats, slot.0);
+        if art.avatar != want {
+            art.avatar = want;
+        }
+    }
 }
 
 pub fn update_avatars(

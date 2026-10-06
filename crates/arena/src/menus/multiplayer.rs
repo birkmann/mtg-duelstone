@@ -147,11 +147,11 @@ fn auto_join(cli: Res<CliArgs>, mut st: ResMut<MpState>, cfg: Res<EngineConfig>,
             t.editor_mut().set_text(&invite);
         }
     }
-    start_lookup(&mut st, &cfg.base_url, &invite, &settings.player_name);
+    start_lookup(&mut st, &cfg.base_url, &invite, &settings);
 }
 
 /// Resolve an invite to (engine base, lobby) in the background.
-fn start_lookup(st: &mut MpState, current_base: &str, invite: &str, name: &str) {
+fn start_lookup(st: &mut MpState, current_base: &str, invite: &str, settings: &Settings) {
     let Some((base, code)) = parse_invite(invite) else {
         st.status = "That doesn't look like an invite link or table code.".into();
         st.error = true;
@@ -163,14 +163,15 @@ fn start_lookup(st: &mut MpState, current_base: &str, invite: &str, name: &str) 
     st.status = format!("Looking for table {code}…");
     st.error = false;
     let api = Api::new(base.clone());
-    let name = name.to_string();
+    let name = settings.player_name.clone();
+    let avatar = settings.avatar.clone();
     st.lookup = Some((
         base,
         mtg_client::spawn(async move {
             match api.lobby(&code).await {
                 Ok(l) => Ok(Found::Table(l)),
                 // not a table: maybe a draft pod
-                Err(e) if format!("{e:#}").contains("404") => match api.join_event(&code, &name).await {
+                Err(e) if format!("{e:#}").contains("404") => match api.join_event(&code, &name, Some(&avatar)).await {
                     Ok(t) => Ok(Found::Pod(t)),
                     Err(e) => Err(format!("{e:#}")),
                 },
@@ -296,7 +297,7 @@ fn handle_mp_actions(
             MenuAction::JoinTable => {
                 let text = fields.iter().find(|(f, _)| **f == Field::Invite).map(|(_, t)| t.value().to_string()).unwrap_or_default();
                 focus.clear();
-                start_lookup(&mut st, &cfg.base_url, &text, &settings.player_name);
+                start_lookup(&mut st, &cfg.base_url, &text, &settings);
             }
             MenuAction::CopyInvite => {
                 if let Some(link) = lobby.frame.as_ref().and_then(|l| l.invite.clone()) {

@@ -76,6 +76,10 @@ downloaded.
   ships presets and lets you design your own from patterns, colours, emblems, frames and finishes, with a live
   3D preview. Choices can be a default or per deck. Deck tiles show each deck's box, and the AI gets its own
   sleeve. Designs are painted procedurally and saved to `~/.config/mtg-duelstone/designs.json`.
+- **Avatars** (click your name in the top-right corner of the main menu). Any card's art can be your portrait:
+  pick from featured planeswalkers and legends, browse every legendary creature or planeswalker, or search any
+  card. Then drag the circle onto a face and scroll to zoom. Everyone at the table sees your choice, and the AI
+  wears its commander or the best-known legend in its deck.
 - **Deck builder & tester** (NEW DECK / EDIT DECK on the deck screen).
   - *Search:* the whole card pool, with filters for name, rules text, colour, type, mana value and commander
     eligibility.

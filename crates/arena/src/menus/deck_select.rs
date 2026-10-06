@@ -40,6 +40,7 @@ impl Plugin for DeckSelectPlugin {
                     poll_fetch,
                     rebuild_lists,
                     refresh_visuals,
+                    sync_tile_art,
                     art_fade,
                     wheel_scroll,
                     sync_import_panel,
@@ -113,7 +114,7 @@ enum ImportMsg {
     Saved(Result<Value, String>),
 }
 
-fn rest_base(cfg: &Option<Res<EngineConfig>>, settings: &Settings) -> String {
+pub(super) fn rest_base(cfg: &Option<Res<EngineConfig>>, settings: &Settings) -> String {
     cfg.as_ref().map(|c| c.base_url.clone()).unwrap_or_else(|| settings.engine_url.clone())
 }
 
@@ -194,8 +195,17 @@ struct DeckTile(String);
 struct AiRow(Option<String>);
 #[derive(Component)]
 struct PlayButton;
+/// Fades an art image in once it has loaded (tiles here, thumbnails in `deck_art`).
 #[derive(Component)]
-struct ArtFade(Handle<Image>);
+pub(super) struct ArtFade(pub(super) Handle<Image>);
+/// A tile's art; follows `DeckLook::art` so a new pick shows without rebuilding the grid.
+#[derive(Component)]
+struct TileArt {
+    deck: String,
+    /// The engine's pick (`DeckInfo::cover`).
+    cover: Option<String>,
+    shown: Option<String>,
+}
 
 fn spawn_screen(mut commands: Commands, fonts: Res<ArenaFonts>, mode: Res<MatchMode>, cfg: Res<MatchConfig>) {
     let mode_label = super::modes::setup_label(cfg.format, &cfg.setup);
@@ -313,7 +323,6 @@ fn rebuild_lists(
     list: Res<DeckList>,
     fonts: Res<ArenaFonts>,
     assets: Res<AssetServer>,
-    mut images: ResMut<CardImages>,
     grid: Query<(Entity, Option<&Children>), With<DeckGrid>>,
     ai: Query<(Entity, Option<&Children>), With<AiList>>,
     added: Query<(), Added<DeckGrid>>,
@@ -327,7 +336,7 @@ fn rebuild_lists(
         }
         commands.entity(e).with_children(|g| {
             for d in &list.decks {
-                spawn_tile(g, d, &fonts, &assets, &mut images);
+                spawn_tile(g, d, &fonts, &assets);
             }
         });
     }
@@ -375,7 +384,7 @@ fn spawn_ai_row(g: &mut ChildSpawnerCommands, deck_ref: Option<String>, name: &s
     });
 }
 
-fn spawn_tile(g: &mut ChildSpawnerCommands, d: &DeckInfo, fonts: &ArenaFonts, assets: &AssetServer, images: &mut CardImages) {
+fn spawn_tile(g: &mut ChildSpawnerCommands, d: &DeckInfo, fonts: &ArenaFonts, assets: &AssetServer) {
     let invalid = d.problem.is_some();
     let letters = identity_letters(&d.color_identity);
     let mut tile = g.spawn((
@@ -410,17 +419,17 @@ fn spawn_tile(g: &mut ChildSpawnerCommands, d: &DeckInfo, fonts: &ArenaFonts, as
                         r.spawn((mana_pip(assets, c, if n == 1 { 74.0 } else { 54.0 }), Pickable::IGNORE));
                     }
                 });
-                if let Some(cmd) = d.commanders.first() {
-                    let h = images.request_raw(ImageRequest { name: cmd.clone(), set: None, back: false, version: ImageVersion::ArtCrop });
-                    a.spawn((
-                        ArtFade(h.clone()),
-                        Node { position_type: PositionType::Absolute, left: Val::Px(0.0), top: Val::Px(0.0), width: Val::Percent(100.0), height: Val::Percent(100.0), ..default() },
-                        ImageNode { image: h, color: Color::srgba(1.0, 1.0, 1.0, 0.0), image_mode: NodeImageMode::Auto, ..default() },
-                        Pickable::IGNORE,
-                    ));
+                // the deck's face: the player's pick or the engine's cover card (`sync_tile_art`)
+                a.spawn((
+                    TileArt { deck: d.deck_ref.clone(), cover: d.cover.clone().or_else(|| d.commanders.first().cloned()), shown: None },
+                    ArtFade(Handle::default()),
+                    Node { position_type: PositionType::Absolute, left: Val::Px(0.0), top: Val::Px(0.0), width: Val::Percent(100.0), height: Val::Percent(100.0), ..default() },
+                    ImageNode { color: Color::srgba(1.0, 1.0, 1.0, 0.0), image_mode: NodeImageMode::Auto, ..default() },
+                    Pickable::IGNORE,
+                ));
+                if super::deck_art::can_pick(&d.deck_ref) {
+                    a.spawn(super::deck_art::art_chip(&d.deck_ref, fonts));
                 }
-                // the deck's box, standing in the corner in front of the art
-                a.spawn(super::designer::deckbox_thumb(&d.deck_ref, 112.0));
             });
         // name + meta
         t.spawn(Node { flex_grow: 1.0, flex_direction: FlexDirection::Column, justify_content: JustifyContent::SpaceBetween, padding: UiRect::all(Val::Px(10.0)), ..default() })
@@ -493,6 +502,23 @@ fn refresh_visuals(
     }
 }
 
+fn sync_tile_art(settings: Res<Settings>, mut images: ResMut<CardImages>, mut q: Query<(&mut TileArt, &mut ArtFade, &mut ImageNode)>) {
+    for (mut t, mut fade, mut node) in &mut q {
+        if !settings.is_changed() && !t.is_added() {
+            continue;
+        }
+        let want = settings.deck_looks.get(&t.deck).and_then(|l| l.art.clone()).or_else(|| t.cover.clone());
+        if want == t.shown {
+            continue;
+        }
+        let h = want.as_ref().map(|name| images.request_raw(ImageRequest { name: name.clone(), set: None, back: false, version: ImageVersion::ArtCrop })).unwrap_or_default();
+        fade.0 = h.clone();
+        node.image = h;
+        node.color = Color::srgba(1.0, 1.0, 1.0, 0.0);
+        t.shown = want;
+    }
+}
+
 fn art_fade(images: Res<Assets<Image>>, time: Res<Time>, mut q: Query<(&ArtFade, &mut ImageNode)>) {
     for (a, mut n) in &mut q {
         let loaded = images.get(&a.0).is_some_and(|i| i.width() > 8);
@@ -505,9 +531,14 @@ fn art_fade(images: Res<Assets<Image>>, time: Res<Time>, mut q: Query<(&ArtFade,
 }
 
 fn wheel_scroll(
+    picker: Res<super::deck_art::ArtPicker>,
     mut wheel: MessageReader<MouseWheel>,
     mut q: Query<(&RelativeCursorPosition, &ComputedNode, &mut ScrollPosition), With<Scrollable>>,
 ) {
+    if picker.is_open() {
+        wheel.clear(); // the picker modal scrolls on its own; don't move the grid underneath
+        return;
+    }
     let mut dy = 0.0;
     for e in wheel.read() {
         dy += match e.unit {

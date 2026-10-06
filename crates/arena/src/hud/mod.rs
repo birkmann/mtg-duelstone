@@ -58,6 +58,7 @@ impl Plugin for HudPlugin {
                 Update,
                 (
                     avatar::update_avatars,
+                    avatar::assign_portraits,
                     avatar::update_mana_pools,
                     phase::attach_phase_tracks,
                     phase::update_phase_icons,

@@ -25,6 +25,8 @@ final class Seat {
     volatile String deckName;
     /** Prebuilt deck (limited events); null = load {@link #deckRef}. */
     volatile forge.deck.Deck deck;
+    /** Portrait {card, x, y, zoom} (see {@link Avatars}); null until chosen or derived from the deck at start. */
+    volatile JsonObject avatar;
     /** Secret that binds a socket to this seat (hex). Regenerated when the seat is reopened (kick). */
     volatile String token = newToken();
     /** When the last socket of a seated human went away (0 = connected / never). */
@@ -62,6 +64,8 @@ final class Seat {
         o.addProperty("name", name);
         o.addProperty("deck", deckRef);
         o.addProperty("deckName", deckName);
+        final JsonObject av = avatar;
+        if (av != null) o.add("avatar", av.deepCopy());
         o.addProperty("connected", kind == Kind.AI || connected());
         o.addProperty("you", forViewer);
         return o;

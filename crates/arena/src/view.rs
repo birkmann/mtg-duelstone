@@ -26,6 +26,7 @@ impl Plugin for ViewPlugin {
             .init_resource::<GameResult>()
             .init_resource::<CardCache>()
             .init_resource::<ViewTracking>()
+            .init_resource::<SeatAvatars>()
             .add_systems(Update, apply_frames.in_set(ViewSet))
             .add_systems(OnEnter(AppState::Loading), reset_view);
     }
@@ -48,8 +49,10 @@ pub fn reset_view(
     mut result: ResMut<GameResult>,
     mut cache: ResMut<CardCache>,
     mut tracking: ResMut<ViewTracking>,
+    mut avatars: ResMut<SeatAvatars>,
 ) {
     *view = GameView::default();
+    avatars.0.clear();
     *input = CurrentInput::default();
     prompt.0 = None;
     log.0.clear();
@@ -69,6 +72,7 @@ fn apply_frames(
     mut cache: ResMut<CardCache>,
     mut tracking: ResMut<ViewTracking>,
     mut events: MessageWriter<BoardEvent>,
+    mut avatars: ResMut<SeatAvatars>,
 ) {
     for SendCmd(c) in cmds.read() {
         match c {
@@ -163,7 +167,8 @@ fn apply_frames(
             ServerFrame::Alert => {
                 events.write(BoardEvent::Alert);
             }
-            ServerFrame::Hello { format, .. } => {
+            ServerFrame::Hello { format, seats, .. } => {
+                avatars.0 = seats.iter().filter_map(|s| Some((s.name.clone()?, s.avatar.clone()?))).collect();
                 if format.as_deref() == Some("commander") {
                     view.format = mtg_protocol::Format::Commander;
                 } else if format.as_deref() == Some("constructed") {

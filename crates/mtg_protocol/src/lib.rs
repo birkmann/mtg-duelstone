@@ -5,6 +5,7 @@
 //! Every struct is `#[serde(default)]`-tolerant because the server omits optional fields, and both
 //! frame enums have an `Unknown` fallback so a newer server never crashes an older client.
 
+mod avatar;
 mod card;
 mod cmd;
 mod deck;
@@ -13,6 +14,7 @@ mod frames;
 mod game;
 mod prompt;
 
+pub use avatar::*;
 pub use card::*;
 pub use cmd::*;
 pub use deck::*;

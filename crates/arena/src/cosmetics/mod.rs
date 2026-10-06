@@ -313,7 +313,7 @@ mod tests {
         let lib = DesignLibrary { designs: design::presets() };
         let mut s = Settings { sleeve: "celestial".into(), ..Settings::default() };
         assert_eq!(lib.sleeve_for(&s, Some("user:A")).id, "celestial");
-        s.deck_looks.insert("user:A".into(), DeckLook { sleeve: Some("dragonscale".into()), deckbox: None });
+        s.deck_looks.insert("user:A".into(), DeckLook { sleeve: Some("dragonscale".into()), deckbox: None, ..Default::default() });
         assert_eq!(lib.sleeve_for(&s, Some("user:A")).id, "dragonscale");
         assert_eq!(lib.sleeve_for(&s, Some("user:B")).id, "celestial");
         s.sleeve = "deleted-design".into();

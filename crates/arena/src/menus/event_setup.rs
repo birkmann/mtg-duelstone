@@ -167,7 +167,7 @@ fn poll(mut st: ResMut<SetupState>, choice: Res<EventSetupChoice>, cfg: Res<Engi
                 };
             }
             if auto && let Some(source) = st.selected.clone() {
-                let req = CreateEvent { kind: choice.0, source, pod_size: st.pod as i64, name: settings.player_name.clone(), seed: None };
+                let req = CreateEvent { kind: choice.0, source, pod_size: st.pod as i64, name: settings.player_name.clone(), seed: None, avatar: Some(settings.avatar.clone()) };
                 let api = Api::new(cfg.base_url.clone());
                 st.create = Some(mtg_client::spawn(async move { api.create_event(&req).await.map_err(|e| format!("{e:#}")) }));
             }
@@ -258,7 +258,7 @@ fn handle(
                     st.error = true;
                     continue;
                 };
-                let req = CreateEvent { kind: choice.0, source, pod_size: st.pod as i64, name: settings.player_name.clone(), seed: None };
+                let req = CreateEvent { kind: choice.0, source, pod_size: st.pod as i64, name: settings.player_name.clone(), seed: None, avatar: Some(settings.avatar.clone()) };
                 let api = Api::new(cfg.base_url.clone());
                 st.status = "Opening the pod…".into();
                 st.error = false;

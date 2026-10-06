@@ -218,8 +218,8 @@ impl Api {
     pub async fn event(&self, code: &str) -> Result<EventFrame> {
         self.get(&format!("/api/event/{}", code.trim()), &[], 10).await?.ok("event")?.json("event")
     }
-    pub async fn join_event(&self, code: &str, name: &str) -> Result<SeatTicket> {
-        self.post(&format!("/api/event/{}/join", code.trim()), &serde_json::json!({ "name": name }), 30).await?.ok("join event")?.json("seat ticket")
+    pub async fn join_event(&self, code: &str, name: &str, avatar: Option<&mtg_protocol::Avatar>) -> Result<SeatTicket> {
+        self.post(&format!("/api/event/{}/join", code.trim()), &serde_json::json!({ "name": name, "avatar": avatar }), 30).await?.ok("join event")?.json("seat ticket")
     }
     /// `ws://…/ws/event/{id}?token=…`
     pub fn event_ws_url(&self, event_id: &str, token: &str) -> String {

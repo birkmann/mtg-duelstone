@@ -9,7 +9,9 @@ use bevy::ui::{BackgroundGradient, ColorStop, LinearGradient};
 
 use super::MenuAction;
 use super::stage::IntroClock;
-use crate::shared::{AppState, ArenaFonts, Settings};
+use bevy::image::TRANSPARENT_IMAGE_HANDLE;
+
+use crate::shared::{AppState, ArenaFonts, AvatarArt, Settings};
 use crate::style::*;
 
 pub struct MainMenuPlugin;
@@ -142,13 +144,36 @@ fn spawn_main_menu(mut commands: Commands, fonts: Res<ArenaFonts>, settings: Res
                     anim(3.2, 0.8, Fx::Fade(Color::srgba(0.7, 0.62, 0.5, 0.6))),
                     ui_text(&fonts.body, "Unofficial fan project · Rules engine: Forge (GPL-3) · Card images © Wizards of the Coast via Scryfall · hover or click the cards", 13.0, Color::NONE),
                 ));
-            // player chip
+            // player chip: your portrait + name; opens the avatar studio
             root.spawn((
                 anim(3.0, 0.6, Fx::SlideY(-90.0)),
                 UiTransform::from_translation(Val2::px(0.0, -90.0)),
-                chip(Node { position_type: PositionType::Absolute, top: Val::Px(18.0), right: Val::Px(22.0), padding: UiRect::axes(Val::Px(18.0), Val::Px(8.0)), ..default() }),
+                Button,
+                MenuAction::Avatar,
+                chip(Node {
+                    position_type: PositionType::Absolute,
+                    top: Val::Px(18.0),
+                    right: Val::Px(22.0),
+                    padding: UiRect::new(Val::Px(6.0), Val::Px(18.0), Val::Px(6.0), Val::Px(6.0)),
+                    column_gap: Val::Px(12.0),
+                    align_items: AlignItems::Center,
+                    ..default()
+                }),
             ))
-            .with_child(ui_text(&fonts.title, settings.player_name.clone(), 18.0, GOLD));
+            .with_children(|c| {
+                c.spawn((
+                    Node { width: Val::Px(54.0), height: Val::Px(54.0), border: UiRect::all(Val::Px(2.5)), border_radius: BorderRadius::MAX, overflow: Overflow::clip(), ..default() },
+                    BorderColor::all(GOLD),
+                    BackgroundColor(Color::srgb(0.05, 0.035, 0.03)),
+                    ImageNode::new(TRANSPARENT_IMAGE_HANDLE),
+                    AvatarArt { avatar: Some(settings.avatar.clone()), fallback: TRANSPARENT_IMAGE_HANDLE },
+                    Pickable::IGNORE,
+                ));
+                c.spawn(Node { flex_direction: FlexDirection::Column, ..default() }).with_children(|t| {
+                    t.spawn((ui_text(&fonts.title, settings.player_name.clone(), 18.0, GOLD), Pickable::IGNORE));
+                    t.spawn((ui_text(&fonts.body, "Change avatar", 12.0, TEXT_DIM), Pickable::IGNORE));
+                });
+            });
         });
     commands.spawn((
         Name::new("MainMenuCurtain"),

@@ -50,18 +50,18 @@ public final class MatchManager {
         }
     }
 
-    public MatchSession create(final String humanDeckRef, final String aiDeckRef, final GameSetup setup, final Long seed, final String humanName) {
+    public MatchSession create(final String humanDeckRef, final String aiDeckRef, final GameSetup setup, final Long seed, final String humanName, final JsonObject humanAvatar) {
         prune();
         final String id = "m" + counter.incrementAndGet() + "-" + Long.toString(System.currentTimeMillis() % 100000, 36);
-        final MatchSession m = MatchSession.classic(id, humanDeckRef, aiDeckRef, setup, seed, humanName);
+        final MatchSession m = MatchSession.classic(id, humanDeckRef, aiDeckRef, setup, seed, humanName, humanAvatar);
         matches.put(id, m);
         return m;
     }
 
-    public MatchSession createLobby(final GameSetup setup, final int players, final String hostName, final String hostDeck, final String inviteBase) {
+    public MatchSession createLobby(final GameSetup setup, final int players, final String hostName, final String hostDeck, final JsonObject hostAvatar, final String inviteBase) {
         prune();
         final String id = newCode();
-        final MatchSession m = MatchSession.lobby(id, setup, players, hostName, hostDeck, inviteBase);
+        final MatchSession m = MatchSession.lobby(id, setup, players, hostName, hostDeck, hostAvatar, inviteBase);
         matches.put(id, m);
         return m;
     }

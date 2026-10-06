@@ -58,8 +58,7 @@ impl Plugin for DesignerPlugin {
                 )
                     .chain()
                     .run_if(in_state(AppState::Designer)),
-            )
-            .add_systems(Update, deckbox_thumbs.run_if(in_state(AppState::DeckSelect)));
+            );
     }
 }
 
@@ -757,42 +756,6 @@ fn wheel_scroll(mut wheel: MessageReader<MouseWheel>, mut q: Query<(&RelativeCur
     }
 }
 
-// ---- deck select thumbnails -----------------------------------------------------------------
-
-/// Deckbox picture on a deck select tile; follows the deck's chosen deckbox.
-#[derive(Component)]
-pub(super) struct DeckboxThumb(pub String);
-
-/// Bundle for a deck tile's deckbox picture, standing in the bottom-right corner of its parent.
-pub(super) fn deckbox_thumb(deck_ref: &str, height: f32) -> impl Bundle {
-    let (w, h) = crate::cosmetics::paint::THUMB_BOX_PX;
-    (
-        DeckboxThumb(deck_ref.to_string()),
-        Node {
-            position_type: PositionType::Absolute,
-            right: Val::Px(-6.0),
-            bottom: Val::Px(-10.0),
-            width: Val::Px(height * w as f32 / h as f32),
-            height: Val::Px(height),
-            ..default()
-        },
-        ImageNode { color: Color::NONE, ..default() },
-        Pickable::IGNORE,
-    )
-}
-
-fn deckbox_thumbs(lib: Res<DesignLibrary>, settings: Res<Settings>, mut paints: ResMut<Paints>, mut q: Query<(&DeckboxThumb, &mut ImageNode)>) {
-    for (t, mut img) in &mut q {
-        let d = lib.deckbox_for(&settings, Some(&t.0));
-        if let Some(h) = paints.get(d, PaintTarget::Thumb)
-            && img.image != h
-        {
-            img.image = h;
-            img.color = Color::WHITE;
-        }
-    }
-}
-
 // ---- 3D preview -----------------------------------------------------------------------------
 
 #[derive(Component)]
@@ -1127,10 +1090,10 @@ mod tests {
     #[test]
     fn deleting_a_design_clears_every_reference() {
         let mut s = Settings { sleeve: "x".into(), theme: "x".into(), ..Settings::default() };
-        s.deck_looks.insert("deck".into(), DeckLook { sleeve: Some("x".into()), deckbox: Some("keep".into()) });
+        s.deck_looks.insert("deck".into(), DeckLook { sleeve: Some("x".into()), deckbox: Some("keep".into()), ..Default::default() });
         forget_design(&mut s, "x");
         assert_eq!(s.sleeve, Settings::default().sleeve);
         assert_eq!(s.theme, Settings::default().theme);
-        assert_eq!(s.deck_looks["deck"], DeckLook { sleeve: None, deckbox: Some("keep".into()) });
+        assert_eq!(s.deck_looks["deck"], DeckLook { sleeve: None, deckbox: Some("keep".into()), ..Default::default() });
     }
 }

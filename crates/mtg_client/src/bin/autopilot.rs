@@ -169,6 +169,7 @@ fn play_game(args: &Args, rest: &Rest, n: u32, human: &str, ai: &str, hist: &mut
         format: args.format,
         seed: Some((args.seed as i64).wrapping_add(n as i64)),
         human_name: Some("Tester".into()),
+        human_avatar: None,
         setup: args.setup.clone(),
     }) {
         Ok(m) => m,
@@ -376,13 +377,13 @@ fn play_table(args: &Args, rest: &Rest, n: u32, decks: &[String], hist: &mut BTr
     let players = args.players.clamp(2, 4);
     let humans = args.humans.unwrap_or(players).clamp(1, players);
     let fail = |msg: String| GameResult { failure: Some(msg), secs: t0.elapsed().as_secs_f32(), ..Default::default() };
-    let host = match rest.create_lobby(&CreateLobby { format: args.format, setup: args.setup.clone(), players: players as i64, name: "Bot 1".into(), deck: decks[0].clone() }) {
+    let host = match rest.create_lobby(&CreateLobby { format: args.format, setup: args.setup.clone(), players: players as i64, name: "Bot 1".into(), deck: decks[0].clone(), avatar: None }) {
         Ok(t) => t,
         Err(e) => return fail(format!("create lobby: {e:#}")),
     };
     let mut tickets = vec![host.clone()];
     for i in 1..humans {
-        match rest.join_lobby(&host.id, &JoinLobby { name: format!("Bot {}", i + 1), deck: decks[i as usize % decks.len()].clone() }) {
+        match rest.join_lobby(&host.id, &JoinLobby { name: format!("Bot {}", i + 1), deck: decks[i as usize % decks.len()].clone(), avatar: None }) {
             Ok(t) => tickets.push(t),
             Err(e) => return fail(format!("join lobby: {e:#}")),
         }
@@ -484,7 +485,7 @@ fn sit_in(args: &Args, rest: &Rest) -> Result<bool> {
     if let Some(inv) = &args.join {
         let (_, code) = mtg_client::parse_invite(inv).ok_or_else(|| anyhow::anyhow!("not an invite link or code: {inv}"))?;
         for i in 0..args.bots {
-            let t = rest.join_lobby(&code, &JoinLobby { name: format!("Bot {}", i + 1), deck: args.deck.clone().unwrap_or_else(|| "random".into()) })?;
+            let t = rest.join_lobby(&code, &JoinLobby { name: format!("Bot {}", i + 1), deck: args.deck.clone().unwrap_or_else(|| "random".into()), avatar: None })?;
             println!("seated {} at table {} (seat {})", t.name.clone().unwrap_or_default(), t.id, t.seat + 1);
             seats.push((t.id, t.token, false));
         }

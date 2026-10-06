@@ -71,13 +71,14 @@ public final class MatchSession {
     }
 
     /** 1 human vs. 1 AI, started immediately (the original single-player flow). */
-    static MatchSession classic(final String id, final String humanDeckRef, final String aiDeckRef, final GameSetup setup, final Long seed, final String humanName) {
+    static MatchSession classic(final String id, final String humanDeckRef, final String aiDeckRef, final GameSetup setup, final Long seed, final String humanName, final JsonObject humanAvatar) {
         final MatchSession m = new MatchSession(id, setup, false, null);
         if (setup.variants.contains("teams")) {
             // 2v2 against the AI: you + an AI partner vs two AI opponents (seats alternate teams)
             final Seat h = m.addSeat(Seat.Kind.HUMAN);
             h.name = humanName == null || humanName.isBlank() ? "You" : humanName.trim();
             h.deckRef = humanDeckRef;
+            h.avatar = Avatars.clean(humanAvatar);
             final String[] names = { "Forge AI", "Forge Ally", "Forge AI (2)" };
             for (final String n : names) { final Seat a = m.addSeat(Seat.Kind.AI); a.name = n; a.deckRef = "random"; }
             m.seats.get(1).deckRef = aiDeckRef;
@@ -88,6 +89,7 @@ public final class MatchSession {
         final Seat human = m.addSeat(Seat.Kind.HUMAN);
         human.name = humanName == null || humanName.isBlank() ? "You" : humanName.trim();
         human.deckRef = humanDeckRef;
+        human.avatar = Avatars.clean(humanAvatar);
         final Seat ai = m.addSeat(Seat.Kind.AI);
         ai.name = "Forge AI";
         ai.deckRef = aiDeckRef;
@@ -97,7 +99,7 @@ public final class MatchSession {
     }
 
     /** A lobby with the host in seat 0 and {@code players - 1} open seats. */
-    static MatchSession lobby(final String id, final GameSetup setup, final int players, final String hostName, final String hostDeck, final String inviteBase) {
+    static MatchSession lobby(final String id, final GameSetup setup, final int players, final String hostName, final String hostDeck, final JsonObject hostAvatar, final String inviteBase) {
         if (players < 2 || players > MAX_SEATS) throw new IllegalArgumentException("players must be 2.." + MAX_SEATS);
         final String pp = setup.playerProblem(players);
         if (pp != null) throw new IllegalArgumentException(pp);
@@ -105,12 +107,13 @@ public final class MatchSession {
         final Seat host = m.addSeat(Seat.Kind.HUMAN);
         host.name = cleanName(hostName, "Host");
         m.setDeck(host, hostDeck);
+        host.avatar = Avatars.clean(hostAvatar);
         for (int i = 1; i < players; i++) m.addSeat(Seat.Kind.OPEN);
         return m;
     }
 
-    /** One seat of a table dealt by a limited event: a prebuilt deck, human (token issued) or AI. */
-    record EventPlayer(String name, Deck deck, boolean human) {}
+    /** One seat of a table dealt by a limited event: a prebuilt deck, human (token issued) or AI; avatar may be null. */
+    record EventPlayer(String name, Deck deck, boolean human, JsonObject avatar) {}
 
     /**
      * A table dealt from a draft/sealed event: decks are already built, humans get seat tokens (see
@@ -124,6 +127,7 @@ public final class MatchSession {
             s.deck = p.deck();
             s.deckRef = "event";
             s.deckName = p.deck().getName();
+            s.avatar = Avatars.clean(p.avatar());
             if (p.human()) s.goneSince = System.currentTimeMillis();
         }
         m.autoStart = true;
@@ -183,7 +187,7 @@ public final class MatchSession {
     }
 
     /** Take the first open seat. Returns it (its token is the caller's credential). */
-    public synchronized JsonObject join(final String name, final String deckRef) {
+    public synchronized JsonObject join(final String name, final String deckRef, final JsonObject avatar) {
         if (!lobby) throw new IllegalArgumentException("not a lobby");
         if (started) throw new IllegalStateException("the game has already started");
         Seat free = null;
@@ -192,6 +196,7 @@ public final class MatchSession {
         setDeck(free, deckRef); // throws on a bad deck before the seat is taken
         free.name = uniqueName(cleanName(name, "Player " + (free.index + 1)), free);
         free.kind = Seat.Kind.HUMAN;
+        free.avatar = Avatars.clean(avatar);
         free.goneSince = System.currentTimeMillis(); // not connected until its socket arrives
         broadcastLobby();
         final JsonObject o = new JsonObject();
@@ -250,6 +255,9 @@ public final class MatchSession {
             case "lobbyDeck" -> { // {deck}: change your own deck
                 try { setDeck(from, Json.str(f, "deck")); } catch (final RuntimeException e) { send(sock, error(String.valueOf(e.getMessage()))); return; }
             }
+            case "lobbyAvatar" -> { // {avatar}: change your own portrait (null/invalid clears it → derived from the deck at start)
+                from.avatar = Avatars.clean(f.get("avatar"));
+            }
             case "lobbySeat" -> { // host: {seat, kind: "ai"|"open", deck?}
                 if (!host) { send(sock, error("only the host can change seats")); return; }
                 final Integer idx = Json.integer(f, "seat");
@@ -261,10 +269,11 @@ public final class MatchSession {
                     if (s.kind == Seat.Kind.HUMAN) kick(s);
                     s.kind = Seat.Kind.AI;
                     s.name = uniqueName("Forge AI", s);
+                    s.avatar = null; // the AI's face comes from its deck at start
                 } else if ("open".equals(kind)) {
                     if (s.kind == Seat.Kind.HUMAN) kick(s);
                     s.kind = Seat.Kind.OPEN;
-                    s.name = null; s.deckRef = null; s.deckName = null;
+                    s.name = null; s.deckRef = null; s.deckName = null; s.avatar = null;
                 } else { send(sock, error("kind must be ai or open")); return; }
             }
             case "start" -> {
@@ -312,6 +321,7 @@ public final class MatchSession {
             if (!s.filled()) continue;
             final Deck d = s.deck != null ? s.deck : setup.loadDeck(s.deckRef);
             if (s.deckName == null || "random".equals(s.deckRef)) s.deckName = d.getName();
+            if (s.avatar == null) s.avatar = Avatars.fromDeck(d);
             final RegisteredPlayer rp = setup.register(d, filled, order++);
             if (s.kind == Seat.Kind.HUMAN) {
                 rp.setPlayer(new LobbyPlayerHuman(s.name));
@@ -379,6 +389,19 @@ public final class MatchSession {
         hello.addProperty("seat", s.index);
         int n = 0; for (final Seat o : seats) if (o.filled()) n++;
         hello.addProperty("players", n);
+        // Clients match these to the state's players by name (Forge's player name is the seat name, unique at the table).
+        final JsonArray table = new JsonArray();
+        for (final Seat o : seats) {
+            if (!o.filled()) continue;
+            final JsonObject e = new JsonObject();
+            e.addProperty("seat", o.index);
+            e.addProperty("name", o.name);
+            e.addProperty("kind", o.kind == Seat.Kind.HUMAN ? "human" : "ai");
+            final JsonObject av = o.avatar;
+            if (av != null) e.add("avatar", av.deepCopy());
+            table.add(e);
+        }
+        hello.add("seats", table);
         return hello;
     }
 
@@ -506,7 +529,7 @@ public final class MatchSession {
                 });
             }
             case "clearYields" -> onEdt(() -> { final IGameController c = controller(seat); if (c != null) { c.getYieldController().clearAutoYields(); seatOut(seat, gui.stateFrame()); } });
-            case "lobbyDeck", "lobbySeat", "start" -> send(from, error("the game has already started"));
+            case "lobbyDeck", "lobbyAvatar", "lobbySeat", "start" -> send(from, error("the game has already started"));
             default -> send(from, error("unknown frame type: " + t));
         }
     }

@@ -197,13 +197,13 @@ public final class EngineServer {
                     final String human = Json.str(b, "humanDeck"), ai = Json.str(b, "aiDeck");
                     if (human == null || ai == null) throw new IllegalArgumentException("humanDeck and aiDeck refs required");
                     final Integer seedI = b.has("seed") && !b.get("seed").isJsonNull() ? b.get("seed").getAsInt() : null;
-                    json(resp, 201, matches.create(human, ai, GameSetup.fromJson(b), seedI == null ? null : seedI.longValue(), Json.str(b, "humanName")).describe());
+                    json(resp, 201, matches.create(human, ai, GameSetup.fromJson(b), seedI == null ? null : seedI.longValue(), Json.str(b, "humanName"), Avatars.clean(b.get("humanAvatar"))).describe());
                 }
-                case "POST /lobby" -> { // {format, players: 2..4, name, deck} → host ticket (seat 0 token + invite)
+                case "POST /lobby" -> { // {format, players: 2..4, name, deck, avatar?} → host ticket (seat 0 token + invite)
                     final JsonObject b = body(req);
                     final Integer players = Json.integer(b, "players");
                     final MatchSession lm = matches.createLobby(GameSetup.fromJson(b), players == null ? 2 : players,
-                            Json.str(b, "name"), Json.str(b, "deck"), publicUrl);
+                            Json.str(b, "name"), Json.str(b, "deck"), Avatars.clean(b.get("avatar")), publicUrl);
                     json(resp, 201, lm.hostTicket());
                 }
                 // ---- game setup / cubes / events (v3) ----------------------------------------------
@@ -268,23 +268,24 @@ public final class EngineServer {
                     if ("GET".equals(m) && path.startsWith("/match/")) {
                         final MatchSession ms = matches.get(path.substring("/match/".length()));
                         if (ms == null) json(resp, 404, err("no such match")); else json(resp, 200, ms.describe());
-                    } else if (path.startsWith("/event/")) { // GET /event/{code} · POST /event/{code}/join {name}
+                    } else if (path.startsWith("/event/")) { // GET /event/{code} · POST /event/{code}/join {name, avatar?}
                         final String[] parts = path.substring("/event/".length()).split("/");
                         final EventSession ev = matches.event(parts[0]);
                         if (ev == null) { json(resp, 404, err("no event with code " + parts[0])); return true; }
                         if ("GET".equals(m) && parts.length == 1) json(resp, 200, ev.describe());
                         else if ("POST".equals(m) && parts.length == 2 && "join".equals(parts[1])) {
-                            try { json(resp, 200, ev.join(Json.str(body(req), "name"))); }
+                            final JsonObject b = body(req);
+                            try { json(resp, 200, ev.join(Json.str(b, "name"), Avatars.clean(b.get("avatar")))); }
                             catch (final IllegalStateException e) { json(resp, 409, err(e.getMessage())); }
                         } else return false;
-                    } else if (path.startsWith("/lobby/")) { // GET /lobby/{id} (public info) · POST /lobby/{id}/join {name, deck}
+                    } else if (path.startsWith("/lobby/")) { // GET /lobby/{id} (public info) · POST /lobby/{id}/join {name, deck, avatar?}
                         final String[] parts = path.substring("/lobby/".length()).split("/");
                         final MatchSession lm = matches.get(parts[0]);
                         if (lm == null || !lm.lobby) { json(resp, 404, err("no lobby with code " + parts[0])); return true; }
                         if ("GET".equals(m) && parts.length == 1) json(resp, 200, lm.describe());
                         else if ("POST".equals(m) && parts.length == 2 && "join".equals(parts[1])) {
                             final JsonObject b = body(req);
-                            try { json(resp, 200, lm.join(Json.str(b, "name"), Json.str(b, "deck"))); }
+                            try { json(resp, 200, lm.join(Json.str(b, "name"), Json.str(b, "deck"), Avatars.clean(b.get("avatar")))); }
                             catch (final IllegalStateException e) { json(resp, 409, err(e.getMessage())); }
                         } else return false;
                     } else if ("DELETE".equals(m) && path.startsWith("/match/")) {

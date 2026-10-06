@@ -23,6 +23,8 @@ pub enum ClientFrame {
     Ping,
     /// Lobby: change your own deck.
     LobbyDeck { deck: String },
+    /// Lobby: change your own portrait.
+    LobbyAvatar { avatar: crate::Avatar },
     /// Lobby (host only): fill seat `seat` with an AI (`kind: Ai`, optional deck) or reopen it (`Open`, kicks a human).
     LobbySeat {
         seat: i64,
@@ -169,6 +171,8 @@ pub struct DeckInfo {
     pub color_identity: String,
     pub format: Option<Format>,
     pub problem: Option<String>,
+    /// Card whose art stands for the deck (engine's pick; the client may override it per deck).
+    pub cover: Option<String>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
@@ -184,6 +188,8 @@ pub struct CreateMatch {
     pub seed: Option<i64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub human_name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub human_avatar: Option<crate::Avatar>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
@@ -226,6 +232,8 @@ pub struct CreateLobby {
     pub players: i64,
     pub name: String,
     pub deck: String,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub avatar: Option<crate::Avatar>,
 }
 
 /// `POST /api/lobby/{id}/join`.
@@ -234,6 +242,8 @@ pub struct CreateLobby {
 pub struct JoinLobby {
     pub name: String,
     pub deck: String,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub avatar: Option<crate::Avatar>,
 }
 
 /// Answer to `POST /api/lobby` (host, seat 0) and `POST /api/lobby/{id}/join`: the seat's credential.

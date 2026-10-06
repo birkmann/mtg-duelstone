@@ -106,6 +106,7 @@ pub(super) fn handle_actions(
                 menu.designer_return = Some(*state.get());
                 next.set(AppState::Designer);
             }
+            MenuAction::Avatar => next.set(AppState::AvatarStudio),
             MenuAction::CloseDesigner => next.set(menu.designer_return.take().unwrap_or(AppState::MainMenu)),
             MenuAction::Rematch => next.set(AppState::Loading),
             MenuAction::ToMainMenu => next.set(AppState::MainMenu),
@@ -172,6 +173,7 @@ pub(super) fn debug_jump(
         "settings" => menu.settings_open = true,
         "designer" | "designer-box" | "designer-mat" => next.set(AppState::Designer),
         "multiplayer" => next.set(AppState::Multiplayer),
+        "avatar" => next.set(AppState::AvatarStudio),
         "modes" => next.set(AppState::ModeSelect),
         "cubes" => next.set(AppState::CubeDesigner),
         "draft" => next.set(AppState::EventSetup),

@@ -182,6 +182,16 @@ fn spawn_seat_row(list: &mut ChildSpawnerCommands, fonts: &ArenaFonts, s: &SeatI
                 (_, false) => RED_DAMAGE,
             }),
         ));
+        // AI seats get their portrait from the deck only when the game starts
+        if s.kind != SeatKind::Open {
+            r.spawn((
+                Node { width: Val::Px(46.0), height: Val::Px(46.0), border: UiRect::all(Val::Px(2.0)), border_radius: BorderRadius::MAX, overflow: Overflow::clip(), ..default() },
+                BorderColor::all(GOLD),
+                BackgroundColor(Color::srgb(0.05, 0.035, 0.03)),
+                ImageNode::new(bevy::image::TRANSPARENT_IMAGE_HANDLE),
+                AvatarArt { avatar: s.avatar.clone(), fallback: bevy::image::TRANSPARENT_IMAGE_HANDLE },
+            ));
+        }
         r.spawn(Node { flex_direction: FlexDirection::Column, flex_grow: 1.0, row_gap: Val::Px(2.0), ..default() }).with_children(|c| {
             c.spawn(ui_text(&fonts.title, name, 20.0, name_col));
             let sub = match s.kind {

@@ -47,6 +47,9 @@ pub enum AppState {
     Event,
     /// v3: browse, design and import cubes. Owner: menus.
     CubeDesigner,
+    /// Pick and crop your portrait from any card's art. Entered from the main menu; leaves back
+    /// to it. Owner: menus.
+    AvatarStudio,
 }
 
 /// Parsed command line. Owner: main.rs (inserted before the app runs).
@@ -478,6 +481,9 @@ pub struct Settings {
     /// v3: last Constructed legality (None = casual) and casual variants chosen on the mode screen.
     pub last_legality: Option<String>,
     pub last_variants: Vec<mtg_protocol::Variant>,
+    /// Your portrait at the table (sent to the engine, so other players see it too). Edited in the
+    /// avatar studio (menus).
+    pub avatar: mtg_protocol::Avatar,
 }
 
 /// Cosmetics chosen for one deck; `None` = use the default from `Settings`.
@@ -486,6 +492,9 @@ pub struct Settings {
 pub struct DeckLook {
     pub sleeve: Option<String>,
     pub deckbox: Option<String>,
+    /// Card whose art shows on the deck's tile; `None` = the engine's `DeckInfo::cover`.
+    /// Owner: menus (deck_art).
+    pub art: Option<String>,
 }
 
 impl Default for Settings {
@@ -507,6 +516,7 @@ impl Default for Settings {
             deck_looks: HashMap::new(),
             last_legality: None,
             last_variants: Vec::new(),
+            avatar: mtg_protocol::Avatar { card: "Jace, the Mind Sculptor".into(), x: 0.5, y: 0.22, zoom: 2.2 },
         }
     }
 }
@@ -665,3 +675,23 @@ pub struct EventSetupChoice(pub mtg_protocol::EventKind, pub Option<String>);
 /// A game the event dealt us, waiting for Loading to connect it (writer: event, reader: app_state).
 #[derive(Resource, Debug, Clone)]
 pub struct PendingEventMatch(pub mtg_protocol::SeatTicket);
+
+// =============================================================================================
+// Avatars (owner: avatars; see `crate::avatars`)
+// =============================================================================================
+
+/// Portraits of the players at the table, by player name, from the `hello` frame (the engine fills
+/// in a deck-based pick for seats that didn't choose, e.g. the AI). Owner: view (reset per match).
+/// Reader: hud.
+#[derive(Resource, Debug, Clone, Default)]
+pub struct SeatAvatars(pub HashMap<String, mtg_protocol::Avatar>);
+
+/// A UI image that shows `avatar`'s cropped art once it has loaded, and `fallback` until then (or
+/// when there is no avatar / the art is missing). Owner: avatars (swaps `ImageNode.image`/`rect`);
+/// anyone may spawn it or change `avatar`.
+#[derive(Component, Debug, Clone)]
+#[require(ImageNode)]
+pub struct AvatarArt {
+    pub avatar: Option<mtg_protocol::Avatar>,
+    pub fallback: Handle<Image>,
+}
