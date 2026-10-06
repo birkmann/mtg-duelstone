@@ -9,11 +9,11 @@ use bevy::input::mouse::{MouseScrollUnit, MouseWheel};
 use bevy::prelude::*;
 use bevy::ui::{BackgroundGradient, ColorStop, LinearGradient, RelativeCursorPosition};
 use bevy::window::PrimaryWindow;
-use mtg_client::deckstats::{COLORS, CURVE_BUCKETS, mana_symbols};
+use mtg_client::deckstats::{COLORS, CURVE_BUCKETS};
 use mtg_client::{ImageRequest, ImageVersion};
 use mtg_protocol::{CardKind, CatalogCard, RecCard};
 
-use super::super::widgets::{Field, text_field};
+use super::super::widgets::{Field, cost_pips, text_field};
 use super::{BuilderAction, BuilderDeck, BuilderStats, BuilderUi, RecsState, SearchState, Tab};
 use crate::images::CardImages;
 use crate::shared::{AppState, ArenaFonts};
@@ -340,27 +340,6 @@ fn spawn_pool_tile(p: &mut ChildSpawnerCommands, fonts: &ArenaFonts, images: &mu
     let h = images.request_raw(ImageRequest { name: card.name.clone(), set: card.set.clone(), back: false, version: ImageVersion::Normal });
     let e = card_tile(p, fonts, card, h, tile_size(scale), caption, false, true);
     p.commands().entity(e).insert(BuilderAction::AddCard(Box::new(card.clone())));
-}
-
-/// Mana cost as small pips: icon for coloured/colourless symbols, a numbered disc otherwise.
-fn cost_pips(p: &mut ChildSpawnerCommands, fonts: &ArenaFonts, assets: &AssetServer, cost: &str, size: f32) {
-    p.spawn((Node { column_gap: Val::Px(1.5), align_items: AlignItems::Center, flex_shrink: 0.0, ..default() }, Pickable::IGNORE)).with_children(|r| {
-        for sym in mana_symbols(cost) {
-            let one = sym.len() == 1 && "WUBRGC".contains(sym);
-            if one {
-                r.spawn((mana_pip(assets, sym.chars().next().unwrap(), size), Pickable::IGNORE));
-            } else {
-                let first = sym.split('/').find_map(|s| s.chars().next().filter(|c| "WUBRG".contains(*c)));
-                let bg = first.map(mana_color).unwrap_or(Color::srgb(0.72, 0.70, 0.66));
-                r.spawn((
-                    Node { width: Val::Px(size), height: Val::Px(size), border_radius: BorderRadius::MAX, justify_content: JustifyContent::Center, align_items: AlignItems::Center, ..default() },
-                    BackgroundColor(bg),
-                    Pickable::IGNORE,
-                ))
-                .with_child((ui_text(&fonts.numbers, sym.replace('/', ""), size * 0.66, Color::srgb(0.08, 0.06, 0.05)), Pickable::IGNORE));
-            }
-        }
-    });
 }
 
 // =============================================================================================

@@ -126,8 +126,47 @@ pub struct CubeCard {
     pub is_creature: bool,
     pub power: Option<String>,
     pub toughness: Option<String>,
+    pub loyalty: Option<String>,
     /// copies (cubes are usually singleton)
     pub qty: i32,
+    /// engine card tags (`removal`, `ramp`, …) for the cube screen's balance stats (ignored on save)
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub tags: Vec<String>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub subtypes: Vec<String>,
+}
+
+impl CubeCard {
+    pub fn primary_type(&self) -> crate::CardKind {
+        crate::primary_type(&self.type_line, self.is_land, self.is_creature)
+    }
+    pub fn has_tag(&self, tag: &str) -> bool {
+        self.tags.iter().any(|t| t == tag)
+    }
+}
+
+impl From<&crate::CatalogCard> for CubeCard {
+    fn from(c: &crate::CatalogCard) -> Self {
+        Self {
+            name: c.name.clone(),
+            mana_cost: c.mana_cost.clone(),
+            cmc: c.cmc,
+            type_line: c.type_line.clone(),
+            colors: c.colors.clone(),
+            color_identity: c.color_identity.clone(),
+            oracle_text: c.oracle_text.clone(),
+            set: c.set.clone(),
+            rarity: c.rarity.clone(),
+            is_land: c.is_land,
+            is_creature: c.is_creature,
+            power: c.power.clone(),
+            toughness: c.toughness.clone(),
+            loyalty: c.loyalty.clone(),
+            qty: 1,
+            tags: c.tags.clone(),
+            subtypes: c.subtypes.clone(),
+        }
+    }
 }
 
 /// `GET /api/cube?ref=` and the body of `POST /api/cube`.
@@ -339,5 +378,23 @@ mod tests {
         assert_eq!(v["legality"], "pauper");
         assert_eq!(v["variants"][0], "planechase");
         assert_eq!(crate::Format::parse("Oathbreaker"), Some(crate::Format::Oathbreaker));
+    }
+
+    #[test]
+    fn cube_cards_keep_tags_and_group_by_type() {
+        let raw = r#"{"ref":"user:Mine","name":"Mine","packs":3,"packSize":15,"cards":[
+            {"name":"Swords to Plowshares","manaCost":"{W}","cmc":1,"type":"Instant","colors":"W","colorIdentity":"W",
+             "isLand":false,"isCreature":false,"tags":["removal"],"subtypes":[],"popularity":0.9,"qty":1},
+            {"name":"Dryad Arbor","cmc":0,"type":"Land Creature - Forest Dryad","colors":"G","isLand":true,"isCreature":true,"qty":1}]}"#;
+        let c: Cube = serde_json::from_str(raw).unwrap();
+        assert!(c.cards[0].has_tag("removal"));
+        assert_eq!(c.cards[0].primary_type(), crate::CardKind::Instant);
+        assert_eq!(c.cards[1].primary_type(), crate::CardKind::Land);
+        // saving sends tags back only when present; empty lists stay off the wire
+        let v = serde_json::to_value(&c).unwrap();
+        assert_eq!(v["cards"][0]["tags"][0], "removal");
+        assert!(v["cards"][1].get("tags").is_none());
+        let from: CubeCard = (&crate::CatalogCard { name: "Opt".into(), tags: vec!["draw".into()], ..Default::default() }).into();
+        assert_eq!((from.qty, from.has_tag("draw")), (1, true));
     }
 }

@@ -24,12 +24,15 @@ pub enum ImageVersion {
     Large,
     /// art only (battlefield frames)
     ArtCrop,
+    /// full card, downscaled by the client to ~168 px wide after decoding (whole-cube image grids,
+    /// where hundreds of full-size textures would not fit in memory); fetched as `normal`
+    Thumb,
 }
 
 impl ImageVersion {
     pub fn as_str(self) -> &'static str {
         match self {
-            Self::Normal => "normal",
+            Self::Normal | Self::Thumb => "normal",
             Self::Large => "large",
             Self::ArtCrop => "art_crop",
         }

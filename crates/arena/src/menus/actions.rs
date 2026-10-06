@@ -171,7 +171,7 @@ pub(super) fn debug_jump(
             next.set(AppState::DeckSelect);
         }
         "settings" => menu.settings_open = true,
-        "designer" | "designer-box" | "designer-mat" => next.set(AppState::Designer),
+        "designer" | "designer-box" | "designer-mat" | "designer-art" => next.set(AppState::Designer),
         "multiplayer" => next.set(AppState::Multiplayer),
         "avatar" => next.set(AppState::AvatarStudio),
         "modes" => next.set(AppState::ModeSelect),

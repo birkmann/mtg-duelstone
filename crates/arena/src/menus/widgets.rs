@@ -1,9 +1,11 @@
-//! Reusable menu widgets: styled text fields (bevy's `EditableText`) and settings sliders.
+//! Reusable menu widgets: styled text fields (bevy's `EditableText`), mana-cost pips and settings sliders.
 
 use bevy::input_focus::InputFocus;
 use bevy::prelude::*;
 use bevy::text::{EditableText, FontSize, FontSource};
 use bevy::ui::{BackgroundGradient, ColorStop, LinearGradient, RelativeCursorPosition};
+
+use mtg_client::deckstats::mana_symbols;
 
 use crate::shared::{ArenaFonts, Settings};
 use crate::style::*;
@@ -15,8 +17,9 @@ pub enum Field {
     PlayerName,
     ImportText,
     ImportName,
-    /// Design studio: name of the design being edited.
+    /// Design studio: name of the design being edited, and the artwork picker's card search.
     DesignName,
+    ArtSearch,
     /// Deck builder: deck name, card-name search, rules-text search.
     BuilderName,
     BuilderSearch,
@@ -25,10 +28,12 @@ pub enum Field {
     Invite,
     /// Event setup: filter the cube / set list.
     SourceFilter,
-    /// Cube designer: card search, cube name, pasted list.
+    /// Cube designer: card search, cube name, pasted list, the views' filter, the cube library filter.
     CubeSearch,
     CubeName,
     CubeImportText,
+    CubeFilter,
+    CubeLibraryFilter,
     /// Avatar studio: card search.
     AvatarSearch,
 }
@@ -82,6 +87,27 @@ fn commit_fields(mut settings: ResMut<Settings>, q: Query<(&Field, &EditableText
             _ => {}
         }
     }
+}
+
+/// Mana cost as small pips: icon for coloured/colourless symbols, a numbered disc otherwise.
+pub fn cost_pips(p: &mut ChildSpawnerCommands, fonts: &ArenaFonts, assets: &AssetServer, cost: &str, size: f32) {
+    p.spawn((Node { column_gap: Val::Px(1.5), align_items: AlignItems::Center, flex_shrink: 0.0, ..default() }, Pickable::IGNORE)).with_children(|r| {
+        for sym in mana_symbols(cost) {
+            let one = sym.len() == 1 && "WUBRGC".contains(sym);
+            if one {
+                r.spawn((mana_pip(assets, sym.chars().next().unwrap(), size), Pickable::IGNORE));
+            } else {
+                let first = sym.split('/').find_map(|s| s.chars().next().filter(|c| "WUBRG".contains(*c)));
+                let bg = first.map(mana_color).unwrap_or(Color::srgb(0.72, 0.70, 0.66));
+                r.spawn((
+                    Node { width: Val::Px(size), height: Val::Px(size), border_radius: BorderRadius::MAX, justify_content: JustifyContent::Center, align_items: AlignItems::Center, ..default() },
+                    BackgroundColor(bg),
+                    Pickable::IGNORE,
+                ))
+                .with_child((ui_text(&fonts.numbers, sym.replace('/', ""), size * 0.66, Color::srgb(0.08, 0.06, 0.05)), Pickable::IGNORE));
+            }
+        }
+    });
 }
 
 // -------------------------------------------------------------------------------------------

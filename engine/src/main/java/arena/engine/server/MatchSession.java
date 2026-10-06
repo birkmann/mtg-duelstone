@@ -5,6 +5,7 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import forge.deck.Deck;
 import forge.game.Game;
+import forge.game.GameRules;
 import forge.game.GameType;
 import forge.game.card.CardView;
 import forge.game.phase.PhaseType;
@@ -19,6 +20,7 @@ import forge.player.LobbyPlayerHuman;
 import forge.util.MyRandom;
 import org.eclipse.jetty.websocket.api.Session;
 
+import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
@@ -340,9 +342,28 @@ public final class MatchSession {
             final Runnable r = onOver;
             if (r != null) try { r.run(); } catch (final Exception e) { System.err.println("[match " + id + "] onOver: " + e); }
         });
-        hosted.startMatch(setup.baseType(), setup.applied(), players, guis);
+        hosted.startMatch(rules(setup.baseType()), setup.applied(), players, guis, null);
         final Game g = hosted.getGame();
         if (g != null) for (final Seat s : seats) if (s.kind == Seat.Kind.HUMAN) g.subscribeToEvents(s.gui.eventSubscriber());
+    }
+
+    /**
+     * Forge's own defaults (ante, mana burn, AI sideboarding from the preferences), minus the pre-game "AI can't play
+     * these cards well" popup: it's a Forge deckbuilding hint, meaningless to someone who just picked an opponent.
+     * The defaults builder is private in HostedMatch, so reach it reflectively rather than copy it out of sync.
+     */
+    private static GameRules rules(final GameType type) {
+        GameRules r;
+        try {
+            final Method m = HostedMatch.class.getDeclaredMethod("getDefaultRules", GameType.class);
+            m.setAccessible(true);
+            r = (GameRules) m.invoke(null, type);
+        } catch (final ReflectiveOperationException e) {
+            System.err.println("[match] HostedMatch defaults unavailable, plain rules: " + e);
+            r = new GameRules(type);
+        }
+        r.setWarnAboutAICards(false);
+        return r;
     }
 
     public JsonObject describe() {

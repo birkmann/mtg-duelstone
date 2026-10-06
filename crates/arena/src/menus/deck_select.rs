@@ -9,12 +9,14 @@
 //! reads HOST TABLE / TAKE SEAT, the right panel picks the deck for AI-filled seats, and a joiner's
 //! format is fixed by the table.
 
+use std::collections::{HashMap, VecDeque};
+
 use bevy::input::mouse::{MouseScrollUnit, MouseWheel};
 use bevy::prelude::*;
 use bevy::ui::{BackgroundGradient, ColorStop, LinearGradient, RelativeCursorPosition};
-use crossbeam_channel::Receiver;
+use crossbeam_channel::{Receiver, TryRecvError};
 use mtg_client::{Api, ImageRequest, ImageVersion};
-use mtg_protocol::{DeckInfo, Format};
+use mtg_protocol::{DeckFull, DeckInfo, Format};
 use serde_json::Value;
 
 use super::widgets::{Field, text_field};
@@ -31,6 +33,7 @@ impl Plugin for DeckSelectPlugin {
             .init_resource::<DeckFetch>()
             .init_resource::<DeckSelection>()
             .init_resource::<ImportState>()
+            .init_resource::<CoverFallbacks>()
             .add_message::<RefreshDecks>()
             .add_systems(OnEnter(AppState::DeckSelect), (spawn_screen, request_initial_fetch))
             .add_systems(
@@ -41,6 +44,7 @@ impl Plugin for DeckSelectPlugin {
                     rebuild_lists,
                     refresh_visuals,
                     sync_tile_art,
+                    fetch_fallback_covers,
                     art_fade,
                     wheel_scroll,
                     sync_import_panel,
@@ -199,12 +203,29 @@ struct PlayButton;
 #[derive(Component)]
 pub(super) struct ArtFade(pub(super) Handle<Image>);
 /// A tile's art; follows `DeckLook::art` so a new pick shows without rebuilding the grid.
+/// Every deck gets a face: the player's pick, else the engine's cover, else the deck's own cards
+/// (`CoverFallbacks`) — skipping any whose art failed to load.
 #[derive(Component)]
 struct TileArt {
     deck: String,
     /// The engine's pick (`DeckInfo::cover`).
     cover: Option<String>,
     shown: Option<String>,
+}
+
+/// Mirrors the engine's `RANDOM_COVER`, for engines that send no covers.
+const RANDOM_COVER: &str = "Chaos Warp";
+/// Deck fetches at once while finding fallback covers: enough to fill a screen quickly without
+/// queueing ahead of the art requests themselves.
+const COVER_FETCHES: usize = 4;
+
+/// Fallback faces for decks without a usable `cover` (an older engine sends none; a cover's art can
+/// be missing offline): the deck's cards in `art_choices` order, fetched only for those decks.
+#[derive(Resource, Default)]
+struct CoverFallbacks {
+    choices: HashMap<String, Vec<String>>,
+    wanted: VecDeque<String>,
+    inflight: Vec<(String, Receiver<Result<DeckFull, String>>)>,
 }
 
 fn spawn_screen(mut commands: Commands, fonts: Res<ArenaFonts>, mode: Res<MatchMode>, cfg: Res<MatchConfig>, facts: Res<ServerFacts>) {
@@ -425,7 +446,11 @@ fn spawn_tile(g: &mut ChildSpawnerCommands, d: &DeckInfo, fonts: &ArenaFonts, as
                 });
                 // the deck's face: the player's pick or the engine's cover card (`sync_tile_art`)
                 a.spawn((
-                    TileArt { deck: d.deck_ref.clone(), cover: d.cover.clone().or_else(|| d.commanders.first().cloned()), shown: None },
+                    TileArt {
+                        deck: d.deck_ref.clone(),
+                        cover: d.cover.clone().or_else(|| d.commanders.first().cloned()).or_else(|| (d.deck_ref == "random").then(|| RANDOM_COVER.to_string())),
+                        shown: None,
+                    },
                     ArtFade(Handle::default()),
                     Node { position_type: PositionType::Absolute, left: Val::Px(0.0), top: Val::Px(0.0), width: Val::Percent(100.0), height: Val::Percent(100.0), ..default() },
                     ImageNode { color: Color::srgba(1.0, 1.0, 1.0, 0.0), image_mode: NodeImageMode::Auto, ..default() },
@@ -506,20 +531,75 @@ fn refresh_visuals(
     }
 }
 
-fn sync_tile_art(settings: Res<Settings>, mut images: ResMut<CardImages>, mut q: Query<(&mut TileArt, &mut ArtFade, &mut ImageNode)>) {
+fn sync_tile_art(
+    settings: Res<Settings>,
+    mut images: ResMut<CardImages>,
+    mut fallbacks: ResMut<CoverFallbacks>,
+    mut seen_failures: Local<usize>,
+    mut q: Query<(&mut TileArt, &mut ArtFade, &mut ImageNode)>,
+) {
+    let failures = images.failures();
+    let recheck = settings.is_changed() || fallbacks.is_changed() || failures != *seen_failures;
+    *seen_failures = failures;
+    let crop = |name: &str| ImageRequest { name: name.to_string(), set: None, back: false, version: ImageVersion::ArtCrop };
     for (mut t, mut fade, mut node) in &mut q {
-        if !settings.is_changed() && !t.is_added() {
+        if !recheck && !t.is_added() {
             continue;
         }
-        let want = settings.deck_looks.get(&t.deck).and_then(|l| l.art.clone()).or_else(|| t.cover.clone());
+        let picked = settings.deck_looks.get(&t.deck).and_then(|l| l.art.clone());
+        let fetched = fallbacks.choices.get(&t.deck);
+        let have_fallbacks = fetched.is_some();
+        let want = picked.into_iter().chain(t.cover.clone()).chain(fetched.into_iter().flatten().cloned()).find(|n| !images.has_failed(&crop(n)));
+        if want.is_none() && !have_fallbacks && super::deck_art::can_pick(&t.deck) && !fallbacks.wanted.contains(&t.deck) {
+            // queueing isn't news for `sync_tile_art`; the answer is (`fetch_fallback_covers`)
+            fallbacks.bypass_change_detection().wanted.push_back(t.deck.clone());
+        }
         if want == t.shown {
             continue;
         }
-        let h = want.as_ref().map(|name| images.request_raw(ImageRequest { name: name.clone(), set: None, back: false, version: ImageVersion::ArtCrop })).unwrap_or_default();
+        let h = want.as_deref().map(|name| images.request_raw(crop(name))).unwrap_or_default();
         fade.0 = h.clone();
         node.image = h;
         node.color = Color::srgba(1.0, 1.0, 1.0, 0.0);
         t.shown = want;
+    }
+}
+
+fn fetch_fallback_covers(mut fallbacks: ResMut<CoverFallbacks>, list: Res<DeckList>, cfg: Option<Res<EngineConfig>>, settings: Res<Settings>) {
+    // polling must not look like a change, or every tile would re-check every frame
+    let fb = fallbacks.bypass_change_detection();
+    let mut done = Vec::new();
+    fb.inflight.retain(|(r, rx)| match rx.try_recv() {
+        Ok(res) => {
+            done.push((r.clone(), res));
+            false
+        }
+        Err(TryRecvError::Empty) => true,
+        Err(TryRecvError::Disconnected) => {
+            done.push((r.clone(), Err("fetch dropped".into())));
+            false
+        }
+    });
+    let landed = !done.is_empty();
+    for (r, res) in done {
+        // an empty list still settles the deck, so a failing one isn't fetched again
+        let names = res.map(|d| super::deck_art::art_choices(&d)).unwrap_or_else(|e| {
+            warn!("cover fallback for {r}: {e}");
+            Vec::new()
+        });
+        fb.choices.insert(r, names);
+    }
+    while fb.inflight.len() < COVER_FETCHES
+        && let Some(r) = fb.wanted.pop_front()
+    {
+        if fb.choices.contains_key(&r) || fb.inflight.iter().any(|(x, _)| *x == r) {
+            continue;
+        }
+        let (base, fmt, deck_ref) = (rest_base(&cfg, &settings), list.format, r.clone());
+        fb.inflight.push((r, mtg_client::spawn(async move { Api::new(base).deck(&deck_ref, fmt).await.map_err(|e| format!("{e:#}")) })));
+    }
+    if landed {
+        fallbacks.set_changed();
     }
 }
 

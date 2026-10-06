@@ -2,7 +2,8 @@
 //!
 //! Why data instead of images: a design is a handful of choices (pattern, three colours, emblem,
 //! frame, finish) that `paint` turns into textures at any resolution. The saved file stays tiny,
-//! the studio can preview every edit live, and deck tiles get crisp thumbnails for free.
+//! the studio can preview every edit live, and deck tiles get crisp thumbnails for free. Card art
+//! stays data too: a design names the card, and the painter fetches its art crop.
 
 use std::hash::{DefaultHasher, Hash, Hasher};
 
@@ -104,6 +105,10 @@ pub struct Design {
     /// Pattern scale: 0.5 = fine, 2.0 = bold.
     pub scale: f32,
     pub seed: u32,
+    /// A card whose art crop is printed where the pattern would be (sleeve back, deckbox front and
+    /// back, playmat); frame, colours, emblem and finish still go on top.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub art: Option<String>,
     /// Shipped artwork used instead of painting (asset path). Presets only, never saved.
     #[serde(skip)]
     pub image: Option<&'static str>,
@@ -126,6 +131,7 @@ impl Default for Design {
             finish: Finish::Matte,
             scale: 1.0,
             seed: 1,
+            art: None,
             image: None,
             builtin: false,
         }
@@ -137,7 +143,7 @@ impl Design {
     pub fn fingerprint(&self) -> u64 {
         let mut h = DefaultHasher::new();
         (self.kind, self.pattern, self.base, self.detail, self.accent, self.emblem, self.frame, self.finish).hash(&mut h);
-        (self.scale.to_bits(), self.seed, self.image).hash(&mut h);
+        (self.scale.to_bits(), self.seed, &self.art, self.image).hash(&mut h);
         h.finish()
     }
 
@@ -202,6 +208,7 @@ fn preset(kind: DesignKind, id: &str, name: &str, pattern: Pattern, cols: [u32; 
         finish,
         scale,
         seed: id.bytes().fold(7u32, |h, b| h.wrapping_mul(31).wrapping_add(b as u32)),
+        art: None,
         image: None,
         builtin: true,
     }

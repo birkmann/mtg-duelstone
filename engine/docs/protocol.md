@@ -278,7 +278,7 @@ engine only stores, sanitizes and relays it.
 | DELETE | `/api/cube` | `?name=` | |
 | POST | `/api/cube/import` | `{text}` (one card per line: `1 Name`, `2x Name`, `Name (SET)`) | `{cards:[…], unresolved:[{line, suggestions}]}` |
 | GET | `/api/sets` | | draftable sets with boosters, newest first `[{code, name, date}]` |
-| GET | `/api/cards/search` | `?q=| GET | `/api/cards/search` | `?q=&limit=` | catalog cards (cube designer search) |limit=` | catalog cards (cube designer search; the full filter set is above) |
+| GET | `/api/cards/search` | `?q=&ci=&type=&cmc=&limit=` | catalog cards for the cube designer's search (the full filter set is above). Cube cards (`/api/cube`, import) are the same catalog cards plus `qty`, so they carry `tags` and `subtypes` too |
 
 ### Limited events (cube draft, set draft, sealed)
 - `POST /api/event` `{kind: "cubeDraft"|"setDraft"|"sealed", source: <cube ref or set code>, podSize: 2..8, name, seed?, avatar?}`

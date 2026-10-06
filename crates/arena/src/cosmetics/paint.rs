@@ -6,7 +6,8 @@
 //! `Image` works everywhere (3D materials and UI nodes) with no extra shader pipeline.
 //!
 //! Every surface is painted by one function, [`surface`], in face-local coordinates, so a sleeve,
-//! the side of a box and a playmat share the same look at any resolution.
+//! the side of a box and a playmat share the same look at any resolution. A design with card art
+//! swaps the pattern for that art on its big faces; everything layered on top stays the same.
 
 use std::f32::consts::{PI, TAU};
 
@@ -35,17 +36,51 @@ pub enum PaintTarget {
     Thumb,
 }
 
-pub fn render(d: &Design, t: PaintTarget) -> Image {
+/// `art` is the decoded art crop of `d.art`; `None` paints the pattern (no art, or it failed to load).
+pub fn render(d: &Design, t: PaintTarget, art: Option<&Art>) -> Image {
     match (d.kind, t) {
-        (DesignKind::Sleeve, PaintTarget::Full) => finish_image(paint_sleeve(d, SLEEVE_PX.0, SLEEVE_PX.1), SLEEVE_PX, true),
-        (DesignKind::Sleeve, PaintTarget::Thumb) => finish_image(paint_sleeve(d, 122, 170), (122, 170), false),
+        (DesignKind::Sleeve, PaintTarget::Full) => finish_image(paint_sleeve(d, art, SLEEVE_PX.0, SLEEVE_PX.1), SLEEVE_PX, true),
+        (DesignKind::Sleeve, PaintTarget::Thumb) => finish_image(paint_sleeve(d, art, 122, 170), (122, 170), false),
         (DesignKind::Deckbox, PaintTarget::Full) => {
-            let (px, size) = paint_box_atlas(d);
+            let (px, size) = paint_box_atlas(d, art);
             finish_image(px, size, true)
         }
-        (DesignKind::Deckbox, PaintTarget::Thumb) => finish_image(paint_box_thumb(d, THUMB_BOX_PX.0, THUMB_BOX_PX.1), THUMB_BOX_PX, false),
-        (DesignKind::Playmat, PaintTarget::Full) => finish_image(paint_playmat(d, PLAYMAT_PX.0, PLAYMAT_PX.1), PLAYMAT_PX, true),
-        (DesignKind::Playmat, PaintTarget::Thumb) => finish_image(paint_playmat(d, 192, 124), (192, 124), false),
+        (DesignKind::Deckbox, PaintTarget::Thumb) => finish_image(paint_box_thumb(d, art, THUMB_BOX_PX.0, THUMB_BOX_PX.1), THUMB_BOX_PX, false),
+        (DesignKind::Playmat, PaintTarget::Full) => finish_image(paint_playmat(d, art, PLAYMAT_PX.0, PLAYMAT_PX.1), PLAYMAT_PX, true),
+        (DesignKind::Playmat, PaintTarget::Thumb) => finish_image(paint_playmat(d, art, 192, 124), (192, 124), false),
+    }
+}
+
+/// A card's art crop in linear light, ready for sampling.
+pub struct Art {
+    w: usize,
+    h: usize,
+    px: Vec<C3>,
+}
+
+impl Art {
+    /// From 8-bit sRGB RGBA (only the first `w * h` pixels are read, so a mip chain may follow).
+    pub fn from_srgba(w: usize, h: usize, rgba: &[u8]) -> Option<Art> {
+        if w == 0 || h == 0 || rgba.len() < w * h * 4 {
+            return None;
+        }
+        let lut: Vec<f32> = (0..256).map(|v| (v as f32 / 255.0).powf(2.2)).collect();
+        let px = rgba[..w * h * 4].as_chunks::<4>().0.iter().map(|p| [lut[p[0] as usize], lut[p[1] as usize], lut[p[2] as usize]]).collect();
+        Some(Art { w, h, px })
+    }
+
+    /// Bilinear sample with the art scaled to cover a face of this aspect, centred (the excess is
+    /// cropped, like a print that bleeds off every edge).
+    fn cover(&self, u: f32, v: f32, aspect: f32) -> C3 {
+        let a = self.w as f32 / self.h as f32;
+        let (fx, fy) = if aspect > a { (1.0, a / aspect) } else { (aspect / a, 1.0) };
+        let x = ((0.5 + (u - 0.5) * fx) * self.w as f32 - 0.5).clamp(0.0, (self.w - 1) as f32);
+        let y = ((0.5 + (v - 0.5) * fy) * self.h as f32 - 0.5).clamp(0.0, (self.h - 1) as f32);
+        let (x0, y0) = (x as usize, y as usize);
+        let (x1, y1) = ((x0 + 1).min(self.w - 1), (y0 + 1).min(self.h - 1));
+        let (tx, ty) = (x - x0 as f32, y - y0 as f32);
+        let at = |x: usize, y: usize| self.px[y * self.w + x];
+        mix(mix(at(x0, y0), at(x1, y0), tx), mix(at(x0, y1), at(x1, y1), tx), ty)
     }
 }
 
@@ -349,7 +384,7 @@ fn emblem(e: Emblem, x: f32, y: f32) -> (f32, f32) {
 
 /// How a face uses the design.
 #[derive(Clone, Copy)]
-struct Surface {
+struct Surface<'a> {
     /// width / height of the face
     aspect: f32,
     /// emblem radius as a fraction of the face height (0 = no emblem)
@@ -364,6 +399,8 @@ struct Surface {
     px: f32,
     /// offset into the continuous pattern space (seamless box sides)
     offset: Vec2,
+    /// card art printed instead of the pattern (big faces only)
+    art: Option<&'a Art>,
 }
 
 struct Colors {
@@ -380,13 +417,18 @@ fn colors(d: &Design) -> Colors {
 fn surface(d: &Design, cols: &Colors, s: &Surface, u: f32, v: f32) -> C3 {
     let (cx, cy) = ((u - 0.5) * s.aspect, v - 0.5);
     let (px, py) = (u * s.aspect + s.offset.x, v + s.offset.y);
-    let (body, glint) = pattern(d, cx, cy, px, py);
     let r = (cx * cx / (s.aspect * s.aspect).max(1.0) + cy * cy).sqrt();
 
-    // light ground in the middle, darker toward the rim
-    let ground = mix(mul(cols.base, 0.62), mul(cols.base, 1.18), 1.0 - r * 1.4);
-    let mut col = mix(ground, cols.detail, body.clamp(0.0, 1.0) * s.contrast);
-    col = mix(col, cols.accent, glint.clamp(0.0, 1.0) * s.contrast);
+    let mut col = if let Some(art) = s.art {
+        // calm surfaces (playmats) tint the art toward the base colour so cards still read on it
+        mix(art.cover(u, v, s.aspect), mul(cols.base, 0.5), (1.0 - s.contrast) * 0.5)
+    } else {
+        let (body, glint) = pattern(d, cx, cy, px, py);
+        // light ground in the middle, darker toward the rim
+        let ground = mix(mul(cols.base, 0.62), mul(cols.base, 1.18), 1.0 - r * 1.4);
+        let col = mix(ground, cols.detail, body.clamp(0.0, 1.0) * s.contrast);
+        mix(col, cols.accent, glint.clamp(0.0, 1.0) * s.contrast)
+    };
 
     // frame
     let e = (u * s.aspect).min((1.0 - u) * s.aspect).min(v).min(1.0 - v);
@@ -465,9 +507,9 @@ fn surface(d: &Design, cols: &Colors, s: &Surface, u: f32, v: f32) -> C3 {
 
 // ---- sleeve ---------------------------------------------------------------------------------
 
-fn paint_sleeve(d: &Design, w: usize, h: usize) -> Vec<u8> {
+fn paint_sleeve(d: &Design, art: Option<&Art>, w: usize, h: usize) -> Vec<u8> {
     let cols = colors(d);
-    let s = Surface { aspect: w as f32 / h as f32, emblem: 0.2, frame: true, medallion: true, contrast: 1.0, px: 1.0 / h as f32, offset: Vec2::ZERO };
+    let s = Surface { aspect: w as f32 / h as f32, emblem: 0.2, frame: true, medallion: true, contrast: 1.0, px: 1.0 / h as f32, offset: Vec2::ZERO, art };
     let mut out = vec![0u8; w * h * 4];
     for y in 0..h {
         for x in 0..w {
@@ -484,10 +526,10 @@ fn paint_sleeve(d: &Design, w: usize, h: usize) -> Vec<u8> {
 
 // ---- playmat --------------------------------------------------------------------------------
 
-fn paint_playmat(d: &Design, w: usize, h: usize) -> Vec<u8> {
+fn paint_playmat(d: &Design, art: Option<&Art>, w: usize, h: usize) -> Vec<u8> {
     let cols = colors(d);
     let aspect = w as f32 / h as f32;
-    let s = Surface { aspect, emblem: 0.17, frame: true, medallion: true, contrast: 0.55, px: 1.0 / h as f32, offset: Vec2::ZERO };
+    let s = Surface { aspect, emblem: 0.17, frame: true, medallion: true, contrast: 0.55, px: 1.0 / h as f32, offset: Vec2::ZERO, art };
     let mut out = vec![0u8; w * h * 4];
     for y in 0..h {
         for x in 0..w {
@@ -495,16 +537,19 @@ fn paint_playmat(d: &Design, w: usize, h: usize) -> Vec<u8> {
             let mut col = surface(d, &cols, &s, u, v);
             let (cx, cy) = ((u - 0.5) * aspect, v - 0.5);
             let aa = s.px * 1.5;
-            // centre line between the halves, broken by the medallion
-            let gap = smooth(0.26, 0.3, cx.abs());
-            col = mix(col, cols.accent, (1.0 - smooth(0.0015, 0.0015 + aa, cy.abs())) * 0.35 * gap);
-            // big faint rings around the medallion
-            let r = (cx * cx + cy * cy).sqrt();
-            for (rad, k) in [(0.36, 0.22), (0.62, 0.12)] {
-                col = mix(col, cols.accent, (1.0 - smooth(0.002, 0.002 + aa, (r - rad).abs())) * k);
+            // centre line and rings belong to the painted mats; drawn over art they only cut it up
+            if art.is_none() {
+                // centre line between the halves, broken by the medallion
+                let gap = smooth(0.26, 0.3, cx.abs());
+                col = mix(col, cols.accent, (1.0 - smooth(0.0015, 0.0015 + aa, cy.abs())) * 0.35 * gap);
+                // big faint rings around the medallion
+                let r = (cx * cx + cy * cy).sqrt();
+                for (rad, k) in [(0.36, 0.22), (0.62, 0.12)] {
+                    col = mix(col, cols.accent, (1.0 - smooth(0.002, 0.002 + aa, (r - rad).abs())) * k);
+                }
             }
-            // keep the busy pattern down where the cards lie
-            col = mul(col, 0.85);
+            // keep the busy pattern (or art) down where the cards lie
+            col = mul(col, if art.is_some() { 0.78 } else { 0.85 });
             put(&mut out, (y * w + x) * 4, col, 1.0);
         }
     }
@@ -542,16 +587,26 @@ pub fn box_atlas_layout() -> ([(BoxFace, [usize; 4]); 6], (usize, usize)) {
 }
 
 /// One point on a deckbox face, `u`/`v` face-local (v down; for the top, v = 0 is the back edge).
-fn box_face(d: &Design, cols: &Colors, face: BoxFace, u: f32, v: f32, px: f32) -> C3 {
+/// Card art goes on the front and back; the narrow sides and the top keep the pattern.
+fn box_face(d: &Design, cols: &Colors, face: BoxFace, u: f32, v: f32, px: f32, art: Option<&Art>) -> C3 {
     let (w, h, dep) = (BOX_SIZE.x, BOX_SIZE.y, BOX_SIZE.z);
-    let side = |offset: f32, aspect: f32, emblem: f32| Surface { aspect, emblem, frame: true, medallion: emblem > 0.0, contrast: 1.0, px, offset: Vec2::new(offset, 0.0) };
+    let side = |offset: f32, aspect: f32, emblem: f32, with_art: bool| Surface {
+        aspect,
+        emblem,
+        frame: true,
+        medallion: emblem > 0.0,
+        contrast: 1.0,
+        px,
+        offset: Vec2::new(offset, 0.0),
+        art: art.filter(|_| with_art),
+    };
     let mut col = match face {
-        BoxFace::Front => surface(d, cols, &side(0.0, w / h, 0.17), u, v * (1.0 - 0.0)),
-        BoxFace::Right => surface(d, cols, &side(w / h, dep / h, 0.0), u, v),
-        BoxFace::Back => surface(d, cols, &side((w + dep) / h, w / h, 0.11), u, v),
-        BoxFace::Left => surface(d, cols, &side((2.0 * w + dep) / h, dep / h, 0.0), u, v),
+        BoxFace::Front => surface(d, cols, &side(0.0, w / h, 0.17, true), u, v),
+        BoxFace::Right => surface(d, cols, &side(w / h, dep / h, 0.0, false), u, v),
+        BoxFace::Back => surface(d, cols, &side((w + dep) / h, w / h, 0.11, true), u, v),
+        BoxFace::Left => surface(d, cols, &side((2.0 * w + dep) / h, dep / h, 0.0, false), u, v),
         BoxFace::Top => {
-            let s = Surface { aspect: w / dep, emblem: 0.32, frame: true, medallion: false, contrast: 0.8, px: px * h / dep, offset: Vec2::new(0.0, 3.0) };
+            let s = Surface { aspect: w / dep, emblem: 0.32, frame: true, medallion: false, contrast: 0.8, px: px * h / dep, offset: Vec2::new(0.0, 3.0), art: None };
             mul(surface(d, cols, &s, u, v), 1.05)
         }
         BoxFace::Bottom => return mul(cols.base, 0.25),
@@ -570,7 +625,7 @@ fn box_face(d: &Design, cols: &Colors, face: BoxFace, u: f32, v: f32, px: f32) -
     col
 }
 
-fn paint_box_atlas(d: &Design) -> (Vec<u8>, (usize, usize)) {
+fn paint_box_atlas(d: &Design, art: Option<&Art>) -> (Vec<u8>, (usize, usize)) {
     let cols = colors(d);
     let (rects, (aw, ah)) = box_atlas_layout();
     let mut out = vec![0u8; aw * ah * 4];
@@ -579,7 +634,7 @@ fn paint_box_atlas(d: &Design) -> (Vec<u8>, (usize, usize)) {
         for y in 0..fh {
             for x in 0..fw {
                 let (u, v) = ((x as f32 + 0.5) / fw as f32, (y as f32 + 0.5) / fh as f32);
-                let col = box_face(d, &cols, face, u, v, px);
+                let col = box_face(d, &cols, face, u, v, px, art);
                 put(&mut out, ((y0 + y) * aw + x0 + x) * 4, col, 1.0);
             }
         }
@@ -590,7 +645,7 @@ fn paint_box_atlas(d: &Design) -> (Vec<u8>, (usize, usize)) {
 /// A 3/4 view of the box drawn straight from the face functions (no atlas): front, right side
 /// and top as affine parallelograms, 2×2 supersampled, on a transparent background with a soft
 /// contact shadow.
-fn paint_box_thumb(d: &Design, w: usize, h: usize) -> Vec<u8> {
+fn paint_box_thumb(d: &Design, art: Option<&Art>, w: usize, h: usize) -> Vec<u8> {
     let cols = colors(d);
     let fh = h as f32 * 0.6;
     let fw = fh * BOX_SIZE.x / BOX_SIZE.y;
@@ -603,7 +658,7 @@ fn paint_box_thumb(d: &Design, w: usize, h: usize) -> Vec<u8> {
         // front
         let (u, v) = ((p.x - x0) / fw, (p.y - y0) / fh);
         if (0.0..1.0).contains(&u) && (0.0..1.0).contains(&v) {
-            let mut c = box_face(d, &cols, BoxFace::Front, u, v, px);
+            let mut c = box_face(d, &cols, BoxFace::Front, u, v, px, art);
             let edge = (u * fw).min(v * fh);
             c = add(c, mul(cols.accent, (1.0 - smooth(0.0, 1.6, edge)) * 0.25));
             return Some(c);
@@ -612,13 +667,13 @@ fn paint_box_thumb(d: &Design, w: usize, h: usize) -> Vec<u8> {
         let s = (p.x - (x0 + fw)) / dv.x;
         let t = (p.y - y0 - s * dv.y) / fh;
         if (0.0..1.0).contains(&s) && (0.0..1.0).contains(&t) {
-            return Some(mul(box_face(d, &cols, BoxFace::Right, s, t, px * 2.0), 0.58));
+            return Some(mul(box_face(d, &cols, BoxFace::Right, s, t, px * 2.0, art), 0.58));
         }
         // top: origin at the front's top-left corner, spanned by width and depth
         let t = (p.y - y0) / dv.y;
         let s = (p.x - x0 - t * dv.x) / fw;
         if (0.0..1.0).contains(&s) && (0.0..1.0).contains(&t) {
-            return Some(mul(box_face(d, &cols, BoxFace::Top, s, 1.0 - t, px * 2.0), 1.12));
+            return Some(mul(box_face(d, &cols, BoxFace::Top, s, 1.0 - t, px * 2.0, art), 1.12));
         }
         None
     };
@@ -674,14 +729,33 @@ mod tests {
     fn every_preset_paints_every_target() {
         // small sizes keep the test fast; the full-size path is the same code
         for d in presets() {
-            let s = paint_sleeve(&d, 24, 34);
+            let s = paint_sleeve(&d, None, 24, 34);
             assert_eq!(s.len(), 24 * 34 * 4);
-            let t = paint_box_thumb(&d, 44, 50);
+            let t = paint_box_thumb(&d, None, 44, 50);
             assert!(t.chunks(4).any(|p| p[3] == 255), "{} thumb is empty", d.id);
             assert!(t.chunks(4).any(|p| p[3] == 0), "{} thumb has no transparent background", d.id);
-            let m = paint_playmat(&d, 30, 20);
+            let m = paint_playmat(&d, None, 30, 20);
             assert!(m.chunks(4).all(|p| p[3] == 255));
         }
+    }
+
+    #[test]
+    fn art_replaces_the_pattern_on_the_big_faces() {
+        // a pure green "art crop", landscape like Scryfall's
+        let art = Art::from_srgba(8, 6, &[0, 255, 0, 255].repeat(48)).unwrap();
+        let mut d = presets().into_iter().find(|d| d.id == "dragonscale").unwrap();
+        d.frame = Frame::None;
+        d.emblem = Emblem::None;
+        let centre = |px: &[u8], w: usize, h: usize| px[((h / 2) * w + w / 2) * 4..][..3].to_vec();
+        let s = paint_sleeve(&d, Some(&art), 24, 34);
+        let c = centre(&s, 24, 34);
+        assert!(c[1] > 200 && c[0] < 40 && c[2] < 40, "sleeve centre {c:?} should be the art");
+        let plain = paint_sleeve(&d, None, 24, 34);
+        assert!(centre(&plain, 24, 34)[1] < 150, "without art the pattern shows");
+        let m = paint_playmat(&d, Some(&art), 30, 20);
+        let c = centre(&m, 30, 20);
+        assert!(c[1] > c[0] * 2 && c[1] > c[2] * 2, "playmat centre {c:?} should be the (dimmed) art");
+        assert!(Art::from_srgba(8, 6, &[0; 10]).is_none());
     }
 
     /// `PAINT_DUMP=dir cargo test -p arena dump_paint -- --ignored` writes raw RGBA dumps
@@ -693,7 +767,7 @@ mod tests {
         std::fs::create_dir_all(&dir).unwrap();
         for d in presets() {
             for (t, name) in [(PaintTarget::Full, "full"), (PaintTarget::Thumb, "thumb")] {
-                let img = render(&d, t);
+                let img = render(&d, t, None);
                 let (w, h) = (img.width() as usize, img.height() as usize);
                 let data = img.data.unwrap();
                 std::fs::write(format!("{dir}/{}_{name}_{w}x{h}.rgba", d.id), &data[..w * h * 4]).unwrap();

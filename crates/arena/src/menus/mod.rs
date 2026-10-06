@@ -113,17 +113,8 @@ pub enum MenuAction {
     DealGames(mtg_protocol::Pairing, u8),
     LeaveEvent,
     ReturnToPod,
-    // cube designer (handled in `cubes`)
+    /// open the cube designer (its own clicks are `cubes::CubeAction`)
     Cubes,
-    CubeOpen(String),
-    CubeNew,
-    CubeAdd(String),
-    CubeRemove(String),
-    CubeSearch,
-    CubeImport,
-    CubeSave,
-    CubeDelete,
-    CubeDraft,
 }
 
 /// UI-only state shared by the screens.

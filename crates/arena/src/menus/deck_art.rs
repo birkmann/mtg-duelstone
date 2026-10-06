@@ -3,7 +3,8 @@
 //!
 //! Why client-side settings and not the deck file: precons and themes are read-only on the engine,
 //! and the art is a cosmetic choice like sleeves, which already live per deck in `deck_looks`.
-//! Without a pick the tile shows the engine's `DeckInfo::cover` (commander or signature card).
+//! Without a pick the tile shows the engine's `DeckInfo::cover` (commander or signature card), else
+//! the first of the deck's `art_choices` whose art loads.
 
 use bevy::input::mouse::{MouseScrollUnit, MouseWheel};
 use bevy::prelude::*;
@@ -138,7 +139,7 @@ fn debug_open(
 
 /// Every distinct card worth looking at: commanders, then creatures and planeswalkers, other
 /// spells, and non-basic lands (basics all look alike).
-fn art_choices(deck: &DeckFull) -> Vec<String> {
+pub(super) fn art_choices(deck: &DeckFull) -> Vec<String> {
     let rank = |c: &CatalogCard| {
         let t = c.type_line.to_lowercase();
         if c.is_land { 3 } else if t.contains("creature") || t.contains("planeswalker") { 1 } else { 2 }

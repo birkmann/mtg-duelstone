@@ -6,6 +6,8 @@
 //! and every deck tile wants a thumbnail. Painting runs on worker threads; [`Paints::get`] always
 //! answers immediately with the newest *finished* texture, so nothing ever renders a texture that
 //! isn't there yet (Bevy skips meshes whose texture is missing, which would make card backs blink).
+//! A design with card art waits for that art crop (fetched and decoded once per card, on its own:
+//! `CardImages` hands its pixels to the GPU and keeps none on the CPU) before it is painted.
 //!
 //! What is equipped lives in `Settings` (`sleeve`, `deckbox`, per-deck `deck_looks`, and `theme`
 //! for the playmat, kept for compatibility with the original battlefield themes).
@@ -17,13 +19,18 @@ pub mod paint;
 use std::collections::HashMap;
 #[cfg(not(target_arch = "wasm32"))]
 use std::path::PathBuf;
+use std::sync::Arc;
 
+use bevy::asset::RenderAssetUsages;
+use bevy::image::{CompressedImageFormats, ImageSampler, ImageType};
 use bevy::prelude::*;
+use bevy::render::render_resource::TextureFormat;
 use crossbeam_channel::Receiver;
+use mtg_client::{Api, ImageRequest, ImageVersion};
 
-use crate::shared::{CardImages, MatchConfig, Settings};
+use crate::shared::{CardImages, EngineConfig, MatchConfig, Settings};
 pub use design::{Design, DesignKind, Emblem, Finish, Frame, PALETTE, Pattern, Rgb};
-pub use paint::PaintTarget;
+pub use paint::{Art, PaintTarget};
 
 pub struct CosmeticsPlugin;
 
@@ -187,12 +194,21 @@ struct Entry {
     want: Option<Design>,
 }
 
+enum CardArt {
+    Loading(Receiver<Option<Art>>),
+    Ready(Arc<Art>),
+    /// no image (offline without it, unknown card): the design paints its pattern instead
+    Failed,
+}
+
 /// Painted textures per (design id, target). Owner: cosmetics. Anyone may call [`Paints::get`].
 #[derive(Resource, Default)]
 pub struct Paints {
     entries: HashMap<(String, PaintTarget), Entry>,
     /// shipped artwork for image presets, loaded once
     art: HashMap<&'static str, Handle<Image>>,
+    /// card art crops for designs with `art`, by card name
+    card_art: HashMap<String, CardArt>,
 }
 
 /// At most this many paint jobs run at once (the studio can request dozens of thumbnails).
@@ -231,9 +247,40 @@ fn preload_art(mut paints: ResMut<Paints>, assets: Res<AssetServer>, card_images
     }
 }
 
-fn pump_paints(mut paints: ResMut<Paints>, mut images: ResMut<Assets<Image>>) {
+/// Fetch and decode one card's art crop off the main thread.
+fn fetch_art(base: String, card: String) -> Receiver<Option<Art>> {
+    mtg_client::spawn(async move {
+        let req = ImageRequest { name: card.clone(), set: None, back: false, version: ImageVersion::ArtCrop };
+        let bytes = match Api::new(base).image_bytes(&req).await {
+            Ok(b) => b,
+            Err(e) => {
+                warn!("cosmetics: art for {card} unavailable: {e:#}");
+                return None;
+            }
+        };
+        let mime = if bytes.starts_with(&[0x89, b'P', b'N', b'G']) { "image/png" } else { "image/jpeg" };
+        let img = Image::from_buffer(&bytes, ImageType::MimeType(mime), CompressedImageFormats::NONE, true, ImageSampler::Default, RenderAssetUsages::default()).ok()?;
+        if img.texture_descriptor.format != TextureFormat::Rgba8UnormSrgb {
+            warn!("cosmetics: art for {card} decoded as {:?}", img.texture_descriptor.format);
+            return None;
+        }
+        Art::from_srgba(img.width() as usize, img.height() as usize, img.data.as_deref()?)
+    })
+}
+
+fn pump_paints(mut paints: ResMut<Paints>, mut images: ResMut<Assets<Image>>, cfg: Option<Res<EngineConfig>>) {
+    let Paints { entries, card_art, .. } = &mut *paints;
+    for a in card_art.values_mut() {
+        if let CardArt::Loading(rx) = a {
+            match rx.try_recv() {
+                Ok(art) => *a = art.map_or(CardArt::Failed, |art| CardArt::Ready(Arc::new(art))),
+                Err(crossbeam_channel::TryRecvError::Disconnected) => *a = CardArt::Failed,
+                Err(crossbeam_channel::TryRecvError::Empty) => {}
+            }
+        }
+    }
     let mut running = 0;
-    for e in paints.entries.values_mut() {
+    for e in entries.values_mut() {
         if let Some((fp, rx)) = &e.job {
             match rx.try_recv() {
                 Ok(img) => {
@@ -245,17 +292,35 @@ fn pump_paints(mut paints: ResMut<Paints>, mut images: ResMut<Assets<Image>>) {
             }
         }
     }
-    for ((_, target), e) in paints.entries.iter_mut() {
+    for ((_, target), e) in entries.iter_mut() {
         if running >= MAX_JOBS {
             break;
         }
         if e.job.is_some() {
             continue;
         }
+        let Some(want) = &e.want else { continue };
+        // a design with art waits (keeping its last texture) until the art is in
+        let art = match want.art.as_deref() {
+            None => None,
+            Some(card) => match card_art.get(card) {
+                Some(CardArt::Ready(a)) => Some(a.clone()),
+                Some(CardArt::Failed) => None,
+                Some(CardArt::Loading(_)) => continue,
+                None => {
+                    let load = match &cfg {
+                        Some(cfg) => CardArt::Loading(fetch_art(cfg.base_url.clone(), card.to_string())),
+                        None => CardArt::Failed,
+                    };
+                    card_art.insert(card.to_string(), load);
+                    continue;
+                }
+            },
+        };
         let Some(d) = e.want.take() else { continue };
         let t = *target;
         // a worker thread on desktop; in the browser it runs on the page's event loop
-        e.job = Some((d.fingerprint(), mtg_client::spawn(async move { paint::render(&d, t) })));
+        e.job = Some((d.fingerprint(), mtg_client::spawn(async move { paint::render(&d, t, art.as_deref()) })));
         running += 1;
     }
 }

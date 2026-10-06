@@ -48,27 +48,32 @@ impl CatalogCard {
     }
     /// Primary card type for grouping a decklist, in the usual deck-list order.
     pub fn primary_type(&self) -> CardKind {
-        let t = self.type_line.to_ascii_lowercase();
-        // Land first: "Artifact Land" plays like a land; creature before artifact for artifact creatures.
-        if self.is_land || (t.contains("land") && !t.contains("creature")) {
-            CardKind::Land
-        } else if self.is_creature || t.contains("creature") {
-            CardKind::Creature
-        } else if t.contains("planeswalker") {
-            CardKind::Planeswalker
-        } else if t.contains("battle") {
-            CardKind::Battle
-        } else if t.contains("instant") {
-            CardKind::Instant
-        } else if t.contains("sorcery") {
-            CardKind::Sorcery
-        } else if t.contains("artifact") {
-            CardKind::Artifact
-        } else if t.contains("enchantment") {
-            CardKind::Enchantment
-        } else {
-            CardKind::Other
-        }
+        primary_type(&self.type_line, self.is_land, self.is_creature)
+    }
+}
+
+/// Primary card type from a type line (shared by catalog and cube cards).
+pub fn primary_type(type_line: &str, is_land: bool, is_creature: bool) -> CardKind {
+    let t = type_line.to_ascii_lowercase();
+    // Land first: "Artifact Land" plays like a land; creature before artifact for artifact creatures.
+    if is_land || (t.contains("land") && !t.contains("creature")) {
+        CardKind::Land
+    } else if is_creature || t.contains("creature") {
+        CardKind::Creature
+    } else if t.contains("planeswalker") {
+        CardKind::Planeswalker
+    } else if t.contains("battle") {
+        CardKind::Battle
+    } else if t.contains("instant") {
+        CardKind::Instant
+    } else if t.contains("sorcery") {
+        CardKind::Sorcery
+    } else if t.contains("artifact") {
+        CardKind::Artifact
+    } else if t.contains("enchantment") {
+        CardKind::Enchantment
+    } else {
+        CardKind::Other
     }
 }
 

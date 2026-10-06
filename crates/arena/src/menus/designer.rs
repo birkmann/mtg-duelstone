@@ -10,12 +10,16 @@
 //!
 //! The preview shows the whole loadout: each tab's selected design is what the other tabs show
 //! too, so the sleeve chosen on the first tab is the one lying on the playmat on the third.
+//!
+//! Any design can carry a card's art instead of its pattern. The picker opens on the selected
+//! deck's cards first (sleeves that match the deck are the usual wish) and searches every card.
 
 use std::collections::HashMap;
 use std::f32::consts::PI;
 
 use bevy::asset::RenderAssetUsages;
 use bevy::camera::visibility::RenderLayers;
+use bevy::image::TRANSPARENT_IMAGE_HANDLE;
 use bevy::camera::{ClearColorConfig, Hdr};
 use bevy::core_pipeline::tonemapping::Tonemapping;
 use bevy::input::mouse::{AccumulatedMouseMotion, MouseScrollUnit, MouseWheel};
@@ -25,12 +29,16 @@ use bevy::prelude::*;
 use bevy::render::render_resource::{Extent3d, TextureDimension, TextureFormat};
 use bevy::text::EditableText;
 use bevy::ui::RelativeCursorPosition;
+use crossbeam_channel::Receiver;
 use mtg_client::curated::CURATED;
-use mtg_client::{ImageRequest, ImageVersion};
+use mtg_client::{Api, ImageRequest, ImageVersion};
+use mtg_protocol::CardQuery;
 
-use super::deck_select::{DeckList, DeckSelection};
+use super::deck_art::{art_choices, can_pick};
+use super::deck_select::{DeckList, DeckSelection, rest_base};
 use super::widgets::{Field, text_field};
 use super::MenuAction;
+use crate::avatars::art_request;
 use crate::cards::card_mesh;
 use crate::cosmetics::mesh::deckbox_meshes;
 use crate::cosmetics::{Design, DesignKind, Emblem, Finish, Frame, PALETTE, PaintTarget, Pattern, Rgb, apply_finish};
@@ -42,7 +50,9 @@ pub struct DesignerPlugin;
 impl Plugin for DesignerPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<Studio>()
+            .init_resource::<ArtChooser>()
             .add_systems(OnEnter(AppState::Designer), (enter_studio, spawn_screen, spawn_preview).chain())
+            .add_systems(OnExit(AppState::Designer), |mut c: ResMut<ArtChooser>| c.open = false)
             .add_systems(
                 Update,
                 (
@@ -53,6 +63,7 @@ impl Plugin for DesignerPlugin {
                     rebuild_editor,
                     refresh_visuals,
                     list_thumbs,
+                    (art_query_edits, art_search, sync_art_panel, art_grid, art_tile_visuals, close_art_on_escape).chain(),
                     wheel_scroll,
                     (drag_preview, animate_preview, preview_textures),
                 )
@@ -76,11 +87,13 @@ struct Studio {
     /// seconds since the last drag; auto-rotation resumes after a pause
     idle: f32,
     dragging: bool,
+    /// hold the rest pose instead of auto-turning (unattended screenshots)
+    still: bool,
 }
 
 impl Default for Studio {
     fn default() -> Self {
-        Self { kind: DesignKind::Sleeve, selected: HashMap::new(), rebuild_list: true, rebuild_editor: true, yaw: PI + 0.5, pitch: 0.0, idle: 10.0, dragging: false }
+        Self { kind: DesignKind::Sleeve, selected: HashMap::new(), rebuild_list: true, rebuild_editor: true, yaw: PI + 0.5, pitch: 0.0, idle: 10.0, dragging: false, still: false }
     }
 }
 
@@ -113,9 +126,14 @@ enum StudioAction {
     Finish(Finish),
     /// colour slot (0 base, 1 detail, 2 accent) and value
     Color(u8, Rgb),
+    ArtOpen,
+    ArtClose,
+    ArtClear,
+    ArtSource(ArtSource),
+    ArtPick(String),
 }
 
-fn enter_studio(mut studio: ResMut<Studio>, lib: Res<DesignLibrary>, settings: Res<Settings>, sel: Res<DeckSelection>) {
+fn enter_studio(mut studio: ResMut<Studio>, mut chooser: ResMut<ArtChooser>, lib: Res<DesignLibrary>, settings: Res<Settings>, sel: Res<DeckSelection>) {
     // start every tab on what's equipped (for the deck picked in deck select, if any)
     let deck = sel.human.as_deref();
     let equipped = [
@@ -128,11 +146,24 @@ fn enter_studio(mut studio: ResMut<Studio>, lib: Res<DesignLibrary>, settings: R
             studio.selected.insert(k, id);
         }
     }
-    // dev aid for unattended screenshots: ARENA_MENU_SCREEN=designer-box / designer-mat
+    // dev aid for unattended screenshots: ARENA_MENU_SCREEN=designer|designer-box|designer-mat jumps
+    // here and holds the rest pose (an auto-turn would catch the card faces, not the design),
+    // designer-art opens the artwork picker, and ARENA_DESIGN=<id>,<id>… shows those designs
+    // instead of the equipped ones.
     match std::env::var("ARENA_MENU_SCREEN").as_deref() {
-        Ok("designer-box") => studio.kind = DesignKind::Deckbox,
-        Ok("designer-mat") => studio.kind = DesignKind::Playmat,
+        Ok("designer") => studio.still = true,
+        Ok("designer-art") => {
+            studio.still = true;
+            chooser.open_for(sel.human.as_deref());
+        }
+        Ok("designer-box") => (studio.kind, studio.still) = (DesignKind::Deckbox, true),
+        Ok("designer-mat") => (studio.kind, studio.still) = (DesignKind::Playmat, true),
         _ => {}
+    }
+    if let Ok(ids) = std::env::var("ARENA_DESIGN") {
+        for d in ids.split(',').filter_map(|id| lib.get(id.trim())) {
+            studio.selected.insert(d.kind, d.id.clone());
+        }
     }
     studio.rebuild_list = true;
     studio.rebuild_editor = true;
@@ -332,7 +363,14 @@ fn rgb(c: Rgb) -> Color {
     Color::srgb_u8(c[0], c[1], c[2])
 }
 
-fn rebuild_editor(mut commands: Commands, mut studio: ResMut<Studio>, lib: Res<DesignLibrary>, fonts: Res<ArenaFonts>, panel: Query<(Entity, Option<&Children>), With<EditorPanel>>) {
+fn rebuild_editor(
+    mut commands: Commands,
+    mut studio: ResMut<Studio>,
+    lib: Res<DesignLibrary>,
+    fonts: Res<ArenaFonts>,
+    mut card_images: ResMut<CardImages>,
+    panel: Query<(Entity, Option<&Children>), With<EditorPanel>>,
+) {
     if !studio.rebuild_editor {
         return;
     }
@@ -353,12 +391,40 @@ fn rebuild_editor(mut commands: Commands, mut studio: ResMut<Studio>, lib: Res<D
             ui_text(&fonts.body, "Preset: your first change saves it as a new custom design.", 13.0, TEXT_DIM),
             Pickable::IGNORE,
         ));
-        section(p, &fonts, "PATTERN");
-        chip_row(p, |r| {
-            for &v in Pattern::ALL {
-                chip(r, &fonts, v.label(), StudioAction::Pattern(v));
-            }
+        section(p, &fonts, "ARTWORK");
+        p.spawn(Node { align_items: AlignItems::Center, column_gap: Val::Px(12.0), flex_shrink: 0.0, ..default() }).with_children(|r| {
+            let art = d.art.as_ref().map(|c| card_images.request_raw(art_request(c)));
+            r.spawn((
+                Node { width: Val::Px(96.0), height: Val::Px(70.0), flex_shrink: 0.0, border: UiRect::all(Val::Px(1.5)), border_radius: BorderRadius::all(Val::Px(6.0)), overflow: Overflow::clip(), ..default() },
+                BackgroundColor(Color::srgba(0.0, 0.0, 0.0, 0.45)),
+                BorderColor::all(GOLD_DIM),
+                ImageNode { image: art.unwrap_or(TRANSPARENT_IMAGE_HANDLE), image_mode: NodeImageMode::Stretch, ..default() },
+                Pickable::IGNORE,
+            ));
+            r.spawn(Node { flex_direction: FlexDirection::Column, flex_grow: 1.0, min_width: Val::Px(0.0), row_gap: Val::Px(6.0), ..default() }).with_children(|c| {
+                let (label, col) = match &d.art {
+                    Some(card) => (card.clone(), PARCHMENT),
+                    None => ("None: the pattern is painted".to_string(), TEXT_DIM),
+                };
+                c.spawn((ui_text(&fonts.body, label, 14.0, col), Pickable::IGNORE));
+                chip_row(c, |b| {
+                    chip(b, &fonts, "CHOOSE ART", StudioAction::ArtOpen);
+                    if d.art.is_some() {
+                        chip(b, &fonts, "REMOVE", StudioAction::ArtClear);
+                    }
+                });
+            });
         });
+        // the pattern is hidden under art, except on a deckbox's sides and lid
+        let pattern_shows = d.art.is_none() || kind == DesignKind::Deckbox;
+        if pattern_shows {
+            section(p, &fonts, if d.art.is_some() { "SIDE PATTERN" } else { "PATTERN" });
+            chip_row(p, |r| {
+                for &v in Pattern::ALL {
+                    chip(r, &fonts, v.label(), StudioAction::Pattern(v));
+                }
+            });
+        }
         section(p, &fonts, "COLOURS");
         for (slot, label) in [(0u8, "Base"), (1, "Detail"), (2, "Accent")] {
             p.spawn(Node { align_items: AlignItems::Center, column_gap: Val::Px(8.0), flex_shrink: 0.0, ..default() }).with_children(|r| {
@@ -401,8 +467,10 @@ fn rebuild_editor(mut commands: Commands, mut studio: ResMut<Studio>, lib: Res<D
                 });
             });
         });
-        section(p, &fonts, "PATTERN SCALE");
-        p.spawn(Node { align_items: AlignItems::Center, column_gap: Val::Px(12.0), flex_shrink: 0.0, ..default() }).with_children(|r| {
+        if pattern_shows {
+            section(p, &fonts, "PATTERN SCALE");
+        }
+        p.spawn(Node { align_items: AlignItems::Center, column_gap: Val::Px(12.0), flex_shrink: 0.0, display: if pattern_shows { Display::Flex } else { Display::None }, ..default() }).with_children(|r| {
             r.spawn((
                 Button,
                 ScaleTrack,
@@ -450,6 +518,7 @@ fn edit(lib: &mut DesignLibrary, studio: &mut Studio, keep_editor: bool, f: impl
 fn handle_clicks(
     q: Query<(&Interaction, &StudioAction, Option<&ArenaButton>), Changed<Interaction>>,
     mut studio: ResMut<Studio>,
+    mut chooser: ResMut<ArtChooser>,
     mut lib: ResMut<DesignLibrary>,
     mut settings: ResMut<Settings>,
     sel: Res<DeckSelection>,
@@ -526,8 +595,35 @@ fn handle_clicks(
                 1 => d.detail = c,
                 _ => d.accent = c,
             }),
+            StudioAction::ArtOpen => chooser.open_for(sel.human.as_deref()),
+            StudioAction::ArtClose => chooser.open = false,
+            StudioAction::ArtSource(src) => {
+                if chooser.source != src {
+                    chooser.source = src;
+                    chooser.dirty_at = Some(-1.0);
+                }
+            }
+            StudioAction::ArtPick(card) => {
+                chooser.open = false;
+                edit(&mut lib, &mut studio, false, |d| set_art(d, Some(card)));
+                // the artwork section and which pattern controls show depend on it
+                studio.rebuild_editor = true;
+            }
+            StudioAction::ArtClear => {
+                edit(&mut lib, &mut studio, false, |d| set_art(d, None));
+                studio.rebuild_editor = true;
+            }
         }
     }
+}
+
+/// The first art on a design also drops its emblem: a medallion in the middle would sit right on
+/// the art's subject. Swapping art keeps whatever the player chose since.
+fn set_art(d: &mut Design, card: Option<String>) {
+    if d.art.is_none() && card.is_some() {
+        d.emblem = Emblem::None;
+    }
+    d.art = card;
 }
 
 fn capitalize(s: &str) -> String {
@@ -586,7 +682,7 @@ fn scale_slider(q: Query<(&Interaction, &RelativeCursorPosition), With<ScaleTrac
 // ---- visuals --------------------------------------------------------------------------------
 
 fn refresh_visuals(
-    studio: Res<Studio>,
+    (studio, chooser): (Res<Studio>, Res<ArtChooser>),
     lib: Res<DesignLibrary>,
     settings: Res<Settings>,
     sel: Res<DeckSelection>,
@@ -626,6 +722,7 @@ fn refresh_visuals(
             StudioAction::Emblem(v) => *v == d.emblem,
             StudioAction::Frame(v) => *v == d.frame,
             StudioAction::Finish(v) => *v == d.finish,
+            StudioAction::ArtSource(v) => *v == chooser.source,
             _ => false,
         };
         let disabled = match act {
@@ -737,7 +834,11 @@ fn list_thumbs(lib: Res<DesignLibrary>, mut paints: ResMut<Paints>, mut q: Query
     }
 }
 
-fn wheel_scroll(mut wheel: MessageReader<MouseWheel>, mut q: Query<(&RelativeCursorPosition, &ComputedNode, &mut ScrollPosition), With<StudioScroll>>) {
+fn wheel_scroll(
+    chooser: Res<ArtChooser>,
+    mut wheel: MessageReader<MouseWheel>,
+    mut q: Query<(&RelativeCursorPosition, &ComputedNode, &mut ScrollPosition, Has<ArtGrid>), With<StudioScroll>>,
+) {
     let dy: f32 = wheel
         .read()
         .map(|e| match e.unit {
@@ -748,11 +849,321 @@ fn wheel_scroll(mut wheel: MessageReader<MouseWheel>, mut q: Query<(&RelativeCur
     if dy == 0.0 {
         return;
     }
-    for (rel, node, mut sp) in &mut q {
-        if rel.cursor_over {
+    for (rel, node, mut sp, in_picker) in &mut q {
+        // the cursor test ignores what's on top, so with the picker open only its grid scrolls
+        if rel.cursor_over && in_picker == chooser.open {
             let max = ((node.content_size().y - node.size().y) * node.inverse_scale_factor()).max(0.0);
             sp.y = (sp.y - dy).clamp(0.0, max);
         }
+    }
+}
+
+// ---- artwork picker -------------------------------------------------------------------------
+
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
+enum ArtSource {
+    /// the cards of the deck selected on the deck screen
+    #[default]
+    Deck,
+    /// a search over every card
+    Any,
+}
+
+type Names = Result<Vec<String>, String>;
+
+const ART_RESULTS: u32 = 120;
+
+#[derive(Resource, Default)]
+struct ArtChooser {
+    open: bool,
+    source: ArtSource,
+    query: String,
+    /// when the search text last changed (searches wait for typing to pause); < 0 = search now
+    dirty_at: Option<f32>,
+    /// the deck's art choices, fetched once per deck ref
+    deck_cards: Option<(String, Names)>,
+    deck_rx: Option<(String, Receiver<Names>)>,
+    search_rx: Option<Receiver<Names>>,
+    results: Vec<String>,
+    status: String,
+    rebuild: bool,
+}
+
+impl ArtChooser {
+    fn open_for(&mut self, deck: Option<&str>) {
+        self.open = true;
+        self.source = if deck.is_some_and(can_pick) { ArtSource::Deck } else { ArtSource::Any };
+        self.dirty_at = Some(-1.0);
+    }
+}
+
+#[derive(Component)]
+struct ArtPanel;
+#[derive(Component)]
+struct ArtGrid;
+#[derive(Component)]
+struct ArtStatus;
+#[derive(Component)]
+struct ArtTile(String);
+
+fn art_query_edits(q: Query<(&Field, &EditableText), Changed<EditableText>>, mut chooser: ResMut<ArtChooser>, time: Res<Time>) {
+    for (f, t) in &q {
+        let v = t.value().to_string();
+        if *f == Field::ArtSearch && chooser.query != v {
+            chooser.query = v;
+            chooser.dirty_at = Some(time.elapsed_secs());
+        }
+    }
+}
+
+fn art_search(
+    mut chooser: ResMut<ArtChooser>,
+    time: Res<Time>,
+    sel: Res<DeckSelection>,
+    list: Res<DeckList>,
+    cfg: Option<Res<EngineConfig>>,
+    settings: Res<Settings>,
+) {
+    if let Some((deck, rx)) = &chooser.deck_rx
+        && let Ok(res) = rx.try_recv()
+    {
+        chooser.deck_cards = Some((deck.clone(), res));
+        chooser.deck_rx = None;
+        chooser.dirty_at = Some(-1.0);
+    }
+    if let Some(rx) = &chooser.search_rx
+        && let Ok(res) = rx.try_recv()
+    {
+        chooser.search_rx = None;
+        if chooser.source == ArtSource::Any {
+            match res {
+                Ok(names) => {
+                    chooser.status = if names.is_empty() { "No cards match.".into() } else { String::new() };
+                    chooser.results = names;
+                }
+                Err(e) => {
+                    chooser.status = format!("Search failed: {e}");
+                    chooser.results.clear();
+                }
+            }
+            chooser.rebuild = true;
+        }
+    }
+    if !chooser.open {
+        return;
+    }
+    let Some(at) = chooser.dirty_at else { return };
+    if at >= 0.0 && time.elapsed_secs() - at < 0.35 {
+        return;
+    }
+    chooser.dirty_at = None;
+    let q = chooser.query.trim().to_lowercase();
+    let base = rest_base(&cfg, &settings);
+    match (chooser.source, sel.human.clone().filter(|r| can_pick(r))) {
+        (ArtSource::Deck, Some(deck)) => {
+            let cached = chooser.deck_cards.as_ref().filter(|(r, _)| *r == deck).map(|(_, c)| c.clone());
+            match cached {
+                Some(Ok(cards)) => {
+                    chooser.results = cards.into_iter().filter(|c| c.to_lowercase().contains(&q)).collect();
+                    chooser.status = if chooser.results.is_empty() { "No card in this deck matches. Try ANY CARD.".into() } else { String::new() };
+                }
+                Some(Err(e)) => {
+                    chooser.results.clear();
+                    chooser.status = format!("Could not load the deck: {e}");
+                }
+                None => {
+                    if chooser.deck_rx.as_ref().is_none_or(|(r, _)| *r != deck) {
+                        let (fmt, d) = (list.format, deck.clone());
+                        let rx = mtg_client::spawn(async move { Api::new(base).deck(&d, fmt).await.map(|full| art_choices(&full)).map_err(|e| format!("{e:#}")) });
+                        chooser.deck_rx = Some((deck, rx));
+                    }
+                    chooser.results.clear();
+                    chooser.status = "Loading the deck…".into();
+                }
+            }
+            chooser.rebuild = true;
+        }
+        _ => {
+            chooser.source = ArtSource::Any;
+            let query = CardQuery { q: q.clone(), sort: Some(if q.is_empty() { "popular" } else { "name" }.into()), limit: ART_RESULTS, ..Default::default() };
+            // a newer search replaces the receiver, so a slow older answer is dropped
+            chooser.search_rx = Some(mtg_client::spawn(async move {
+                let cards = Api::new(base).catalog_search(&query).await.map_err(|e| format!("{e:#}"))?;
+                let mut names: Vec<String> = Vec::new();
+                for c in cards {
+                    // one tile per card, though a name can come back once per printing
+                    if !names.contains(&c.name) {
+                        names.push(c.name);
+                    }
+                }
+                Ok(names)
+            }));
+            chooser.status = "Searching…".into();
+            chooser.rebuild = true;
+        }
+    }
+}
+
+fn sync_art_panel(
+    mut commands: Commands,
+    chooser: Res<ArtChooser>,
+    studio: Res<Studio>,
+    fonts: Res<ArenaFonts>,
+    sel: Res<DeckSelection>,
+    existing: Query<Entity, With<ArtPanel>>,
+) {
+    if !chooser.is_changed() {
+        return;
+    }
+    if !chooser.open {
+        for e in &existing {
+            commands.entity(e).despawn();
+        }
+        return;
+    }
+    if !existing.is_empty() {
+        return;
+    }
+    let (title, place) = match studio.kind {
+        DesignKind::Sleeve => ("ARTWORK FOR YOUR SLEEVE", "across the sleeve's back"),
+        DesignKind::Deckbox => ("ARTWORK FOR YOUR DECKBOX", "on the front and back of the box"),
+        DesignKind::Playmat => ("ARTWORK FOR YOUR PLAYMAT", "across the whole mat"),
+    };
+    let has_deck = sel.human.as_deref().is_some_and(can_pick);
+    commands
+        .spawn((
+            ArtPanel,
+            DespawnOnExit(AppState::Designer),
+            GlobalZIndex(100),
+            Button, // swallows clicks so the studio underneath doesn't react
+            Node { justify_content: JustifyContent::Center, align_items: AlignItems::Center, ..fullscreen_root() },
+            // darker than the usual scrim: the editor's chips and swatches would show through
+            BackgroundColor(Color::srgba(0.02, 0.012, 0.008, 0.9)),
+        ))
+        .with_children(|scrim| {
+            scrim
+                .spawn(ornate_panel(Node {
+                    width: Val::Px(1100.0),
+                    max_width: Val::Percent(94.0),
+                    height: Val::Percent(88.0),
+                    padding: UiRect::all(Val::Px(24.0)),
+                    flex_direction: FlexDirection::Column,
+                    row_gap: Val::Px(10.0),
+                    ..default()
+                }))
+                .with_children(|p| {
+                    p.spawn(heading(&fonts, title, 30.0));
+                    p.spawn((ui_text(&fonts.body, format!("The card's art is printed {place}; your frame, colours, emblem and finish go on top."), 15.0, TEXT_DIM), Pickable::IGNORE));
+                    p.spawn(divider());
+                    p.spawn(Node { column_gap: Val::Px(8.0), align_items: AlignItems::Center, flex_shrink: 0.0, ..default() }).with_children(|r| {
+                        if has_deck {
+                            let b = spawn_button(r, &fonts, ButtonKind::Secondary, "YOUR DECK", Vec2::new(150.0, 42.0));
+                            r.commands().entity(b).insert(StudioAction::ArtSource(ArtSource::Deck));
+                        }
+                        let b = spawn_button(r, &fonts, ButtonKind::Secondary, "ANY CARD", Vec2::new(150.0, 42.0));
+                        r.commands().entity(b).insert(StudioAction::ArtSource(ArtSource::Any));
+                        r.spawn(Node { flex_grow: 1.0, ..default() });
+                        r.spawn((ui_text(&fonts.title, "SEARCH", 15.0, GOLD), Pickable::IGNORE));
+                        r.spawn(text_field(&fonts, Field::ArtSearch, &chooser.query, Val::Px(300.0), 1.0, false));
+                    });
+                    p.spawn((ArtStatus, ui_text(&fonts.body, "", 14.0, TEXT_DIM), Pickable::IGNORE));
+                    p.spawn((
+                        ArtGrid,
+                        StudioScroll,
+                        ScrollPosition::default(),
+                        RelativeCursorPosition::default(),
+                        Node {
+                            width: Val::Percent(100.0),
+                            flex_grow: 1.0,
+                            min_height: Val::Px(0.0),
+                            flex_wrap: FlexWrap::Wrap,
+                            justify_content: JustifyContent::Center,
+                            align_content: AlignContent::FlexStart,
+                            padding: UiRect::all(Val::Px(6.0)),
+                            row_gap: Val::Px(12.0),
+                            column_gap: Val::Px(12.0),
+                            overflow: Overflow::scroll_y(),
+                            ..default()
+                        },
+                    ));
+                    p.spawn(Node { justify_content: JustifyContent::FlexEnd, flex_shrink: 0.0, ..default() }).with_children(|r| {
+                        let b = spawn_button(r, &fonts, ButtonKind::Secondary, "CLOSE", Vec2::new(150.0, 46.0));
+                        r.commands().entity(b).insert(StudioAction::ArtClose);
+                    });
+                });
+        });
+}
+
+/// Fills the grid with the latest results (the panel may only appear a frame after they do).
+fn art_grid(
+    mut commands: Commands,
+    mut chooser: ResMut<ArtChooser>,
+    fonts: Res<ArenaFonts>,
+    mut card_images: ResMut<CardImages>,
+    grid: Query<(Entity, Option<&Children>), With<ArtGrid>>,
+    added: Query<(), Added<ArtGrid>>,
+    mut grid_scroll: Query<&mut ScrollPosition, With<ArtGrid>>,
+    mut status: Query<&mut Text, With<ArtStatus>>,
+) {
+    if !chooser.rebuild && added.is_empty() {
+        return;
+    }
+    let Ok((e, children)) = grid.single() else { return };
+    chooser.rebuild = false;
+    for mut t in &mut status {
+        t.0 = chooser.status.clone();
+    }
+    for c in children.into_iter().flatten() {
+        commands.entity(*c).despawn();
+    }
+    for mut sp in &mut grid_scroll {
+        sp.y = 0.0;
+    }
+    commands.entity(e).with_children(|g| {
+        for name in &chooser.results {
+            let art = card_images.request_raw(art_request(name));
+            g.spawn((
+                Button,
+                StudioAction::ArtPick(name.clone()),
+                ArtTile(name.clone()),
+                Node {
+                    width: Val::Px(176.0),
+                    flex_direction: FlexDirection::Column,
+                    border: UiRect::all(Val::Px(2.0)),
+                    border_radius: BorderRadius::all(Val::Px(8.0)),
+                    overflow: Overflow::clip(),
+                    flex_shrink: 0.0,
+                    ..default()
+                },
+                BackgroundColor(Color::srgba(0.0, 0.0, 0.0, 0.45)),
+                BorderColor::all(GOLD_DIM),
+            ))
+            .with_children(|t| {
+                t.spawn((
+                    Node { width: Val::Percent(100.0), height: Val::Px(128.0), ..default() },
+                    BackgroundColor(Color::srgb(0.06, 0.045, 0.035)),
+                    ImageNode { image: art, image_mode: NodeImageMode::Stretch, ..default() },
+                    Pickable::IGNORE,
+                ));
+                t.spawn((Node { padding: UiRect::axes(Val::Px(8.0), Val::Px(5.0)), height: Val::Px(28.0), overflow: Overflow::clip(), ..default() }, Pickable::IGNORE))
+                    .with_child((ui_text(&fonts.body, name.clone(), 13.0, PARCHMENT), TextLayout::no_wrap(), Pickable::IGNORE));
+            });
+        }
+    });
+}
+
+/// Gold frame on the design's current art, a lighter one under the cursor.
+fn art_tile_visuals(studio: Res<Studio>, lib: Res<DesignLibrary>, mut q: Query<(&ArtTile, &Interaction, &mut BorderColor)>) {
+    let current = studio.design(&lib, studio.kind).art.as_deref();
+    for (t, i, mut bc) in &mut q {
+        let hov = matches!(i, Interaction::Hovered | Interaction::Pressed);
+        bc.set_if_neq(BorderColor::all(if current == Some(t.0.as_str()) { GOLD_BRIGHT } else if hov { GOLD } else { GOLD_DIM }));
+    }
+}
+
+fn close_art_on_escape(keys: Res<ButtonInput<KeyCode>>, mut chooser: ResMut<ArtChooser>) {
+    if chooser.open && keys.just_pressed(KeyCode::Escape) {
+        chooser.open = false;
     }
 }
 
@@ -880,7 +1291,9 @@ fn spawn_preview(
     commands.entity(root).with_children(|r| {
         // sleeves: one card up front and two fanned behind it
         r.spawn((Group(DesignKind::Sleeve), Transform::default(), Visibility::Inherited, layer.clone())).with_children(|g| {
-            for (x, z, roll) in [(-0.42, -0.14, 0.2), (0.42, -0.14, -0.2)] {
+            // each card on its own depth: the fanned pair overlap in the middle, and on one plane
+            // they would cut through each other
+            for (x, z, roll) in [(-0.42, -0.12, 0.2), (0.42, -0.24, -0.2)] {
                 sleeved(g, Transform::from_xyz(x, -0.08, z).with_rotation(Quat::from_rotation_z(roll)).with_scale(Vec3::splat(1.95)));
             }
             sleeved(g, Transform::from_xyz(0.0, -0.05, 0.0).with_scale(Vec3::splat(2.1)));
@@ -930,13 +1343,14 @@ fn camera_pose(kind: DesignKind) -> (Vec3, Vec3) {
 
 fn drag_preview(
     mut studio: ResMut<Studio>,
+    chooser: Res<ArtChooser>,
     time: Res<Time>,
     mouse: Res<ButtonInput<MouseButton>>,
     motion: Res<AccumulatedMouseMotion>,
     area: Query<&RelativeCursorPosition, With<PreviewArea>>,
 ) {
     let over = area.iter().any(|r| r.cursor_over);
-    if mouse.just_pressed(MouseButton::Left) && over {
+    if mouse.just_pressed(MouseButton::Left) && over && !chooser.open {
         studio.dragging = true;
     }
     if !mouse.pressed(MouseButton::Left) {
@@ -961,7 +1375,7 @@ fn animate_preview(
 ) {
     let dt = time.delta_secs();
     let kind = studio.kind;
-    if studio.idle > 2.5 {
+    if studio.idle > 2.5 && !studio.still {
         // auto-turn: objects spin slowly, the playmat only sways
         if kind == DesignKind::Playmat {
             let t = time.elapsed_secs();
@@ -1085,6 +1499,18 @@ mod tests {
         let fork = lib.get(studio.current()).unwrap();
         assert_eq!(fork.image, None);
         assert!(!studio.rebuild_editor, "typing in the name field must keep its focus");
+    }
+
+    #[test]
+    fn first_art_drops_the_emblem_and_later_swaps_keep_it() {
+        let mut d = presets().into_iter().find(|d| d.id == "dragonscale").unwrap();
+        set_art(&mut d, Some("Shivan Dragon".into()));
+        assert_eq!((d.art.as_deref(), d.emblem), (Some("Shivan Dragon"), Emblem::None));
+        d.emblem = Emblem::Flame;
+        set_art(&mut d, Some("Lightning Bolt".into()));
+        assert_eq!(d.emblem, Emblem::Flame);
+        set_art(&mut d, None);
+        assert_eq!((d.art, d.emblem), (None, Emblem::Flame));
     }
 
     #[test]

@@ -73,8 +73,8 @@ downloaded.
 - **Decks.** Four Constructed and two Commander starter decks, Forge's precon and theme decks, and an importer
   for pasted lists (MTGO, Moxfield and other common export formats) that shows unresolved names with suggestions.
 - **Sleeves, deckboxes and playmats** (CUSTOMIZE in the main menu or on the deck screen). The Design Studio
-  ships presets and lets you design your own from patterns, colours, emblems, frames and finishes, with a live
-  3D preview. Choices can be a default or per deck. Deck tiles show each deck's box, and the AI gets its own
+  ships presets and lets you design your own from patterns, colours, emblems, frames and finishes, or print any
+  card's art on them (CHOOSE ART: your deck's cards first, or search every card), with a live 3D preview. Choices can be a default or per deck. Deck tiles show each deck's box, and the AI gets its own
   sleeve. Designs are painted procedurally and saved to `~/.config/mtg-duelstone/designs.json`.
 - **Avatars** (click your name in the top-right corner of the main menu). Any card's art can be your portrait:
   pick from featured planeswalkers and legends, browse every legendary creature or planeswalker, or search any

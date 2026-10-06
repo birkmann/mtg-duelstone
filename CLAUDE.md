@@ -23,8 +23,8 @@
 - Modes (v3): `GameSetup` (engine) maps format + legality + variants onto Forge's `RegisteredPlayer.forVariants`;
   limited events are `EventSession` (engine, own socket `/ws/event/{id}`) → `menus/event.rs`; cubes are `CubeStore`
   (bundled res/draft + `~/.forge/duelstone-cubes/*.json`) → `menus/cubes.rs`. Forge's draft statics (land set, AI rankings)
-  are global: touch draft state only under `EventSession.DRAFT_LOCK`. Dev jumps: `ARENA_MENU_SCREEN=modes|cubes|draft|avatar`
-  (+ `ARENA_DRAFT_STOP=pick:N|build`, `ARENA_CUBE=<ref>`), `ARENA_LOBBY_HOLD` with `--quick --players N`, and for game shots
+  are global: touch draft state only under `EventSession.DRAFT_LOCK`. Dev jumps: `ARENA_MENU_SCREEN=modes|cubes|draft|avatar|designer[-box|-mat]`
+  (+ `ARENA_DRAFT_STOP=pick:N|build`, `ARENA_CUBE=<ref>` + `ARENA_CUBE_VIEW=table|spoiler|curve|stacks|stats`, `ARENA_DESIGN=<id>,…`), `ARENA_LOBBY_HOLD` with `--quick --players N`, and for game shots
   `ARENA_AUTOPLAY_PAUSE=<turn>` + `ARENA_SHOT_WHEN=paused` (+ `ARENA_HOVER_COMMAND`) under `--autoplay`.
 - Multiplayer: never assume one opponent. Seats are slots (`GameView::seat_order`: 0 = you), anchors per seat
   (`BoardAnchors::seats` / `avatar_of`). Engine-side, every human seat is its own `WsGuiGame`.

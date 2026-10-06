@@ -124,6 +124,16 @@ impl CardImages {
         h
     }
 
+    /// Whether this image could not be fetched (e.g. no art offline), so a caller can try another card.
+    pub fn has_failed(&self, req: &ImageRequest) -> bool {
+        self.failed.contains(req)
+    }
+
+    /// Distinct images that failed so far; grows only, so a caller can tell when to re-check.
+    pub fn failures(&self) -> usize {
+        self.failed.len()
+    }
+
     /// Number of images requested but not yet arrived.
     pub fn pending(&self) -> usize {
         self.queue.len() + self.in_flight
@@ -135,7 +145,8 @@ impl CardImages {
         self.in_flight += 1;
         // The task reports through the shared channel; its own one-shot receiver is not needed.
         drop(mtg_client::spawn(async move {
-            let res = api.image_bytes(&req).await.map_err(|e| format!("{e:#}")).and_then(|b| decode(&b));
+            let thumb = req.version == ImageVersion::Thumb;
+            let res = api.image_bytes(&req).await.map_err(|e| format!("{e:#}")).and_then(|b| decode(&b, thumb));
             let _ = tx.send((req, res));
         }));
     }
@@ -204,7 +215,10 @@ fn card_sampler() -> ImageSampler {
     })
 }
 
-fn decode(bytes: &[u8]) -> Result<Image, String> {
+/// Widest a `Thumb` may stay: two halvings of the 672 px pack images.
+const THUMB_MAX_W: u32 = 256;
+
+fn decode(bytes: &[u8], thumb: bool) -> Result<Image, String> {
     let mime = if bytes.starts_with(&[0x89, b'P', b'N', b'G']) { "image/png" } else { "image/jpeg" };
     let mut img = Image::from_buffer(
         bytes,
@@ -215,6 +229,9 @@ fn decode(bytes: &[u8]) -> Result<Image, String> {
         RenderAssetUsages::default(),
     )
     .map_err(|e| format!("decode: {e}"))?;
+    if thumb {
+        shrink(&mut img, THUMB_MAX_W);
+    }
     with_mips(&mut img);
     img.asset_usage = RenderAssetUsages::RENDER_WORLD;
     Ok(img)
@@ -231,29 +248,12 @@ pub fn with_mips(img: &mut Image) {
         img.data = Some(base);
         return;
     }
-    let lut: Vec<f32> = (0..256).map(|i| (i as f32 / 255.0).powf(2.2)).collect();
-    let to_srgb = |v: f32| ((v.clamp(0.0, 1.0)).powf(1.0 / 2.2) * 255.0 + 0.5) as u8;
+    let lut = srgb_to_linear_lut();
     let mut all = base.clone();
     let mut prev = base;
     let mut levels = 1;
     while w > 1 || h > 1 {
-        let (nw, nh) = ((w / 2).max(1), (h / 2).max(1));
-        let mut next = vec![0u8; nw * nh * 4];
-        for y in 0..nh {
-            for x in 0..nw {
-                let (x0, x1) = ((x * 2).min(w - 1), (x * 2 + 1).min(w - 1));
-                let (y0, y1) = ((y * 2).min(h - 1), (y * 2 + 1).min(h - 1));
-                for c in 0..4 {
-                    let at = |xx: usize, yy: usize| prev[(yy * w + xx) * 4 + c];
-                    let (a, b, cc, d) = (at(x0, y0), at(x1, y0), at(x0, y1), at(x1, y1));
-                    next[(y * nw + x) * 4 + c] = if c == 3 {
-                        ((a as u32 + b as u32 + cc as u32 + d as u32 + 2) / 4) as u8
-                    } else {
-                        to_srgb((lut[a as usize] + lut[b as usize] + lut[cc as usize] + lut[d as usize]) / 4.0)
-                    };
-                }
-            }
-        }
+        let (next, nw, nh) = halve(&prev, w, h, &lut);
         all.extend_from_slice(&next);
         prev = next;
         w = nw;
@@ -262,6 +262,55 @@ pub fn with_mips(img: &mut Image) {
     }
     img.data = Some(all);
     img.texture_descriptor.mip_level_count = levels;
+}
+
+/// Halve a mip-less sRGB image until it is at most `max_w` wide (thumbnails for big card grids).
+fn shrink(img: &mut Image, max_w: u32) {
+    if img.texture_descriptor.format != TextureFormat::Rgba8UnormSrgb || img.texture_descriptor.mip_level_count > 1 || img.width() <= max_w {
+        return;
+    }
+    let (mut w, mut h) = (img.width() as usize, img.height() as usize);
+    let Some(mut data) = img.data.take() else { return };
+    if data.len() != w * h * 4 {
+        img.data = Some(data);
+        return;
+    }
+    let lut = srgb_to_linear_lut();
+    while w > max_w as usize {
+        let (next, nw, nh) = halve(&data, w, h, &lut);
+        data = next;
+        w = nw;
+        h = nh;
+    }
+    img.data = Some(data);
+    img.texture_descriptor.size = Extent3d { width: w as u32, height: h as u32, depth_or_array_layers: 1 };
+}
+
+fn srgb_to_linear_lut() -> Vec<f32> {
+    (0..256).map(|i| (i as f32 / 255.0).powf(2.2)).collect()
+}
+
+/// One 2×2 box-filter step, averaged in linear light (so thumbnails keep their brightness).
+fn halve(prev: &[u8], w: usize, h: usize, lut: &[f32]) -> (Vec<u8>, usize, usize) {
+    let to_srgb = |v: f32| ((v.clamp(0.0, 1.0)).powf(1.0 / 2.2) * 255.0 + 0.5) as u8;
+    let (nw, nh) = ((w / 2).max(1), (h / 2).max(1));
+    let mut next = vec![0u8; nw * nh * 4];
+    for y in 0..nh {
+        for x in 0..nw {
+            let (x0, x1) = ((x * 2).min(w - 1), (x * 2 + 1).min(w - 1));
+            let (y0, y1) = ((y * 2).min(h - 1), (y * 2 + 1).min(h - 1));
+            for c in 0..4 {
+                let at = |xx: usize, yy: usize| prev[(yy * w + xx) * 4 + c];
+                let (a, b, cc, d) = (at(x0, y0), at(x1, y0), at(x0, y1), at(x1, y1));
+                next[(y * nw + x) * 4 + c] = if c == 3 {
+                    ((a as u32 + b as u32 + cc as u32 + d as u32 + 2) / 4) as u8
+                } else {
+                    to_srgb((lut[a as usize] + lut[b as usize] + lut[cc as usize] + lut[d as usize]) / 4.0)
+                };
+            }
+        }
+    }
+    (next, nw, nh)
 }
 
 // ---- procedural art --------------------------------------------------------------------------
@@ -368,5 +417,18 @@ mod tests {
         assert_eq!(img.data.as_ref().unwrap().len(), total);
         with_mips(&mut img); // idempotent
         assert_eq!(img.texture_descriptor.mip_level_count, levels);
+    }
+
+    #[test]
+    fn thumbs_are_halved_below_the_cap_then_mipped() {
+        let (w, h) = (672u32, 936u32);
+        let mut img = Image::new(Extent3d { width: w, height: h, depth_or_array_layers: 1 }, TextureDimension::D2, vec![200u8; (w * h * 4) as usize], TextureFormat::Rgba8UnormSrgb, RenderAssetUsages::default());
+        shrink(&mut img, THUMB_MAX_W);
+        assert_eq!((img.width(), img.height()), (168, 234));
+        assert_eq!(img.data.as_ref().unwrap().len(), 168 * 234 * 4);
+        // a flat colour stays the same colour through the linear-light filter
+        assert!(img.data.as_ref().unwrap().iter().all(|&b| b.abs_diff(200) <= 1));
+        with_mips(&mut img);
+        assert!(img.texture_descriptor.mip_level_count > 1);
     }
 }
