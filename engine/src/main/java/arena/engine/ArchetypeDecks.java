@@ -95,7 +95,7 @@ public final class ArchetypeDecks {
             "rogues", "spirits", "otters", "dragons", "eldrazi", "slivers", "elementals", "monument", "synthesizer", "walls", "fog");
 
     /** Words that can stand in a deck's name: every card-name word and creature type, plus archetype jargon. */
-    private static Set<String> vocabulary() {
+    static Set<String> vocabulary() {
         final Set<String> v = new HashSet<>(TERMS);
         for (final PaperCard pc : forge.model.FModel.getMagicDb().getCommonCards().getUniqueCards()) {
             for (final String w : pc.getName().toLowerCase(Locale.ROOT).split("[^a-z']+")) if (w.length() > 2) v.add(w);
@@ -142,17 +142,14 @@ public final class ArchetypeDecks {
         for (final String[] e : g) GUILDS.put((int) ColorSet.fromNames(e[0].toCharArray()).getColor(), e[1]);
     }
 
-    /** The colours of the deck's spells (lands and their colour identity don't make an Izzet deck Grixis). */
+    /** The colours the deck plays ({@link DeckSource#spellColors}: lands and one-off splashes don't count). */
     private static String colorName(final Deck d) {
-        int mask = 0;
-        for (final Map.Entry<PaperCard, Integer> e : d.getMain()) {
-            if (!e.getKey().getRules().getType().isLand()) mask |= e.getKey().getRules().getColor().getColor();
-        }
+        final int mask = DeckSource.spellColors(d).getColor();
         final int n = Integer.bitCount(mask);
         return n == 0 ? "Colorless" : n == 4 ? "Four-Color" : n == 5 ? "Five-Color" : GUILDS.getOrDefault(mask, "Multicolor");
     }
 
-    private static String slug(final String name) {
+    static String slug(final String name) {
         return name.toLowerCase(Locale.ROOT).replaceAll("[^a-z0-9]+", "-").replaceAll("(^-|-$)", "");
     }
 }

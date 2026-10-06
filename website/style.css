@@ -598,3 +598,238 @@ b, strong { font-weight: 400; color: var(--fg); }
 @media (forced-colors: active) {
   h1, h2 { background: none; -webkit-text-fill-color: currentColor; color: CanvasText; }
 }
+
+/* --- Deck explorer (#decks, decks.js) ---------------------------------- */
+/* The tiles and the viewer are built from assets/decks.json. Mana pips keep Magic's own colours
+   in both themes: they name a colour, so they must look like the symbols players know. */
+.visually-hidden { position: absolute; width: 1px; height: 1px; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.pip {
+  display: inline-grid; place-items: center; width: 1.25em; height: 1.25em; border-radius: 50%; flex: none;
+  font: 700 0.72em/1 var(--sans); font-style: normal; color: #1d1712; background: #cac5c0;
+  box-shadow: inset 0 -1px 0 rgba(0, 0, 0, 0.25), 0 0 0 1px rgba(0, 0, 0, 0.35);
+}
+.pip-W { background: #f8f2d6; }
+.pip-U { background: #4aa3df; }
+.pip-B { background: #4a403b; color: #efe6dd; }
+.pip-R { background: #e8664a; }
+.pip-G { background: #3fa06a; }
+.pip-C { background: #cac5c0; }
+.pip-h { font-size: 0.6em; }
+.cost { display: inline-flex; gap: 2px; align-items: center; font-size: 15px; }
+.pips { display: inline-flex; gap: 3px; align-items: center; font-size: 16px; }
+
+.dx { display: flex; flex-direction: column; gap: 18px; min-width: 0; }
+.dx-formats { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; border-bottom: 1px solid var(--rule); padding-bottom: 0; margin-bottom: -2px; }
+.dx-formats::-webkit-scrollbar { display: none; }
+.dx-tab {
+  flex: none; display: inline-flex; align-items: baseline; gap: 8px; padding: 10px 14px 12px; cursor: pointer;
+  font: 700 16px/1 var(--display); letter-spacing: 0.03em; color: var(--text); background: none;
+  border: 0; border-bottom: 2px solid transparent; margin-bottom: -1px;
+}
+.dx-tab small { font: 12px var(--sans); color: var(--muted); letter-spacing: 0; }
+.dx-tab:hover { color: var(--link-hover); }
+.dx-tab[aria-selected="true"] { color: var(--heading-solid); border-bottom-color: var(--gold); }
+.dx-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; }
+.dx-search {
+  flex: 1 1 260px; display: flex; align-items: center; gap: 8px; min-width: 0; height: 42px; padding: 0 14px;
+  border: 1px solid var(--rule); border-radius: 999px; background: color-mix(in srgb, var(--bg) 70%, #000 6%);
+}
+.dx-search:focus-within { border-color: var(--rule-strong); }
+.dx-search svg { width: 18px; height: 18px; flex: none; fill: none; stroke: var(--muted); stroke-width: 2; stroke-linecap: round; }
+.dx-search input { flex: 1; min-width: 0; border: 0; background: none; color: var(--fg); font: 15px var(--sans); outline: none; }
+.dx-search input::placeholder { color: var(--muted); }
+.dx-colors { display: flex; gap: 4px; }
+.pip-btn {
+  display: grid; place-items: center; width: 36px; height: 36px; padding: 0; cursor: pointer; font-size: 22px;
+  border: 1px solid transparent; border-radius: 999px; background: none; opacity: 0.45; filter: saturate(0.5);
+  transition: opacity .15s ease, filter .15s ease, border-color .15s ease;
+}
+.pip-btn:hover { opacity: 0.8; }
+.pip-btn[aria-pressed="true"] { opacity: 1; filter: none; border-color: var(--gold); }
+.seg { display: inline-flex; padding: 3px; gap: 2px; border: 1px solid var(--rule); border-radius: 999px; }
+.seg button {
+  display: inline-flex; align-items: center; gap: 6px; height: 34px; padding: 0 14px; cursor: pointer;
+  font: 14px var(--sans); color: var(--text); background: none; border: 0; border-radius: 999px;
+}
+.seg button:hover { color: var(--link-hover); }
+.seg button[aria-pressed="true"], .seg button[aria-selected="true"] { color: var(--fg); background: color-mix(in srgb, var(--gold) 22%, transparent); }
+.seg svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; }
+.dx-sort { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); }
+.dx-sort select {
+  height: 40px; padding: 0 12px; border: 1px solid var(--rule); border-radius: 999px; cursor: pointer;
+  background: color-mix(in srgb, var(--bg) 70%, #000 6%); color: var(--fg); font: 14px var(--sans); text-transform: none; letter-spacing: 0;
+}
+.dx-blurb { font-size: 14.5px; color: var(--muted); }
+.dx-blurb b { color: var(--fg); }
+.dx-empty { padding: 48px 0; text-align: center; color: var(--muted); }
+.dx-more { display: flex; justify-content: center; }
+.dx-more .pill { font-size: 15px; padding: 12px 24px; }
+
+/* Tiles: the deck's key card's art, its name and colours, and a curve you can read at a glance. */
+.dx-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 18px; }
+.dx-tile {
+  position: relative; display: flex; flex-direction: column; min-width: 0; padding: 0; text-align: left; cursor: pointer;
+  border: 1px solid var(--rule); border-radius: 12px; overflow: hidden; color: var(--fg); font: inherit;
+  background: color-mix(in srgb, var(--bg) 70%, #000 6%);
+  transition: transform .2s cubic-bezier(.2,.8,.2,1), border-color .15s ease, box-shadow .2s ease;
+}
+.dx-tile:hover { transform: translateY(-3px); border-color: var(--rule-strong); box-shadow: var(--shot-shadow); }
+.dx-art { position: relative; display: block; aspect-ratio: 626 / 457; overflow: hidden; background: var(--night-raised); }
+/* absolute, so a tall crop (vertical-frame cards) can never stretch the tile */
+.dx-art img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: center 30%; }
+.dx-art::after { content: ""; position: absolute; inset: 40% 0 0; background: linear-gradient(transparent, rgba(15, 9, 6, 0.92)); }
+.dx-art .pips { position: absolute; left: 12px; bottom: 10px; z-index: 1; }
+.dx-badge {
+  position: absolute; top: 10px; right: 10px; z-index: 1; font-size: 11.5px; letter-spacing: 0.06em; text-transform: uppercase;
+  color: var(--cream); background: rgba(15, 9, 6, 0.75); border: 1px solid rgba(215, 154, 60, 0.45); border-radius: 999px; padding: 4px 9px;
+}
+.dx-info { display: flex; flex-direction: column; gap: 6px; padding: 12px 14px 14px; flex: 1; }
+.dx-info b { font-family: var(--display); font-weight: 700; font-size: 16.5px; line-height: 1.25; letter-spacing: 0.01em; }
+.dx-sub { font-size: 13px; line-height: 1.45; color: var(--muted); }
+.dx-hit { font-size: 13px; color: var(--label); }
+.dx-foot { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; margin-top: auto; padding-top: 6px; }
+.dx-counts { font-size: 12.5px; color: var(--text); font-variant-numeric: tabular-nums; }
+.curve-mini { display: flex; align-items: flex-end; gap: 2px; height: 26px; }
+.curve-mini i { display: block; width: 6px; min-height: 1px; border-radius: 2px 2px 0 0; background: var(--gold); opacity: 0.85; }
+
+/* Table view */
+.dx-tablewrap { overflow-x: auto; border-top: 1px solid var(--rule-strong); }
+.dx-table { width: 100%; border-collapse: collapse; font-size: 14.5px; }
+.dx-table th { text-align: left; font-weight: 400; font-size: 12px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); padding: 12px 10px; white-space: nowrap; }
+.dx-table td { padding: 10px; border-top: 1px solid var(--rule); vertical-align: middle; color: var(--text); }
+.dx-table tbody tr { cursor: pointer; }
+.dx-table tbody tr:hover td { background: color-mix(in srgb, var(--gold) 8%, transparent); }
+.dx-table .dx-name { color: var(--fg); font-family: var(--display); font-weight: 700; font-size: 15px; white-space: nowrap; }
+.dx-table .dx-name button { all: unset; cursor: pointer; }
+.dx-table .dx-name button:focus-visible { outline: 2px solid var(--gold-hi); outline-offset: 3px; }
+.dx-table .num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.dx-table .dx-sub { font-family: var(--sans); font-weight: 400; font-size: 12.5px; }
+.dx-table .dx-keys { font-size: 13px; color: var(--muted); max-width: 340px; }
+.dx-thumb { width: 54px; height: 40px; border-radius: 6px; object-fit: cover; background: var(--night); }
+
+/* Viewer: a dark panel in both themes, like the lightbox, because card art reads best on it. */
+.dx-viewer {
+  width: min(1180px, calc(100vw - 32px)); height: min(860px, calc(100vh - 32px)); max-width: none; max-height: none;
+  padding: 0; border: 1px solid var(--gold-dim); border-radius: 14px; overflow: hidden;
+  background: var(--night); color: var(--cream);
+  --fg: var(--cream); --text: var(--cream-dim); --muted: #9a8a70; --rule: var(--night-line); --rule-strong: var(--gold-dim);
+  --label: var(--gold); --heading-solid: var(--gold-hi); --link-hover: var(--gold-hi); --bg: var(--night);
+  color-scheme: dark;
+}
+.dx-viewer[open] { display: flex; flex-direction: column; }
+.dx-viewer::backdrop { background: rgba(8, 5, 3, 0.82); backdrop-filter: blur(4px); }
+.dxv-head {
+  position: relative; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 14px 20px; align-items: start;
+  padding: 22px 24px 0; border-bottom: 1px solid var(--rule); overflow: hidden; flex: none;
+}
+.dxv-art { position: absolute; inset: 0; background: center 30% / cover no-repeat; opacity: 0.3; mask-image: linear-gradient(90deg, transparent, #000 45%, #000); -webkit-mask-image: linear-gradient(90deg, transparent, #000 45%, #000); }
+.dxv-art::after { content: ""; position: absolute; inset: 0; background: linear-gradient(transparent 30%, var(--night)); }
+.dxv-title, .dxv-actions, .dxv-tabs { position: relative; }
+.dxv-title { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.dxv-title h3 { font-size: clamp(22px, 3vw, 32px); line-height: 1.15; color: var(--gold-hi); }
+.dxv-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; font-size: 14px; color: var(--text); }
+.dxv-actions { display: flex; gap: 6px; }
+.dxv-btn {
+  display: inline-flex; align-items: center; gap: 8px; height: 38px; padding: 0 14px; cursor: pointer;
+  font: 14px var(--sans); color: var(--cream); background: rgba(15, 9, 6, 0.6);
+  border: 1px solid var(--night-line); border-radius: 999px;
+}
+.dxv-btn:hover { border-color: var(--gold); color: var(--gold-hi); }
+.dxv-btn svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.dxv-icon { width: 38px; padding: 0; justify-content: center; }
+.dxv-tabs { grid-column: 1 / -1; justify-self: start; margin-bottom: 14px; background: rgba(15, 9, 6, 0.6); }
+.dxv-body { flex: 1; min-height: 0; display: grid; grid-template-columns: 260px minmax(0, 1fr); }
+.dxv-preview { padding: 20px 0 20px 24px; }
+.dxv-preview img { width: 100%; aspect-ratio: 488 / 680; border-radius: 4.75% / 3.5%; background: var(--night-raised); box-shadow: 0 20px 40px -18px #000; }
+.dxv-pane { overflow-y: auto; padding: 20px 24px 28px; scrollbar-width: thin; scrollbar-color: var(--gold-dim) transparent; }
+.dxv-body.no-preview { grid-template-columns: minmax(0, 1fr); }
+.dxv-body.no-preview .dxv-preview { display: none; }
+
+/* List view: type groups flow into columns. */
+.dl-cols { columns: 250px 3; column-gap: 28px; }
+.dl-group { break-inside: avoid; margin-bottom: 20px; }
+.dl-group h4 { display: flex; justify-content: space-between; margin: 0 0 6px; padding-bottom: 6px; border-bottom: 1px solid var(--gold-dim); font: 700 14px var(--display); letter-spacing: 0.06em; color: var(--gold); }
+.dl-group h4 span { font: 13px var(--sans); color: var(--muted); }
+.dl-row {
+  display: grid; grid-template-columns: 22px minmax(0, 1fr) auto; gap: 8px; align-items: center; width: 100%;
+  padding: 4px 6px; margin: 0 -6px; width: calc(100% + 12px); cursor: default; text-align: left;
+  font: 14.5px var(--sans); color: var(--cream); background: none; border: 0; border-radius: 6px;
+}
+.dl-row:hover, .dl-row:focus-visible, .dl-row.is-on { background: rgba(215, 154, 60, 0.13); }
+.dl-row .n { color: var(--muted); font-variant-numeric: tabular-nums; text-align: right; }
+.dl-row .nm { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dl-side h4 { color: var(--cream-dim); border-color: var(--night-line); }
+
+/* Visual view: each type a column of overlapping cards, like a table spread. */
+.dv-cols { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 22px 14px; align-items: start; }
+.dv-col h4 { margin: 0 0 8px; font: 700 13px var(--display); letter-spacing: 0.06em; color: var(--gold); }
+.dv-col h4 span { font: 12px var(--sans); color: var(--muted); }
+.dv-stack { display: flex; flex-direction: column; }
+.dv-card { position: relative; display: block; padding: 0; border: 0; background: none; cursor: zoom-in; transition: transform .15s ease; }
+.dv-stack .dv-card + .dv-card { margin-top: -118%; }
+.dv-card img { width: 100%; aspect-ratio: 488 / 680; border-radius: 4.75% / 3.5%; background: var(--night-raised); box-shadow: 0 -2px 8px rgba(0, 0, 0, 0.45); }
+.dv-card:hover, .dv-card:focus-visible { z-index: 2; transform: translateY(-10px); }
+.dv-card .qty {
+  position: absolute; top: 8%; right: 6%; min-width: 26px; padding: 3px 7px; border-radius: 999px; text-align: center;
+  font: 700 13px var(--sans); color: #1d1712; background: var(--gold-hi); box-shadow: 0 2px 6px rgba(0, 0, 0, 0.6);
+}
+
+/* Stats view */
+.ds { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); gap: 28px 40px; }
+.ds h4 { margin: 0 0 14px; font: 700 15px var(--display); letter-spacing: 0.05em; color: var(--gold); }
+.ds-facts { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+.ds-fact { padding: 14px 16px; border: 1px solid var(--night-line); border-radius: 10px; }
+.ds-fact b { display: block; font: 700 26px/1.1 var(--display); color: var(--gold-hi); font-variant-numeric: tabular-nums; }
+.ds-fact span { font-size: 12.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+.curve { display: grid; grid-template-columns: repeat(8, minmax(0, 1fr)); gap: 8px; align-items: end; height: 200px; padding-bottom: 0; border-bottom: 1px solid var(--night-line); }
+.curve-bar { display: flex; flex-direction: column; justify-content: flex-end; align-items: center; gap: 4px; height: 100%; }
+.curve-bar span { font-size: 13px; color: var(--cream); font-variant-numeric: tabular-nums; }
+.curve-bar i { display: block; width: 100%; max-width: 44px; border-radius: 4px 4px 0 0; background: var(--gold); min-height: 0; transition: background-color .15s ease; }
+.curve-bar:hover i { background: var(--gold-hi); }
+.curve-x { display: grid; grid-template-columns: repeat(8, minmax(0, 1fr)); gap: 8px; margin-top: 6px; text-align: center; font-size: 12.5px; color: var(--muted); }
+.ds-note { margin-top: 10px; font-size: 13px; color: var(--muted); }
+.ds-rows { display: flex; flex-direction: column; gap: 10px; }
+.ds-row { display: grid; grid-template-columns: 112px minmax(0, 1fr) 36px; gap: 10px; align-items: center; font-size: 14px; color: var(--text); }
+.ds-row .lbl { display: flex; align-items: center; gap: 8px; }
+.ds-row .track { display: block; height: 10px; border-radius: 5px; background: rgba(255, 255, 255, 0.06); overflow: hidden; }
+.ds-row .fill { display: block; height: 100%; border-radius: 5px; background: var(--gold); }
+.ds-row .v { text-align: right; color: var(--cream); font-variant-numeric: tabular-nums; }
+
+/* Sample hand */
+.dh-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; margin-bottom: 22px; font-size: 14px; color: var(--text); }
+.dh-bar .pill { font-size: 14px; padding: 10px 18px; }
+.dh-hand { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 12px; }
+.dh-hand .dv-card { cursor: zoom-in; animation: dh-in .35s cubic-bezier(.2,.8,.2,1) both; }
+@keyframes dh-in { from { opacity: 0; transform: translateY(18px) rotate(-3deg); } }
+
+/* Touch: a tap shows the card big, since there is no hover preview. */
+.dx-pop { position: fixed; inset: 0; z-index: 30; display: grid; place-items: center; padding: 24px; background: rgba(8, 5, 3, 0.8); cursor: zoom-out; }
+.dx-pop img { width: min(380px, 86vw); aspect-ratio: 488 / 680; border-radius: 4.75% / 3.5%; box-shadow: 0 30px 60px -20px #000; }
+
+@media (max-width: 900px) {
+  .dxv-body { grid-template-columns: minmax(0, 1fr); }
+  .dxv-preview { display: none; }
+  .ds { grid-template-columns: minmax(0, 1fr); }
+  .ds-facts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 720px) {
+  .dx-grid { grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 12px; }
+  .dx-info { padding: 10px 12px 12px; }
+  .dx-info b { font-size: 15px; }
+  .curve-mini { display: none; }
+  .dx-view span { display: none; }
+  .dx-viewer { width: 100vw; height: 100dvh; border-radius: 0; border: 0; }
+  .dxv-head { grid-template-columns: minmax(0, 1fr); padding: 16px 16px 0; }
+  .dxv-actions { order: -1; justify-content: flex-end; }
+  .dxv-btn span { display: none; }
+  #dxv-copy { width: 38px; padding: 0; justify-content: center; }
+  .dxv-pane { padding: 16px 16px 24px; }
+  .dv-cols { grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); }
+  .dh-hand { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .dx-table .dx-keys, .dx-table .hide-sm { display: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .dx-tile, .dv-card { transition: none; }
+  .dx-tile:hover { transform: none; }
+  .dh-hand .dv-card { animation: none; }
+}

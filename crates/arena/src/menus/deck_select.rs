@@ -144,7 +144,7 @@ fn deck_rank(deck_ref: &str) -> u8 {
         "random" => 0,
         "user" => 1,
         "starter" => 2,
-        "precon" | "archetype" => 3,
+        "precon" | "archetype" | "tournament" => 3,
         "theme" => 4,
         "forge" => 5,
         _ => 6,

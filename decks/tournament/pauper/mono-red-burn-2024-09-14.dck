@@ -1,0 +1,22 @@
+[metadata]
+Name=Mono-Red Burn
+Deck Type=Constructed
+Comment=Pauper League · 2024-09-14 · 5-0
+[Main]
+4 Chain Lightning|AA3|[12]
+3 Fireblast|DMR|[119]
+2 Guttersnipe|HOC|[196]
+4 Kessig Flamebreather|DBL|[431]
+4 Lava Dart|PLST|[JUD-94]
+4 Lava Spike|TSR|[347]
+4 Lightning Bolt|MSC|[806]
+19 Mountain|TRK|[323]
+4 Reckless Impulse|TRK|[168]
+4 Sawblade Scamp|ONE|[147]
+4 Thermo-Alchemist|INR|[174]
+4 Wrenn's Resolve|MOM|[173]
+[Sideboard]
+4 End the Festivities|DBL|[422]
+3 Pyroblast|MB2|[198]
+4 Relic of Progenitus|MB2|[230]
+4 Smash to Smithereens|PIO|[343]

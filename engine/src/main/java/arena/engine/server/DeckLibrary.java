@@ -32,7 +32,9 @@ import java.util.regex.Pattern;
  * deck screen can offer hundreds of playable decks for every format instead of four starters:
  * <ul>
  *   <li>{@code archetype:<legality>/<stem>} - this repo's {@code decks/archetypes/} (see {@code arena.engine.ArchetypeDecks}),
- *       one deck per Forge metagame archetype; the only real source of Pauper and most of Standard,</li>
+ *       one deck per Forge metagame archetype; with the next, the only real source of Pauper and most of Standard,</li>
+ *   <li>{@code tournament:<legality>/<stem>} - this repo's {@code decks/tournament/}: real MTGO lists picked out of Forge's
+ *       deck archive (see {@code arena.engine.TournamentDecks}),</li>
  *   <li>{@code forge:<path>} - Forge's quest duel, quest world and genetic-AI decks under {@code res/} (~9k files).</li>
  * </ul>
  * Why an index: checking every deck against six legalities takes ~15 s, far too slow per request. It is built
@@ -50,9 +52,9 @@ public final class DeckLibrary {
         }
     }
 
-    private static final String ARCHETYPE = "archetype:", FORGE = "forge:";
+    private static final String ARCHETYPE = "archetype:", TOURNAMENT = "tournament:", FORGE = "forge:";
     /** Bumped when the cache's columns or the naming rules change. */
-    private static final String CACHE_VERSION = "2";
+    private static final String CACHE_VERSION = "3";
     private static final int REJECTED = -1;
 
     private static final CompletableFuture<Map<String, Entry>> INDEX = new CompletableFuture<>();
@@ -79,7 +81,7 @@ public final class DeckLibrary {
         return INDEX.join();
     }
 
-    public static boolean owns(final String ref) { return ref.startsWith(ARCHETYPE) || ref.startsWith(FORGE); }
+    public static boolean owns(final String ref) { return ref.startsWith(ARCHETYPE) || ref.startsWith(TOURNAMENT) || ref.startsWith(FORGE); }
 
     public static Deck load(final String ref) {
         final Entry e = entries().get(ref);
@@ -100,6 +102,9 @@ public final class DeckLibrary {
         if (repo != null) {
             for (final String l : DeckSource.LEGALITIES) {
                 for (final File f : dcks(new File(repo, "archetypes/" + l))) out.add(new Source(ARCHETYPE + l + "/" + stem(f), f, "archetype"));
+            }
+            for (final String l : DeckSource.LEGALITIES) {
+                for (final File f : dcks(new File(repo, "tournament/" + l))) out.add(new Source(TOURNAMENT + l + "/" + stem(f), f, "archetype"));
             }
         }
         final File res = new File(ForgeConstants.RES_DIR);

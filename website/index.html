@@ -55,6 +55,7 @@ try {
       -->
       <a href="#about">About</a>
       <a href="#modes">Game modes</a>
+      <a href="#decks">Decks</a>
       <a class="nav-extra" href="#friends">Multiplayer</a>
       <a class="nav-extra" href="#requirements">Requirements</a>
       <a href="https://github.com/birkmann/mtg-duelstone">Source</a>
@@ -365,6 +366,59 @@ try {
   </div>
 </section>
 
+<!-- Deck explorer. The decks are the ones that ship with the game (decks/), baked into
+     assets/decks.json by tools/build-website-decks.py; decks.js renders it. Card images come from
+     Scryfall's CDN by printing id, so none are stored here. -->
+<section class="wrap section" id="decks">
+  <div class="head">
+    <div class="copy">
+      <span class="label">deck explorer</span>
+      <h2>Every deck in the box</h2>
+    </div>
+    <p class="lead">The game comes with hundreds of ready-to-play decks: Forge's metagame archetypes for every format, real tournament lists and starter decks. Browse them by format, look inside any of them, and draw a sample hand.</p>
+  </div>
+
+  <div class="dx" id="dx" aria-busy="true">
+    <div class="dx-formats" role="tablist" aria-label="Format"></div>
+    <div class="dx-tools">
+      <label class="dx-search">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="M16 16l4.5 4.5"/></svg>
+        <span class="visually-hidden">Search decks or cards</span>
+        <input type="search" id="dx-q" placeholder="Search decks or cards" autocomplete="off" spellcheck="false">
+      </label>
+      <div class="dx-colors" role="group" aria-label="Colours the deck plays">
+        <button type="button" class="pip-btn" data-c="W" aria-pressed="false" title="White"><i class="pip pip-W">W</i></button>
+        <button type="button" class="pip-btn" data-c="U" aria-pressed="false" title="Blue"><i class="pip pip-U">U</i></button>
+        <button type="button" class="pip-btn" data-c="B" aria-pressed="false" title="Black"><i class="pip pip-B">B</i></button>
+        <button type="button" class="pip-btn" data-c="R" aria-pressed="false" title="Red"><i class="pip pip-R">R</i></button>
+        <button type="button" class="pip-btn" data-c="G" aria-pressed="false" title="Green"><i class="pip pip-G">G</i></button>
+        <button type="button" class="pip-btn" data-c="C" aria-pressed="false" title="Colourless"><i class="pip pip-C">C</i></button>
+      </div>
+      <div class="seg" id="dx-src" role="group" aria-label="Source">
+        <button type="button" data-v="all" aria-pressed="true">All</button>
+        <button type="button" data-v="meta" aria-pressed="false">Archetypes</button>
+        <button type="button" data-v="event" aria-pressed="false">Tournament</button>
+      </div>
+      <label class="dx-sort"><span>Sort</span>
+        <select id="dx-sort">
+          <option value="pop">Most played</option>
+          <option value="new">Newest</option>
+          <option value="name">Name</option>
+          <option value="mv">Lowest curve</option>
+          <option value="colors">Colours</option>
+        </select>
+      </label>
+      <div class="seg dx-view" id="dx-view" role="group" aria-label="View">
+        <button type="button" data-v="tiles" aria-pressed="true" title="Tiles"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="7" height="7" rx="1.5"/><rect x="13" y="4" width="7" height="7" rx="1.5"/><rect x="4" y="13" width="7" height="7" rx="1.5"/><rect x="13" y="13" width="7" height="7" rx="1.5"/></svg><span>Tiles</span></button>
+        <button type="button" data-v="table" aria-pressed="false" title="Table"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg><span>Table</span></button>
+      </div>
+    </div>
+    <p class="dx-blurb" id="dx-blurb"></p>
+    <div class="dx-results" id="dx-results"><p class="dx-empty">Loading decks…</p></div>
+    <div class="dx-more"><button type="button" class="pill pill-secondary" id="dx-more" hidden>Show more</button></div>
+  </div>
+</section>
+
 <section class="wrap section" id="friends">
   <div class="head">
     <div class="copy">
@@ -453,24 +507,24 @@ try {
     </div>
 
     <div class="split split-reverse">
-      <!-- One matching loadout across the three tabs, so the designs are the subject, not the cards. -->
+      <!-- One loadout across the three tabs, each printed with a card's art: that's the feature people ask about. -->
       <div class="studio-shots">
         <figure class="shot">
           <picture>
             <source srcset="assets/img/designer.webp" type="image/webp">
-            <img src="assets/img/designer.jpg" width="1600" height="900" alt="The Design Studio: three cards in Dragonscale sleeves, red scales with a gold flame emblem, beside pattern, colour, emblem and finish options." loading="lazy">
+            <img src="assets/img/designer.jpg" width="1600" height="900" alt="The Design Studio: two cards in custom sleeves printed with the art of Chandra, Acolyte of Flame inside an ornate gold frame, beside the artwork picker and colour, emblem, frame and finish options." loading="lazy">
           </picture>
         </figure>
         <figure class="shot">
           <picture>
             <source srcset="assets/img/designer-box.webp" type="image/webp">
-            <img src="assets/img/designer-box.jpg" width="1600" height="900" alt="The Dragonhide deckbox in the Design Studio: red scales, an ornate gold frame and a flame emblem." loading="lazy">
+            <img src="assets/img/designer-box.jpg" width="1600" height="900" alt="A custom deckbox in the Design Studio with Liliana, the Last Hope on the front, a violet frame and filigree on the sides." loading="lazy">
           </picture>
         </figure>
         <figure class="shot">
           <picture>
             <source srcset="assets/img/designer-mat.webp" type="image/webp">
-            <img src="assets/img/designer-mat.jpg" width="1600" height="900" alt="The Dragon's Lair playmat in the Design Studio, set up like a game in progress with matching sleeves and deckbox." loading="lazy">
+            <img src="assets/img/designer-mat.jpg" width="1600" height="900" alt="A custom playmat printed with the art of a Mountain, set up like a game in progress with the Chandra sleeves and Liliana deckbox." loading="lazy">
           </picture>
         </figure>
       </div>
@@ -693,7 +747,7 @@ try {
       <button class="copy-btn" type="button" data-copy="git clone https://github.com/birkmann/mtg-duelstone.git &amp;&amp; cd mtg-duelstone &amp;&amp; tools/setup-forge.sh &amp;&amp; tools/fetch-offline.sh &amp;&amp; ./run.sh">Copy</button>
     </div>
   </details>
-  <p class="legal">This is an unofficial fan project. It is not affiliated with, endorsed, sponsored or approved by Wizards of the Coast. Magic: The Gathering and MTG are trademarks of Wizards of the Coast LLC; card names, mana symbols, artwork and images are © Wizards of the Coast. The project is intended to fall under the <a href="https://company.wizards.com/en/legal/fancontentpolicy">Wizards of the Coast Fan Content Policy</a>. No card images are included or redistributed; the game downloads them once from <a href="https://scryfall.com">Scryfall</a> onto your computer. The rules engine is <a href="https://github.com/Card-Forge/forge">Forge</a> (GPL-3.0).</p>
+  <p class="legal">This is an unofficial fan project. It is not affiliated with, endorsed, sponsored or approved by Wizards of the Coast. Magic: The Gathering and MTG are trademarks of Wizards of the Coast LLC; card names, mana symbols, artwork and images are © Wizards of the Coast. The project is intended to fall under the <a href="https://company.wizards.com/en/legal/fancontentpolicy">Wizards of the Coast Fan Content Policy</a>. No card images are included or redistributed; the game downloads them once from <a href="https://scryfall.com">Scryfall</a> onto your computer, and the deck explorer on this page shows them straight from Scryfall. The rules engine is <a href="https://github.com/Card-Forge/forge">Forge</a> (GPL-3.0).</p>
 </footer>
 <div class="lightbox" id="lightbox" role="dialog" aria-modal="true" aria-label="Screenshot" hidden>
   <div class="lb-backdrop" data-close></div>
@@ -715,6 +769,35 @@ try {
     <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg>
   </button>
 </div>
+
+<dialog class="dx-viewer" id="dx-viewer" aria-labelledby="dxv-name">
+  <header class="dxv-head">
+    <div class="dxv-art" id="dxv-art" aria-hidden="true"></div>
+    <div class="dxv-title">
+      <span class="label" id="dxv-format"></span>
+      <h3 id="dxv-name"></h3>
+      <p class="dxv-meta" id="dxv-meta"></p>
+    </div>
+    <div class="dxv-actions">
+      <button type="button" class="dxv-btn" id="dxv-copy" title="Copy the list (MTGO / Arena text)"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V5a1 1 0 0 0-1-1H5a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h3"/></svg><span>Copy list</span></button>
+      <button type="button" class="dxv-btn dxv-icon" id="dxv-prev" aria-label="Previous deck"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg></button>
+      <button type="button" class="dxv-btn dxv-icon" id="dxv-next" aria-label="Next deck"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg></button>
+      <button type="button" class="dxv-btn dxv-icon" id="dxv-close" aria-label="Close"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+    </div>
+    <div class="seg dxv-tabs" id="dxv-tabs" role="tablist" aria-label="View">
+      <button type="button" role="tab" data-v="list" aria-selected="true">List</button>
+      <button type="button" role="tab" data-v="visual" aria-selected="false">Cards</button>
+      <button type="button" role="tab" data-v="stats" aria-selected="false">Stats</button>
+      <button type="button" role="tab" data-v="hand" aria-selected="false">Sample hand</button>
+    </div>
+  </header>
+  <div class="dxv-body">
+    <aside class="dxv-preview" aria-hidden="true"><img id="dxv-preview" alt="" width="488" height="680"></aside>
+    <div class="dxv-pane" id="dxv-pane" role="tabpanel"></div>
+  </div>
+</dialog>
+<div class="dx-pop" id="dx-pop" hidden><img alt=""></div>
+<script src="decks.js" defer></script>
 
 <script>
 // Light/dark toggle. The page is dark like the game until the visitor picks light;

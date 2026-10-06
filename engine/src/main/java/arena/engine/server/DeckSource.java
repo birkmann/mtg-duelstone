@@ -29,7 +29,7 @@ import java.util.concurrent.ThreadLocalRandom;
  *   <li>{@code "starter:<name>"} — a {@code .dck} shipped in this repo's {@code decks/<format>/} dir,</li>
  *   <li>{@code "precon:<name>"} — Forge's shipped Commander precons,</li>
  *   <li>{@code "theme:<name>"} — Forge's bundled constructed precon decks (quest/precons, 60-card legal only),</li>
- *   <li>{@code "archetype:<legality>/<stem>"}, {@code "forge:<path>"} — the constructed {@link DeckLibrary},</li>
+ *   <li>{@code "archetype:…"}, {@code "tournament:…"}, {@code "forge:<path>"} — the constructed {@link DeckLibrary},</li>
  *   <li>{@code "user:<name>"} — Forge's own ~/.forge/decks/{commander,constructed},</li>
  *   <li>{@code "file:<path>"} — any .dck,</li>
  *   <li>{@code "random"} — a random legal deck of the requested format (for the AI).</li>
@@ -275,17 +275,24 @@ public final class DeckSource {
     }
 
     /**
-     * What a 60-card deck plays: its spells' colours. Colour identity would count the lands too, and a
-     * Raffine's Tower makes a two-colour control deck look like four.
+     * What a 60-card deck plays: the colours of its spells, each with at least 4 copies. Colour identity would
+     * count the lands too (a Raffine's Tower makes a two-colour control deck look like four), and real lists
+     * carry one-off splashes (2 Prismatic Strands) that don't make a Dimir deck five-colour.
      */
     public static ColorSet spellColors(final Deck d) {
-        int spells = 0, all = 0;
+        final int[] perColor = new int[5];
+        int all = 0, any = 0;
         for (final Map.Entry<PaperCard, Integer> e : d.getMain()) {
             final forge.card.CardRules r = e.getKey().getRules();
             all |= r.getColorIdentity().getColor();
-            if (!r.getType().isLand()) spells |= r.getColor().getColor();
+            if (r.getType().isLand()) continue;
+            final int c = r.getColor().getColor();
+            any |= c;
+            for (int i = 0; i < 5; i++) if ((c & (1 << i)) != 0) perColor[i] += e.getValue();
         }
-        return ColorSet.fromMask(spells != 0 ? spells : all);
+        int main = 0;
+        for (int i = 0; i < 5; i++) if (perColor[i] >= 4) main |= 1 << i;
+        return ColorSet.fromMask(main != 0 ? main : any != 0 ? any : all);
     }
 
     /** Art for the "Random deck" tile: there are no cards to choose from until it's generated. */
@@ -355,7 +362,7 @@ public final class DeckSource {
         final String name = colon < 0 ? ref : ref.substring(colon + 1);
         switch (kind) {
             case "precon": return require(FModel.getDecks().getCommanderPrecons(), name, ref);
-            case "archetype", "forge": return DeckLibrary.load(ref);
+            case "archetype", "tournament", "forge": return DeckLibrary.load(ref);
             case "theme": {
                 final Deck d = themes().get(name);
                 if (d != null) return d;
