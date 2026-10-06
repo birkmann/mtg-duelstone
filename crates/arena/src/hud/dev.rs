@@ -1,7 +1,8 @@
 //! Dev-only: `ARENA_SHOT_WHEN=<cond>` takes a screenshot the first time a live game state matches
 //! (stack, ability, attack, block, target, pay, attackdecl, blockdecl, sel), then exits. Lets us
 //! eyeball arrows / stack / combat visuals on REAL engine data under `--autoplay`.
-//! `ARENA_HOVER_HAND=<n>` pretends the pointer rests on my n-th hand card (hover lift check).
+//! `ARENA_HOVER_HAND=<n>` pretends the pointer rests on my n-th hand card (hover lift check),
+//! `ARENA_HOVER_COMMAND` on my first command-zone card. `paused` pairs with `ARENA_AUTOPLAY_PAUSE`.
 
 use bevy::prelude::*;
 use bevy::render::view::screenshot::{Screenshot, save_to_disk};
@@ -30,7 +31,7 @@ impl Plugin for DevPlugin {
         if std::env::var("ARENA_OPEN_MENU").is_ok() {
             app.add_systems(Update, open_menu.run_if(in_state(AppState::InMatch).or_else(in_state(AppState::GameOver))));
         }
-        if std::env::var("ARENA_HOVER_HAND").is_ok() {
+        if std::env::var("ARENA_HOVER_HAND").is_ok() || std::env::var("ARENA_HOVER_COMMAND").is_ok() {
             app.add_systems(Update, fake_hover.run_if(in_state(AppState::InMatch).or_else(in_state(AppState::GameOver))));
         }
     }
@@ -48,7 +49,13 @@ fn fake_hover(
     }
     let n: usize = std::env::var("ARENA_HOVER_HAND").ok().and_then(|s| s.parse().ok()).unwrap_or(2);
     let Some(me) = view.me() else { return };
-    let Some(c) = me.zones.hand.get(n) else { return };
+    // ARENA_HOVER_COMMAND: my first command-zone card that isn't the Planar Dice (a plane, a scheme, a commander)
+    let c = if std::env::var("ARENA_HOVER_COMMAND").is_ok() {
+        me.zones.command.iter().find(|c| c.name != "Planar Dice")
+    } else {
+        me.zones.hand.get(n)
+    };
+    let Some(c) = c else { return };
     if let Some(&e) = registry.0.get(&c.id) {
         commands.entity(e).insert(Hovered);
         preview.0 = Some(c.id);
@@ -84,6 +91,7 @@ fn shot_when(
         "attackdecl" => crate::combat::declaring_attackers(&view, &input) && f.is_some_and(|f| !f.selectable.is_empty()),
         "blockdecl" => crate::combat::declaring_blockers(&view, &input) && f.is_some_and(|f| !f.selectable.is_empty()),
         "sel" => f.is_some_and(|f| !f.selectable.is_empty()),
+        "paused" => crate::debug::paused_for_shot(&view),
         _ => false,
     };
     if ok && time.elapsed_secs() > 8.0 {

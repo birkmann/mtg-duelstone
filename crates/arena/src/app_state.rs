@@ -210,13 +210,16 @@ fn poll_boot(
                 // the multiplayer screen picks the invite up from CliArgs
                 next.set(AppState::Multiplayer);
             } else if cli.quick {
-                *mode = MatchMode::VsAi;
+                *mode = match cli.players {
+                    Some(n) if n > 2 => MatchMode::Host { players: n.min(4) },
+                    _ => MatchMode::VsAi,
+                };
                 *match_cfg = MatchConfig {
                     format: cli.format.unwrap_or(settings.last_format),
                     human_deck: cli.deck.clone().unwrap_or_default(),
                     ai_deck: cli.ai_deck.clone().unwrap_or_default(),
                     seed: cli.seed,
-                    setup: Default::default(),
+                    setup: cli.setup.clone(),
                 };
                 next.set(AppState::Loading);
             } else {

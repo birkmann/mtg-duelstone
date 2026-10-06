@@ -51,7 +51,7 @@ fn main() {
 fn parse_args() -> CliArgs {
     use arena::platform::query_param;
     CliArgs {
-        format: query_param("format").map(|f| if f == "commander" { Format::Commander } else { Format::Constructed }),
+        format: query_param("format").as_deref().and_then(Format::parse),
         deck: query_param("deck"),
         ai_deck: query_param("ai-deck"),
         seed: query_param("seed").and_then(|s| s.parse().ok()),
@@ -65,15 +65,45 @@ fn parse_args() -> CliArgs {
     }
 }
 
+/// `mtg-duelstone --fetch-images [ARGS]`: run the `fetch-offline` tool packaged next to this binary.
+/// Why here: an AppImage or a macOS app has one obvious executable, so this is how release users
+/// download the card images (they are not redistributed) without unpacking anything.
+#[cfg(not(target_arch = "wasm32"))]
+fn fetch_images(args: Vec<String>) -> ! {
+    let exe = std::env::current_exe().and_then(|e| e.canonicalize()).ok();
+    let tool = exe.as_deref().and_then(|e| e.parent()).map(|d| d.join(if cfg!(windows) { "fetch-offline.exe" } else { "fetch-offline" }));
+    let Some(tool) = tool.filter(|t| t.is_file()) else {
+        eprintln!("fetch-offline is not next to this binary; from a source checkout run tools/fetch-offline.sh");
+        std::process::exit(2);
+    };
+    match std::process::Command::new(&tool).args(args).status() {
+        Ok(s) => std::process::exit(s.code().unwrap_or(1)),
+        Err(e) => {
+            eprintln!("cannot run {}: {e}", tool.display());
+            std::process::exit(2);
+        }
+    }
+}
+
 #[cfg(not(target_arch = "wasm32"))]
 fn parse_args() -> CliArgs {
+    if std::env::args().nth(1).as_deref() == Some("--fetch-images") {
+        fetch_images(std::env::args().skip(2).collect());
+    }
     let mut cli = CliArgs::default();
     let mut args = std::env::args().skip(1);
     while let Some(a) = args.next() {
         match a.as_str() {
-            "--format" => {
-                cli.format = args.next().map(|f| if f == "commander" { Format::Commander } else { Format::Constructed })
-            }
+            "--format" => match args.next().as_deref().map(Format::parse) {
+                Some(Some(f)) => cli.format = Some(f),
+                _ => eprintln!("--format: constructed, commander, brawl or oathbreaker"),
+            },
+            "--legality" => cli.setup.legality = args.next(),
+            "--variant" => match args.next().as_deref().and_then(mtg_protocol::Variant::parse) {
+                Some(v) => cli.setup.variants.push(v),
+                None => eprintln!("--variant: planechase, archenemy, momir or teams"),
+            },
+            "--players" => cli.players = args.next().and_then(|s| s.parse().ok()),
             "--deck" => cli.deck = args.next(),
             "--ai-deck" => cli.ai_deck = args.next(),
             "--seed" => cli.seed = args.next().and_then(|s| s.parse().ok()),
@@ -88,10 +118,12 @@ fn parse_args() -> CliArgs {
             "--join" => cli.join = args.next(),
             "-h" | "--help" => {
                 println!(
-                    "mtg-duelstone [--quick] [--format constructed|commander] [--deck REF] [--ai-deck REF] [--seed N]\n\
-                     \x20         [--join INVITE-LINK-OR-CODE]\n\
+                    "mtg-duelstone [--quick] [--format constructed|commander|brawl|oathbreaker] [--deck REF] [--ai-deck REF] [--seed N]\n\
+                     \x20         [--legality standard|pioneer|modern|legacy|vintage|pauper] [--variant planechase|archenemy|momir|teams]...\n\
+                     \x20         [--players 2..4] [--join INVITE-LINK-OR-CODE]\n\
                      \x20         [--replay FILE.jsonl] [--record FILE.jsonl] [--engine URL] [--no-autolaunch]\n\
-                     \x20         [--screenshot OUT.png] [--exit-after SECS] [--autoplay]"
+                     \x20         [--screenshot OUT.png] [--exit-after SECS] [--autoplay]\n\
+                     mtg-duelstone --fetch-images      download the card images once (about 9 GB)"
                 );
                 std::process::exit(0);
             }

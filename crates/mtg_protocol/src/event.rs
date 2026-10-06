@@ -56,6 +56,10 @@ impl Variant {
             Self::Teams => "2v2 Teams",
         }
     }
+    /// `planechase` / `archenemy` / `momir` / `teams` (case-insensitive).
+    pub fn parse(s: &str) -> Option<Self> {
+        Self::ALL.into_iter().find(|v| v.as_str().eq_ignore_ascii_case(s.trim()))
+    }
     /// Momir decks are generated: the player's deck choice is irrelevant.
     pub fn ignores_decks(self) -> bool {
         matches!(self, Self::Momir)

@@ -52,8 +52,12 @@ pub enum AppState {
 /// Parsed command line. Owner: main.rs (inserted before the app runs).
 #[derive(Resource, Debug, Clone, Default)]
 pub struct CliArgs {
-    /// `--format constructed|commander`
+    /// `--format constructed|commander|brawl|oathbreaker`
     pub format: Option<Format>,
+    /// `--legality pauper`, `--variant planechase` (repeatable): the game setup for `--quick`
+    pub setup: mtg_protocol::GameSetup,
+    /// `--players N` (2..=4) with `--quick`: open a table, fill the other seats with the Forge AI and start
+    pub players: Option<u8>,
     /// `--deck <ref>` / `--ai-deck <ref>` (deck refs as listed by `/api/decks`)
     pub deck: Option<String>,
     pub ai_deck: Option<String>,

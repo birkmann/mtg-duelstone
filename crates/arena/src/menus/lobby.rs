@@ -6,6 +6,9 @@
 //! filled with AI, a player's connection drops), and the screen is a pure function of the latest one
 //! (`LobbyView`). The host's START turns the same socket into the game: `hello` + the first `state`
 //! arrive and app_state moves on to InMatch.
+//!
+//! `--quick --players N` skips the waiting: the host gives every open seat to the Forge AI and starts,
+//! which is the quickest way into a 3- or 4-player game against the computer.
 
 use bevy::prelude::*;
 use mtg_protocol::{LobbyFrame, SeatInfo, SeatKind};
@@ -20,7 +23,7 @@ impl Plugin for LobbyPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<CopyFeedback>()
             .add_systems(OnEnter(AppState::Lobby), spawn_screen)
-            .add_systems(Update, (rebuild_seats, refresh_texts).run_if(in_state(AppState::Lobby)));
+            .add_systems(Update, (rebuild_seats, refresh_texts, quick_table).run_if(in_state(AppState::Lobby)));
     }
 }
 
@@ -91,6 +94,33 @@ fn spawn_screen(mut commands: Commands, fonts: Res<ArenaFonts>, mut copied: ResM
                 bar.commands().entity(b).insert((MenuAction::StartTable, StartButton));
             });
         });
+}
+
+/// `--quick --players N`: fill the open seats with AI (each asked for once), then start.
+fn quick_table(
+    cli: Res<CliArgs>,
+    lobby: Res<LobbyView>,
+    match_cfg: Res<MatchConfig>,
+    mut out: MessageWriter<SendCmd>,
+    mut asked: Local<Vec<i64>>,
+    mut started: Local<bool>,
+) {
+    let Some(l) = lobby.frame.as_ref().filter(|l| cli.quick && cli.players.is_some() && is_host(l)) else { return };
+    if *started {
+        return;
+    }
+    let deck = Some(match_cfg.ai_deck.clone()).filter(|d| !d.is_empty());
+    for s in l.seats.iter().filter(|s| s.kind == SeatKind::Open) {
+        if !asked.contains(&s.seat) {
+            asked.push(s.seat);
+            out.write(SendCmd(mtg_protocol::ClientFrame::LobbySeat { seat: s.seat, kind: SeatKind::Ai, deck: deck.clone() }));
+        }
+    }
+    // dev aid for unattended screenshots: ARENA_LOBBY_HOLD keeps the full table in the lobby
+    if l.can_start && l.seats.iter().all(|s| s.kind != SeatKind::Open) && std::env::var("ARENA_LOBBY_HOLD").is_err() {
+        *started = true;
+        out.write(SendCmd(mtg_protocol::ClientFrame::Start { seed: match_cfg.seed }));
+    }
 }
 
 fn is_host(l: &LobbyFrame) -> bool {

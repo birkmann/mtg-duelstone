@@ -87,6 +87,11 @@ fn start(mut ed: ResMut<CubeEditor>, cfg: Res<EngineConfig>) {
     if ed.cube.name.is_empty() {
         ed.cube = Cube { name: "My Cube".into(), packs: 3, pack_size: 15, ..default() };
     }
+    // dev aid for unattended screenshots: ARENA_CUBE=<ref> opens that cube
+    if let Ok(r) = std::env::var("ARENA_CUBE") {
+        let a = api(&cfg);
+        ed.pending.push(mtg_client::spawn(async move { Reply::Loaded(a.cube(&r).await.map_err(|e| format!("{e:#}"))) }));
+    }
     ed.version += 1;
 }
 

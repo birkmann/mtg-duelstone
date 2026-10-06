@@ -23,6 +23,14 @@ impl Plugin for DebugPlugin {
     }
 }
 
+/// Dev aid for screenshots: `ARENA_AUTOPLAY_PAUSE=N` stops the bot in my first main phase of turn N or
+/// later, so the board holds still (the engine waits for us) until `ARENA_SHOT_WHEN=paused` fires.
+pub fn paused_for_shot(view: &GameView) -> bool {
+    let Some(n) = std::env::var("ARENA_AUTOPLAY_PAUSE").ok().and_then(|s| s.parse::<i32>().ok()) else { return false };
+    let g = &view.game;
+    g.turn >= n && g.player_turn.is_some() && g.player_turn == view.you && g.phase == Some(mtg_protocol::PhaseType::Main1)
+}
+
 /// `--autoplay`: drive the human seat with the shared bot policy, slowly enough that the board
 /// animations are visible in screenshots/recordings.
 fn autoplay(
@@ -58,7 +66,7 @@ fn autoplay(
     if view.seq != last_progress.0 {
         *last_progress = (view.seq, now);
     }
-    if now < *next_at {
+    if now < *next_at || paused_for_shot(&view) {
         return;
     }
     if let Some(p) = &prompt.0 {

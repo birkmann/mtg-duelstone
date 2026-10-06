@@ -143,6 +143,7 @@ pub(super) fn debug_jump(
     mut next: ResMut<NextState<AppState>>,
     mut menu: ResMut<MenuState>,
     mut settings: ResMut<Settings>,
+    mut match_cfg: ResMut<MatchConfig>,
     mut done: Local<bool>,
 ) {
     if *done || *state.get() != AppState::MainMenu {
@@ -154,9 +155,14 @@ pub(super) fn debug_jump(
     };
     *done = true;
     match which.as_str() {
-        "deck" | "play" => next.set(AppState::DeckSelect),
+        // the mode screen is skipped: take the remembered format, as it would
+        "deck" | "play" => {
+            match_cfg.format = settings.last_format;
+            next.set(AppState::DeckSelect);
+        }
         "commander" => {
             settings.last_format = Format::Commander;
+            match_cfg.format = Format::Commander;
             next.set(AppState::DeckSelect);
         }
         "import" => {

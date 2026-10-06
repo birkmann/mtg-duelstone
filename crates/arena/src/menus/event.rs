@@ -470,13 +470,18 @@ fn handle(
     let _ = me;
     // Dev aid (ARENA_MENU_SCREEN=draft): run the whole event unattended — start, take the first card of
     // every pack, take the engine's suggested deck, deal a game — for screenshots and UI smoke tests.
+    // ARENA_DRAFT_STOP=pick:N holds on the pack after N picks, =build on the suggested deck.
     if std::env::var("ARENA_MENU_SCREEN").as_deref() == Ok("draft")
         && let Some(f) = &view.frame
     {
+        let stop = std::env::var("ARENA_DRAFT_STOP").unwrap_or_default();
+        let hold_pick = stop.strip_prefix("pick:").and_then(|n| n.parse::<usize>().ok()).is_some_and(|n| f.pool.len() >= n);
         let step = match f.phase {
             EventPhase::Lobby if is_host(f) && f.can_start => Some((-10, ClientFrame::StartEvent)),
+            EventPhase::Drafting if hold_pick => None,
             EventPhase::Drafting => f.pack.first().map(|c| (c.id, ClientFrame::Pick { id: c.id })),
             EventPhase::Building | EventPhase::Ready if draft.main.is_empty() => Some((-1, ClientFrame::SuggestDeck)),
+            EventPhase::Building if stop == "build" => None,
             EventPhase::Building if draft.dirty => Some((-2, ClientFrame::SubmitDeck { deck: draft.to_deck() })),
             EventPhase::Ready if is_host(f) && f.games.is_empty() => Some((-3, ClientFrame::DealGames { pairing: Pairing::Duels, table_size: 2 })),
             _ => None,
