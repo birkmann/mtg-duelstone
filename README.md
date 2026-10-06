@@ -7,7 +7,8 @@ a tilted 3D table, art-framed cards, targeting arrows and the full rules engine 
 
 Play the Forge AI or up to three friends in **Constructed** (Casual to Vintage, Pauper), **Commander**, **Brawl**
 and **Oathbreaker**, with **Planechase**, **Archenemy**, **Momir Basic** and **2v2 teams** on top, or draft a
-**cube**, a **set** or **sealed**.
+**cube**, a **set** or **sealed**. Everything runs on your machine: no internet needed once the card images are
+downloaded.
 
 ![Rust](https://img.shields.io/badge/Rust-2024-b7410e?logo=rust)
 ![Bevy](https://img.shields.io/badge/Bevy-0.19-232326)
@@ -24,20 +25,22 @@ and **Oathbreaker**, with **Planechase**, **Archenemy**, **Momir Basic** and **2
 
 | | |
 |:---:|:---:|
+| ![Choose a mode](docs/screenshots/modes.jpg) | ![Four-player Commander](docs/screenshots/table4.jpg) |
+| **Choose a mode.** Format, Constructed legality and casual variants, here Pauper with Planechase | **Four at one table.** A Commander free-for-all against three Forge AI players |
+| ![Cube draft](docs/screenshots/draft.jpg) | ![Deck building after the draft](docs/screenshots/limited.jpg) |
+| **Cube draft.** The MTGO Legacy Cube in a pod of eight, AI drafters in the empty seats | **Build your deck.** 40 cards from your picks, basics on the right, or *Suggest a deck* |
+| ![Planechase](docs/screenshots/planechase.jpg) | ![Archenemy](docs/screenshots/archenemy.jpg) |
+| **Planechase.** The current plane in the big preview; the Planar Dice sit in your command zone | **Archenemy.** 40 life and a scheme deck against everyone else |
+| ![Multiplayer lobby](docs/screenshots/lobby.jpg) | ![Cube designer](docs/screenshots/cubes.jpg) |
+| **The lobby.** Copy the invite link, give empty seats to the AI, start | **Cube designer.** Edit a copy of any of the 94 bundled cubes or build your own |
 | ![Main menu](docs/screenshots/menu.jpg) | ![Deck selection](docs/screenshots/decks.jpg) |
-| **Main menu.** A card carousel around an arcane portal; Play · Decks · Customize · Settings | **Choose your deck.** Constructed ↔ Commander, every deck in its box, pick the AI's deck or Random |
-| ![Opening hand](docs/screenshots/mulligan.jpg) | ![Hover preview while paying mana](docs/screenshots/hover.jpg) |
-| **Opening hand.** Keep or mulligan | **Hover preview & mana payment.** Big card on the right, cost pips, Auto Pay |
+| **Main menu.** Play · Multiplayer · Cubes · Decks · Customize · Settings | **Choose your deck.** Every deck in its box; pick the AI's deck or Random |
 | ![Commander game with goblin and elf tokens](docs/screenshots/commander.jpg) | ![Counterspell on the stack](docs/screenshots/stack.jpg) |
 | **Commander.** Krenko's goblin tokens stack up (x5), elves (x11), commander damage | **The stack.** The AI counters your spell; the button reads *Resolve* |
 | ![Deck builder with recommendations](docs/screenshots/builder.jpg) | ![Design Studio](docs/screenshots/designer.jpg) |
 | **Deck builder.** Offline EDHREC-style suggestions, live mana curve, colour sources and role counts | **Design Studio.** Sleeves, deckboxes and playmats from presets or your own designs |
-| ![Combat](docs/screenshots/combat.jpg) | ![Combat damage assignment](docs/screenshots/damage.jpg) |
-| **Combat.** A Commander alpha strike: ribbons to the defender, Inferno Titan's ability on the stack | **Prompts.** Every engine question gets a dialog, e.g. trample damage assignment |
-
-| ![Victory](docs/screenshots/victory.jpg) | ![Defeat](docs/screenshots/defeat.jpg) |
-|:---:|:---:|
-| **Victory.** Confetti, Rematch or back to the menu | **Defeat.** Better luck next time |
+| ![Hover preview while paying mana](docs/screenshots/hover.jpg) | ![Combat damage assignment](docs/screenshots/damage.jpg) |
+| **Hover preview & mana payment.** Big card on the right, cost pips, Auto Pay | **Prompts.** Every engine question gets a dialog, e.g. trample damage assignment |
 
 ## Features
 
@@ -49,6 +52,8 @@ and **Oathbreaker**, with **Planechase**, **Archenemy**, **Momir Basic** and **2
 - **Multiplayer, up to 4 players.** Host a table and send the invite link; friends join from a browser with nothing
   to install. Forge AI fills any empty seat, and three- and four-player games lay the opponents out in columns
   across the far side of the table.
+- **Plays offline.** The engine, the AI, card images, rulings and suggestions are all local; nothing goes online
+  while you play. Multiplayer needs only your local network.
 - **Runs in the browser.** The same Bevy client compiles to WebAssembly (WebGL2), and the engine serves it to
   invitees.
 - **A 3D card table.** Perspective camera over a themed playmat (Sanctum, Jungle, Storm), fanned hand on its
@@ -177,8 +182,16 @@ Short on friends? Fill seats with headless bots that play over the real protocol
 | **Linux** (x86_64) | [mtg-duelstone-x86_64.AppImage](https://github.com/birkmann/mtg-duelstone/releases/latest/download/mtg-duelstone-x86_64.AppImage): `chmod +x` it and run it. Needs Vulkan graphics drivers. |
 
 Both bundle the engine, Forge's card data, a Java runtime and the browser client for multiplayer invitees, so
-there is nothing else to install. Card images are not included (Wizards' art is not redistributed): the bundled
-`fetch-offline` tool downloads them once, see [offline/README.md](offline/README.md). Releases are built by
+there is nothing else to install. Card images are not included (Wizards' art is not redistributed). Download them
+once, about 9 GB into `~/.local/share/mtg-duelstone/offline` (re-run to resume or update):
+
+```bash
+./mtg-duelstone-x86_64.AppImage --fetch-images
+"/Applications/MTG Duelstone.app/Contents/MacOS/mtg-duelstone" --fetch-images
+```
+
+After that the game needs no internet at all: the engine, the AI, card images, rulings and the splash art are all
+local, and multiplayer only needs your local network. See [offline/README.md](offline/README.md). Releases are built by
 [`.github/workflows/release.yml`](.github/workflows/release.yml) when a `v*` tag is pushed; the scripts are in
 [`packaging/`](packaging).
 
@@ -205,6 +218,8 @@ Skip the menus and jump straight into a game:
 ```bash
 ./run.sh --quick --format constructed --deck starter:gruul-dinosaurs --ai-deck random
 ./run.sh --quick --format commander --deck starter:lathril-elves
+./run.sh --quick --format constructed --legality pauper --variant planechase
+./run.sh --quick --format commander --players 4     # you and three Forge AI at one table
 ```
 
 <details>
@@ -213,7 +228,10 @@ Skip the menus and jump straight into a game:
 | flag | meaning |
 |---|---|
 | `--quick` | skip the menus, straight into a match (uses your last format; random decks if none given) |
-| `--format constructed\|commander` | game format |
+| `--format constructed\|commander\|brawl\|oathbreaker` | game format |
+| `--legality standard\|pioneer\|modern\|legacy\|vintage\|pauper` | Constructed legality for `--quick` (default: casual) |
+| `--variant planechase\|archenemy\|momir\|teams` | casual variant for `--quick`; repeatable |
+| `--players 2..4` | with `--quick`: open a table and give the other seats to the Forge AI |
 | `--deck REF`, `--ai-deck REF` | decks as listed by the engine (`starter:…`, `theme:…`, `precon:…`, `user:…`, `random`) |
 | `--seed N` | engine RNG seed |
 | `--join LINK-OR-CODE` | join a multiplayer table (in a browser, open the link, i.e. `/?join=CODE`) |
@@ -221,6 +239,7 @@ Skip the menus and jump straight into a game:
 | `--autoplay` | a built-in bot plays your seat (demos, screenshots) |
 | `--screenshot out.png --exit-after SECS` | save a frame and quit |
 | `--record f.jsonl`, `--replay f.jsonl` | record engine frames / replay them with no engine |
+| `--fetch-images` | run the bundled `fetch-offline` (packaged builds): download the card images once |
 
 `cargo run -p arena --features dev` enables Bevy dynamic linking for fast rebuilds.
 </details>

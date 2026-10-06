@@ -3,7 +3,7 @@
    one action that matters on each screen. Cinzel for headings and buttons, Inter for text,
    both self-hosted (SIL OFL, assets/fonts/OFL-*.txt).
    Dark is the default because the game is dark; light is a parchment variant the visitor
-   can pick. The bands (Commander, decks, install) and the lightbox stay dark in both. */
+   can pick. The bands (game modes, highlights, install) and the lightbox stay dark in both. */
 
 @font-face { font-family: "Cinzel"; src: url("assets/fonts/Cinzel-Bold.woff2") format("woff2"); font-weight: 700; font-display: swap; }
 @font-face { font-family: "Inter"; src: url("assets/fonts/Inter-Regular.woff2") format("woff2"); font-weight: 400; font-display: swap; }
@@ -200,6 +200,73 @@ b, strong { font-weight: 400; color: var(--fg); }
 .lead { max-width: 560px; font-size: 19px; line-height: 1.55; color: var(--text); }
 .lead.narrow { max-width: 640px; }
 
+/* --- Store header ---------------------------------------------------- */
+/* Like a store page: the title, a big screenshot with a strip of thumbnails, and a fact panel
+   with the download beside it. The panel stacks under the viewer below 1000px. */
+.store { padding-top: 48px; display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 20px 32px; align-items: start; }
+.store-title { grid-column: 1 / -1; font-size: clamp(36px, 5.6vw, 64px); line-height: 1.05; padding-bottom: 0.04em; }
+.viewer { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.viewer-main { display: block; padding: 0; border: 0; background: none; cursor: zoom-in; border-radius: 12px; }
+.viewer-main img { border-radius: 12px; background: var(--night); border: 1px solid var(--shot-edge); box-shadow: var(--shot-shadow); width: 100%; }
+.thumbs { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 6px; scrollbar-width: thin; scrollbar-color: var(--rule-strong) transparent; }
+.thumb { flex: none; width: 112px; padding: 0; border: 2px solid transparent; border-radius: 8px; background: none; cursor: pointer; opacity: .62; transition: opacity .15s ease, border-color .15s ease; }
+.thumb img { width: 100%; aspect-ratio: 16 / 9; object-fit: cover; border-radius: 6px; background: var(--night); }
+.thumb:hover { opacity: 1; }
+.thumb.is-active { opacity: 1; border-color: var(--gold); }
+.capsule {
+  display: flex; flex-direction: column; gap: 16px; padding: 16px 16px 20px;
+  border-radius: 12px; border: 1px solid var(--rule); background: color-mix(in srgb, var(--bg) 70%, #000 6%);
+}
+.capsule-art { width: 100%; border-radius: 8px; aspect-ratio: 16 / 9; object-fit: cover; }
+.capsule-text { font-size: 15px; line-height: 1.55; color: var(--text); }
+.facts { margin: 0; display: grid; gap: 0; border-top: 1px solid var(--rule); }
+.facts > div { display: grid; grid-template-columns: 92px minmax(0, 1fr); gap: 10px; padding: 7px 0; border-bottom: 1px solid var(--rule); }
+.facts dt { font-size: 12px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); padding-top: 2px; }
+.facts dd { margin: 0; font-size: 14.5px; color: var(--fg); }
+.capsule .tags { margin: 0; gap: 6px; }
+.capsule .tags li { font-size: 12px; padding: 4px 10px; }
+.capsule .pill-dl { align-self: stretch; }
+.capsule .dl-meta { margin: -6px 0 0; text-align: center; }
+
+/* About */
+.about { padding-top: 96px; }
+.about-cols { display: grid; grid-template-columns: minmax(0, 7fr) minmax(0, 5fr); gap: 56px; align-items: start; }
+.prose { display: flex; flex-direction: column; gap: 18px; max-width: 680px; }
+.prose p { font-size: 17px; line-height: 1.65; color: var(--text); }
+.checks { list-style: none; margin: 0; padding: 0; border-top: 1px solid var(--rule-strong); }
+.checks li { position: relative; padding: 12px 0 12px 26px; border-bottom: 1px solid var(--rule); font-size: 15.5px; color: var(--fg); }
+.checks li::before { content: ""; position: absolute; left: 4px; top: 19px; width: 8px; height: 8px; transform: rotate(45deg); background: var(--gold); }
+
+/* Game modes */
+.group-title { font-size: 24px; color: var(--fg); padding-top: 24px; border-top: 1px solid var(--rule-strong); margin-top: 8px; }
+.mode-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 32px; }
+.mode-grid-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.mode { display: flex; flex-direction: column; gap: 8px; }
+.mode .shot { margin-bottom: 8px; }
+.mode h4, .mini-modes h4 { font-family: var(--display); font-weight: 700; font-size: 20px; margin: 0; color: var(--fg); }
+.mode p, .mini-modes p { font-size: 15.5px; line-height: 1.6; color: var(--text); }
+.mode .mode-meta, .mini-modes .mode-meta { font-size: 13px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--label); }
+.mini-modes { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 32px; }
+.mini-modes article { display: flex; flex-direction: column; gap: 6px; padding: 18px 20px; border: 1px solid var(--rule); border-radius: 10px; }
+.shot-wide { max-width: 980px; }
+
+/* Multiplayer */
+.pair { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 32px; }
+.pair figcaption { margin-top: 12px; font-size: 15px; color: var(--text); }
+.pair figcaption b { font-family: var(--display); font-weight: 700; color: var(--fg); }
+
+/* Highlights: alternating rows inside one band */
+#highlights .section { gap: 96px; }
+
+/* System requirements */
+.req { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 40px; }
+.req h3 { font-size: 20px; color: var(--fg); margin-bottom: 12px; }
+.req dl { margin: 0; border-top: 1px solid var(--rule-strong); }
+.req dl > div { display: grid; grid-template-columns: 96px minmax(0, 1fr); gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--rule); }
+.req dt { font-size: 12px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); padding-top: 3px; }
+.req dd { margin: 0; font-size: 15px; color: var(--fg); }
+#requirements .note { max-width: 760px; font-size: 14px; }
+
 /* --- Screenshots ----------------------------------------------------- */
 .shot { margin-top: 0; margin-bottom: 0; }
 .shot:not(.wrap) { margin-left: 0; margin-right: 0; }
@@ -290,6 +357,7 @@ b, strong { font-weight: 400; color: var(--fg); }
 .gallery { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 48px 32px; }
 .gallery figcaption { margin-top: 14px; font-size: 15px; line-height: 1.55; color: var(--text); }
 .gallery figcaption b { font-family: var(--display); font-weight: 700; font-size: 15px; letter-spacing: 0.02em; color: var(--fg); }
+.gallery-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 36px 24px; }
 
 /* Install */
 .install { border-top: 1px solid var(--band-edge); }
@@ -305,6 +373,8 @@ b, strong { font-weight: 400; color: var(--fg); }
 .install-more { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 32px; border-top: 1px solid var(--rule); padding-top: 28px; }
 .install-more h3 { font-size: 18px; color: var(--fg); margin-bottom: 8px; }
 .install-more p { font-size: 15px; color: var(--text); line-height: 1.6; }
+.install-more p + p { margin-top: 10px; }
+.install-more code { overflow-wrap: anywhere; }
 
 /* Terminal block */
 .code { position: relative; max-width: 760px; background: var(--night-raised); border: 1px solid var(--night-line); border-radius: 10px; color: var(--cream); }
@@ -402,6 +472,10 @@ b, strong { font-weight: 400; color: var(--fg); }
   .nav-links a.nav-extra { display: none; }
 }
 @media (max-width: 1000px) {
+  .store { grid-template-columns: minmax(0, 1fr); }
+  .capsule-art { display: none; }
+  .about-cols { grid-template-columns: minmax(0, 1fr); gap: 32px; }
+  .mode-grid, .gallery-3, .req { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .features { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .specs dl { grid-template-columns: repeat(2, minmax(0, 1fr)); row-gap: 8px; }
   .hero { grid-template-columns: minmax(0, 1fr); row-gap: 28px; }
@@ -417,7 +491,9 @@ b, strong { font-weight: 400; color: var(--fg); }
   .hero { padding-top: 56px; }
   .lead { font-size: 17px; }
   .section { padding-top: 80px; padding-bottom: 80px; }
-  .features, .platforms, .gallery, .cols, .mats { grid-template-columns: minmax(0, 1fr); }
+  .features, .platforms, .gallery, .gallery-3, .cols, .mats, .mode-grid, .mode-grid-2, .mini-modes, .pair, .req { grid-template-columns: minmax(0, 1fr); }
+  .store { padding-top: 32px; }
+  .thumb { width: 88px; }
   .features article { padding-right: 0; }
   .cols { gap: 20px; }
   .gallery { gap: 40px; }
