@@ -1,8 +1,12 @@
 //! Main menu: logo + Play / Decks / Settings / Quit on the left, over the 3D portal stage
 //! (`stage`). The UI intro is timed against the stage's `IntroClock` so both halves land
-//! together: fade up from black, the logo drops in with a flare, its underline draws out, the
-//! buttons slide in one after another, then the chrome. Returning from another screen replays
-//! only a fast version of the button slide.
+//! together: fade up from black, the logo settles in with a flare, its underline draws out, the
+//! buttons rise into place one after another, then the chrome. Returning from another screen
+//! replays only a fast version of the button reveal.
+//!
+//! Motion is deliberately quiet: no overshoot, no travel from off-screen. Buttons fade in while
+//! rising a few pixels (a staggered reveal), so nothing is ever parked half-visible at the edge
+//! before its turn, which is what made the old slide-in look cheap.
 
 use bevy::prelude::*;
 use bevy::ui::{BackgroundGradient, ColorStop, LinearGradient};
@@ -13,6 +17,10 @@ use bevy::image::TRANSPARENT_IMAGE_HANDLE;
 
 use crate::shared::{AppState, ArenaFonts, AvatarArt, ServerFacts, Settings};
 use crate::style::*;
+
+/// How far each button rises into place, and the gap between one button's start and the next.
+const REVEAL_RISE: f32 = 14.0;
+const REVEAL_STAGGER: f32 = 0.08;
 
 pub struct MainMenuPlugin;
 
@@ -38,11 +46,12 @@ enum Fx {
     Curtain,
     /// text fading in to this colour (its shadow fades along)
     Fade(Color),
-    /// scale from this down to 1
+    /// scale from this down to 1, settling without overshoot
     Pop(f32),
+    /// a button fading in (see `ButtonReveal`) while rising this many px into place
+    Reveal(f32),
     /// width grows from 0 to this many px
     Grow(f32),
-    SlideX(f32),
     SlideY(f32),
     /// light bloom behind the logo: flashes on landing, then settles into a slow pulse
     Flare,
@@ -50,6 +59,12 @@ enum Fx {
 
 fn anim(at: f32, dur: f32, fx: Fx) -> Anim {
     Anim { at, dur, fx }
+}
+
+/// A menu button's reveal starting at `at`. It spawns already hidden and lowered, so the frame
+/// before the intro system first runs can't flash it in its final place.
+fn reveal(at: f32) -> impl Bundle {
+    (anim(at, 0.6, Fx::Reveal(REVEAL_RISE)), ButtonReveal(0.0), UiTransform::from_translation(Val2::px(0.0, REVEAL_RISE)))
 }
 
 /// UI timeline: the full intro runs in real time; a return visit starts just before the buttons
@@ -87,7 +102,7 @@ fn spawn_main_menu(mut commands: Commands, fonts: Res<ArenaFonts>, settings: Res
             .with_children(|col| {
                 // logo
                 col.spawn((
-                    anim(1.7, 0.75, Fx::Pop(1.6)),
+                    anim(1.7, 1.1, Fx::Pop(1.08)),
                     Node { flex_direction: FlexDirection::Column, align_items: AlignItems::Center, ..default() },
                     UiTransform::IDENTITY,
                     Pickable::IGNORE,
@@ -127,7 +142,7 @@ fn spawn_main_menu(mut commands: Commands, fonts: Res<ArenaFonts>, settings: Res
                     TextShadow { offset: Vec2::new(0.0, 1.0), color: Color::srgba(0.0, 0.0, 0.0, 0.9) },
                 ));
                 let p = spawn_button(col, &fonts, ButtonKind::Primary, "PLAY", Vec2::new(340.0, 72.0));
-                col.commands().entity(p).insert((MenuAction::Play, anim(2.55, 0.75, Fx::SlideX(-640.0))));
+                col.commands().entity(p).insert((MenuAction::Play, reveal(2.45)));
                 for (i, (label, act)) in [("MULTIPLAYER", MenuAction::Multiplayer), ("CUBES", MenuAction::Cubes), ("DECKS", MenuAction::Decks), ("CUSTOMIZE", MenuAction::Customize), ("SETTINGS", MenuAction::OpenSettings), ("QUIT", MenuAction::Quit)]
                     .into_iter()
                     // a browser tab can't quit itself
@@ -138,7 +153,7 @@ fn spawn_main_menu(mut commands: Commands, fonts: Res<ArenaFonts>, settings: Res
                 {
                     let kind = if act == MenuAction::Quit { ButtonKind::Ghost } else { ButtonKind::Secondary };
                     let b = spawn_button(col, &fonts, kind, label, Vec2::new(340.0, 54.0));
-                    col.commands().entity(b).insert((act, anim(2.65 + i as f32 * 0.09, 0.75, Fx::SlideX(-640.0))));
+                    col.commands().entity(b).insert((act, reveal(2.45 + (i + 1) as f32 * REVEAL_STAGGER)));
                 }
             });
             // footer
@@ -193,9 +208,8 @@ fn ease_out_cubic(x: f32) -> f32 {
     1.0 - (1.0 - x.clamp(0.0, 1.0)).powi(3)
 }
 
-fn ease_out_back(x: f32) -> f32 {
-    let x = x.clamp(0.0, 1.0);
-    1.0 + 2.2 * (x - 1.0).powi(3) + 1.2 * (x - 1.0).powi(2)
+fn ease_out_quart(x: f32) -> f32 {
+    1.0 - (1.0 - x.clamp(0.0, 1.0)).powi(4)
 }
 
 #[allow(clippy::type_complexity)]
@@ -210,10 +224,11 @@ fn animate_intro(
         &mut Node,
         Option<&mut BackgroundColor>,
         Option<&mut BoxShadow>,
+        Option<&mut ButtonReveal>,
     )>,
 ) {
     let t = ui_t(&clock);
-    for (a, tf, tc, ts, mut node, bg, shadow) in &mut q {
+    for (a, tf, tc, ts, mut node, bg, shadow, rv) in &mut q {
         let p = ((t - a.at) / a.dur).clamp(0.0, 1.0);
         match a.fx {
             Fx::Curtain => {
@@ -237,15 +252,20 @@ fn animate_intro(
             }
             Fx::Pop(from) => {
                 if let Some(mut tf) = tf {
-                    tf.scale = Vec2::splat(from + (1.0 - from) * ease_out_back(p));
+                    tf.scale = Vec2::splat(from + (1.0 - from) * ease_out_quart(p));
+                }
+            }
+            Fx::Reveal(rise) => {
+                // opacity on a gentle S-curve, position on a long ease-out: the button is mostly
+                // visible before it finishes settling, which reads as one soft motion
+                if let Some(mut rv) = rv {
+                    rv.0 = p * p * (3.0 - 2.0 * p);
+                }
+                if let Some(mut tf) = tf {
+                    tf.translation.y = Val::Px(rise * (1.0 - ease_out_quart(p)));
                 }
             }
             Fx::Grow(w) => node.width = Val::Px(w * ease_out_cubic(p)),
-            Fx::SlideX(from) => {
-                if let Some(mut tf) = tf {
-                    tf.translation.x = Val::Px(from * (1.0 - ease_out_back(p)));
-                }
-            }
             Fx::SlideY(from) => {
                 if let Some(mut tf) = tf {
                     tf.translation.y = Val::Px(from * (1.0 - ease_out_cubic(p)));

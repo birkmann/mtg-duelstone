@@ -180,6 +180,13 @@ pub struct ButtonAnim {
     press: f32,
 }
 
+/// How far an intro reveal has brought a button in, 0..=1: fill, border, glow and label fade
+/// together and the button settles from a hair smaller. Without it a button is fully shown. Set by
+/// whoever times the reveal (the main menu); applied by [`animate_buttons`], which owns the
+/// button's colours and scale every frame and would otherwise overwrite a fade.
+#[derive(Component, Debug, Clone, Copy)]
+pub struct ButtonReveal(pub f32);
+
 impl ArenaButton {
     pub fn new(kind: ButtonKind) -> Self {
         Self { kind, disabled: false }
@@ -190,7 +197,7 @@ impl ArenaButton {
     }
 }
 
-fn kind_gradient(kind: ButtonKind, h: f32, disabled: bool) -> (BackgroundGradient, Color, Color) {
+fn kind_gradient(kind: ButtonKind, h: f32, disabled: bool, alpha: f32) -> (BackgroundGradient, Color, Color) {
     // returns (gradient, border, glow)
     let lift = |c: Color, a: f32| -> Color {
         let s = c.to_srgba();
@@ -216,12 +223,13 @@ fn kind_gradient(kind: ButtonKind, h: f32, disabled: bool) -> (BackgroundGradien
     } else {
         border
     };
+    let fade = |c: Color| c.with_alpha(c.alpha() * alpha);
     (
         BackgroundGradient::from(LinearGradient::to_bottom(vec![
-            ColorStop::new(top, Val::Percent(0.0)),
-            ColorStop::new(bot, Val::Percent(100.0)),
+            ColorStop::new(fade(top), Val::Percent(0.0)),
+            ColorStop::new(fade(bot), Val::Percent(100.0)),
         ])),
-        border,
+        fade(border),
         glow,
     )
 }
@@ -229,7 +237,7 @@ fn kind_gradient(kind: ButtonKind, h: f32, disabled: bool) -> (BackgroundGradien
 /// A button node (no label). Add children with the label via [`button_label`] or use
 /// [`spawn_button`].
 pub fn button(kind: ButtonKind, node: Node) -> impl Bundle {
-    let (grad, border, _) = kind_gradient(kind, 0.0, false);
+    let (grad, border, _) = kind_gradient(kind, 0.0, false, 1.0);
     let radius = if kind == ButtonKind::Primary { 99.0 } else { 9.0 };
     (
         Button,
@@ -275,12 +283,25 @@ pub fn spawn_button(
         .id()
 }
 
+#[allow(clippy::type_complexity)]
 fn animate_buttons(
     time: Res<Time>,
-    mut q: Query<(&Interaction, &ArenaButton, &mut ButtonAnim, &mut UiTransform, &mut BackgroundGradient, &mut BorderColor, &mut BoxShadow)>,
+    mut q: Query<(
+        &Interaction,
+        &ArenaButton,
+        &mut ButtonAnim,
+        &mut UiTransform,
+        &mut BackgroundGradient,
+        &mut BorderColor,
+        &mut BoxShadow,
+        Option<&ButtonReveal>,
+        Option<&Children>,
+    )>,
+    mut labels: Query<(&mut TextColor, Option<&mut TextShadow>)>,
 ) {
     let dt = time.delta_secs();
-    for (inter, b, mut a, mut tf, mut grad, mut border, mut shadow) in &mut q {
+    for (inter, b, mut a, mut tf, mut grad, mut border, mut shadow, reveal, children) in &mut q {
+        let r = reveal.map_or(1.0, |r| r.0.clamp(0.0, 1.0));
         let (th, tp) = match (b.disabled, inter) {
             (true, _) => (0.0, 0.0),
             (_, Interaction::Pressed) => (1.0, 1.0),
@@ -290,16 +311,16 @@ fn animate_buttons(
         let k = (dt * 16.0).min(1.0);
         a.hover += (th - a.hover) * k;
         a.press += (tp - a.press) * k;
-        let s = 1.0 + 0.045 * a.hover - 0.07 * a.press;
+        let s = (1.0 + 0.045 * a.hover - 0.07 * a.press) * (0.975 + 0.025 * r);
         tf.scale = Vec2::splat(s);
-        let (g, bc, glow) = kind_gradient(b.kind, a.hover, b.disabled);
+        let (g, bc, glow) = kind_gradient(b.kind, a.hover, b.disabled, r);
         *grad = g;
         *border = BorderColor::all(bc);
         let gs = glow.to_srgba();
-        let ga = if b.disabled || b.kind == ButtonKind::Ghost { 0.0 } else { 0.55 * a.hover };
+        let ga = if b.disabled || b.kind == ButtonKind::Ghost { 0.0 } else { 0.55 * a.hover * r };
         shadow.0 = vec![
             bevy::ui::ShadowStyle {
-                color: Color::srgba(0.0, 0.0, 0.0, 0.5 * (1.0 - a.hover * 0.5)),
+                color: Color::srgba(0.0, 0.0, 0.0, 0.5 * (1.0 - a.hover * 0.5) * r),
                 x_offset: Val::Px(0.0),
                 y_offset: Val::Px(4.0 - 2.0 * a.press),
                 spread_radius: Val::Px(0.0),
@@ -313,6 +334,19 @@ fn animate_buttons(
                 blur_radius: Val::Px(16.0),
             },
         ];
+        // labels are opaque by construction (spawn_button), so the reveal is their whole alpha
+        if reveal.is_some()
+            && let Some(children) = children
+        {
+            for &child in children {
+                if let Ok((mut tc, ts)) = labels.get_mut(child) {
+                    tc.0 = tc.0.with_alpha(r);
+                    if let Some(mut ts) = ts {
+                        ts.color = ts.color.with_alpha(0.7 * r);
+                    }
+                }
+            }
+        }
     }
 }
 

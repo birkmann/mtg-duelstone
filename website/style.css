@@ -239,6 +239,21 @@ b, strong { font-weight: 400; color: var(--fg); }
 .play-stage:fullscreen { background: #000; }
 .play-stage:fullscreen .play-game { aspect-ratio: auto; width: 100vw; height: 100vh; border: 0; border-radius: 0; }
 .play-stage:fullscreen .play-game iframe { width: 100%; height: 100%; }
+/* Sits on the frame's corner, outside the game's own corner controls (its settings gear). In full
+   screen it moves to the top middle, faint until the pointer finds it. */
+.play-fs {
+  position: absolute; top: -18px; right: -18px; z-index: 2; width: 40px; height: 40px; padding: 0;
+  display: grid; place-items: center; border-radius: 50%; cursor: pointer;
+  border: 1px solid var(--gold-dim); background: var(--night-raised); color: var(--gold-hi);
+  box-shadow: 0 6px 18px -6px rgba(0, 0, 0, 0.9); transition: border-color .15s ease, background-color .15s ease, opacity .2s ease;
+}
+.play-fs:hover { border-color: var(--gold); background: #2a1c11; }
+.play-fs svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.play-fs .fs-exit { display: none; }
+.play-stage:fullscreen .play-fs { top: 10px; right: auto; left: 50%; transform: translateX(-50%); opacity: 0.45; }
+.play-stage:fullscreen .play-fs:hover, .play-stage:fullscreen .play-fs:focus-visible { opacity: 1; }
+.play-stage:fullscreen .fs-enter { display: none; }
+.play-stage:fullscreen .fs-exit { display: inline; }
 .play-bar { display: flex; align-items: center; gap: 10px 12px; flex-wrap: wrap; margin-top: -20px; }
 .play-bar p { flex: 1 1 260px; margin: 0; font-size: 15px; line-height: 1.5; color: var(--text); }
 .play-bar .pill { font-size: 14px; padding: 10px 18px; }

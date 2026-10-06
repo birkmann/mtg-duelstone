@@ -409,6 +409,10 @@ fn ease_out_cubic(x: f32) -> f32 {
     1.0 - (1.0 - x.clamp(0.0, 1.0)).powi(3)
 }
 
+fn ease_out_quart(x: f32) -> f32 {
+    1.0 - (1.0 - x.clamp(0.0, 1.0)).powi(4)
+}
+
 fn ease_out_back(x: f32) -> f32 {
     let x = x.clamp(0.0, 1.0);
     let (c1, c3) = (1.4, 2.4);
@@ -452,6 +456,9 @@ fn toggle_stage(
     }
 }
 
+/// Longest step the intro clock takes in one frame (a 30 fps frame).
+const MAX_INTRO_STEP: f32 = 1.0 / 30.0;
+
 /// Advance the clock; any key or click during the full intro skips to its end.
 fn tick_intro(
     time: Res<Time>,
@@ -460,7 +467,10 @@ fn tick_intro(
     mouse: Res<ButtonInput<MouseButton>>,
     mut sfx: MessageWriter<PlaySfx>,
 ) {
-    clock.t += time.delta_secs();
+    // The first seconds are when frames hitch (pipelines compiling, card images arriving, the
+    // browser's wasm warming up). Advancing by a capped step makes a hitch slow the intro down for
+    // a moment instead of jumping cards and buttons ahead, which is what read as stutter.
+    clock.t += time.delta_secs().min(MAX_INTRO_STEP);
     if clock.full && clock.t < INTRO_END && (keys.get_just_pressed().next().is_some() || mouse.get_just_pressed().next().is_some()) {
         clock.t = INTRO_END;
         clock.sfx_fired = u8::MAX;
@@ -546,24 +556,28 @@ fn animate_cards(
         c.spin = (c.spin - dt).max(0.0);
         let i = c.slot as f32;
         let a = i / N_CARDS as f32 * TAU + ring_rot;
-        // fly-out from the portal centre, staggered, with a spiral and a spin
+        // fly-out from the portal centre, staggered, along a spiral that eases onto the ring.
+        // No overshoot: a card that shoots past the ring and pulls back (seen in perspective)
+        // grows and shrinks again, which looked like a stutter.
         let launch = 1.25 + i * 0.065;
-        let e = ((t - launch) / 1.05).clamp(0.0, 1.0);
+        let e = ((t - launch) / 1.4).clamp(0.0, 1.0);
         if e <= 0.0 {
             tf.scale = Vec3::ZERO;
             continue;
         }
-        let k = ease_out_back(e);
-        let swirl = (1.0 - ease_out_cubic(e)) * 2.6;
-        let radius = RING_RADIUS * k + c.hover * 0.45;
+        let k = ease_out_quart(e);
+        let swirl = (1.0 - k) * 2.2;
+        // Hover only scales the card in place (below): pushing it outward or up slid it out from
+        // under a still pointer, which un-hovered it, which slid it back: a flicker loop.
+        let radius = RING_RADIUS * k;
         let aa = a - swirl;
         let bob = (now * 0.8 + i * 1.3).sin() * 0.07;
-        let local = Vec3::new(aa.sin() * radius, bob + c.hover * 0.12, aa.cos() * radius);
+        let local = Vec3::new(aa.sin() * radius, bob, aa.cos() * radius);
         tf.translation = tilt * local;
-        let spin = (1.0 - ease_out_cubic(e)) * TAU * 1.5 + TAU * smooth(1.0 - c.spin / SPIN_SECS) * if c.spin > 0.0 { 1.0 } else { 0.0 };
+        let spin = (1.0 - k) * TAU + TAU * smooth(1.0 - c.spin / SPIN_SECS) * if c.spin > 0.0 { 1.0 } else { 0.0 };
         let wobble = Quat::from_rotation_z((now * 0.6 + i).sin() * 0.05);
         tf.rotation = tilt * Quat::from_rotation_y(aa + spin) * wobble;
-        tf.scale = Vec3::splat(CARD_SCALE * (0.15 + 0.85 * ease_out_cubic(e)) * (1.0 + 0.1 * c.hover));
+        tf.scale = Vec3::splat(CARD_SCALE * (0.35 + 0.65 * k) * (1.0 + 0.08 * c.hover));
     }
 }
 

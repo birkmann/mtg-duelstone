@@ -200,6 +200,10 @@ try {
         </div>
       </div>
       <div class="play-game" id="play-game" hidden></div>
+      <!-- one click in and out of full screen, on the frame itself (Esc also leaves) -->
+      <button class="play-fs" type="button" id="play-fs" aria-label="Full screen" title="Full screen" hidden>
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path class="fs-enter" d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/><path class="fs-exit" d="M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5"/></svg>
+      </button>
     </div>
 
     <div class="play-bar" id="play-bar" hidden>
@@ -485,7 +489,7 @@ try {
     <figure class="shot">
       <picture>
         <source srcset="assets/img/cubes.webp" type="image/webp">
-        <img src="assets/img/cubes.jpg" width="1600" height="900" alt="The cube designer with a copy of the MTGO Vintage Cube open, its 540 cards sorted by colour." loading="lazy">
+        <img src="assets/img/cubes.jpg" width="1600" height="900" alt="The cube designer with a copy of the MTGO Vintage Cube open in the table view: 540 cards in columns by colour and type, with card search on the right." loading="lazy">
       </picture>
       <figcaption><b>Cube designer.</b> Edit a copy of any cube.</figcaption>
     </figure>
@@ -767,6 +771,7 @@ try {
   var game = document.getElementById('play-game');
   var bar = document.getElementById('play-bar');
   var fullBtn = document.getElementById('play-full');
+  var fsBtn = document.getElementById('play-fs');
   var reduce = window.matchMedia('(prefers-reduced-motion: reduce)');
   var engine = stage.dataset.engine || '';
   // Local testing: ?engine=http://localhost:8080. Loopback only, so a crafted link can't put
@@ -775,6 +780,10 @@ try {
     var q = new URLSearchParams(location.search).get('engine');
     if (q && /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?\/?$/.test(q)) engine = q;
   } catch (e) {}
+  // A page opened from this machine (Live Server, python -m http.server) plays against the engine
+  // `./run.sh --serve` starts here, so trying the section needs no configuration.
+  var local = /^(localhost|127\.0\.0\.1|\[::1\])$/.test(location.hostname);
+  if (!engine && local) engine = 'http://localhost:8080';
   engine = engine.replace(/\/+$/, '');
   var frame = null, retry = null;
 
@@ -803,7 +812,8 @@ try {
         }
       })
       .catch(function () {
-        say('The game server is offline right now. Trying again in a moment… or download the game.', false);
+        say(local ? 'No engine at ' + engine + '. Start one with ./run.sh --serve; this page keeps checking.'
+                  : 'The game server is offline right now. Trying again in a moment… or download the game.', false);
         retry = setTimeout(check, 30000);
       });
   }
@@ -816,6 +826,8 @@ try {
     if (!frame) return;
     frame.style.transform = isFull() ? '' : 'scale(' + game.clientWidth / W + ')';
     fullBtn.textContent = isFull() ? 'Exit full screen' : 'Full screen';
+    fsBtn.title = fullBtn.textContent;
+    fsBtn.setAttribute('aria-label', fullBtn.textContent);
   }
   if (window.ResizeObserver) new ResizeObserver(fit).observe(game);
   document.addEventListener('fullscreenchange', fit);
@@ -832,7 +844,7 @@ try {
     frame.addEventListener('load', function () { if (frame) frame.focus(); });
     game.appendChild(frame);
     poster.hidden = true;
-    game.hidden = bar.hidden = false;
+    game.hidden = bar.hidden = fsBtn.hidden = false;
     fit();
     stage.scrollIntoView({ behavior: reduce.matches ? 'auto' : 'smooth', block: 'center' });
   }
@@ -841,7 +853,7 @@ try {
     if (isFull()) (document.exitFullscreen || document.webkitExitFullscreen).call(document);
     game.removeChild(frame);
     frame = null;
-    game.hidden = bar.hidden = true;
+    game.hidden = bar.hidden = fsBtn.hidden = true;
     poster.hidden = false;
     startBtn.focus();
     check();
@@ -854,6 +866,7 @@ try {
 
   startBtn.addEventListener('click', start);
   fullBtn.addEventListener('click', toggleFull);
+  fsBtn.addEventListener('click', toggleFull);
   document.getElementById('play-close').addEventListener('click', stop);
   check();
 })();
