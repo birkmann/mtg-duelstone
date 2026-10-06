@@ -318,8 +318,11 @@ fn on_board_events(
                 for b in &banners {
                     commands.entity(b).despawn();
                 }
-                let mine = view.is_me(*player);
-                spawn_banner(&mut commands, &fonts, if mine { "YOUR TURN" } else { "OPPONENT'S TURN" }, mine, 1.7 / sp);
+                // dev: screenshot runs can drop the banner, which otherwise lands across many shots
+                if std::env::var("ARENA_NO_TURN_BANNER").is_err() {
+                    let mine = view.is_me(*player);
+                    spawn_banner(&mut commands, &fonts, if mine { "YOUR TURN" } else { "OPPONENT'S TURN" }, mine, 1.7 / sp);
+                }
             }
             BoardEvent::Cue(cue) => {
                 let kind = cue.kind.to_ascii_lowercase();

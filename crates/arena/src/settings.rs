@@ -118,3 +118,23 @@ fn save_debounced(time: Res<Time>, settings: Res<Settings>, mut timer: ResMut<Sa
     }
 }
 
+
+impl Settings {
+    /// The portrait this player shows and sends: `avatar`, unless `ARENA_AVATAR="<card>[|x|y|zoom]"`
+    /// overrides it for this run. That is a screenshot aid: a different face per shot without
+    /// touching the saved settings (the override never lands in the resource, so it's never written).
+    pub fn shown_avatar(&self) -> mtg_protocol::Avatar {
+        let Ok(spec) = std::env::var("ARENA_AVATAR") else { return self.avatar.clone() };
+        let mut parts = spec.split('|'); // card names contain commas
+        let card = parts.next().unwrap_or_default().trim().to_string();
+        if card.is_empty() {
+            return self.avatar.clone();
+        }
+        let mut a = mtg_protocol::Avatar::framed(card);
+        let nums: Vec<f32> = parts.filter_map(|p| p.trim().parse().ok()).collect();
+        if let [x, y, zoom] = nums[..] {
+            (a.x, a.y, a.zoom) = (x, y, zoom);
+        }
+        a
+    }
+}

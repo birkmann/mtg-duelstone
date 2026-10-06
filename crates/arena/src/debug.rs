@@ -25,10 +25,21 @@ impl Plugin for DebugPlugin {
 
 /// Dev aid for screenshots: `ARENA_AUTOPLAY_PAUSE=N` stops the bot in my first main phase of turn N or
 /// later, so the board holds still (the engine waits for us) until `ARENA_SHOT_WHEN=paused` fires.
+/// `ARENA_PAUSE_PHASE=attackers` stops at my declare-attackers step instead.
+/// With `ARENA_PAUSE_UNTAPPED` it only stops on a turn where no land lies tapped (sideways lands
+/// read as clutter in a showcase shot).
 pub fn paused_for_shot(view: &GameView) -> bool {
     let Some(n) = std::env::var("ARENA_AUTOPLAY_PAUSE").ok().and_then(|s| s.parse::<i32>().ok()) else { return false };
     let g = &view.game;
-    g.turn >= n && g.player_turn.is_some() && g.player_turn == view.you && g.phase == Some(mtg_protocol::PhaseType::Main1)
+    // ARENA_PAUSE_PHASE=attackers holds at my declare-attackers step instead of main phase 1
+    let phase = match std::env::var("ARENA_PAUSE_PHASE").as_deref() {
+        Ok("attackers") => mtg_protocol::PhaseType::CombatDeclareAttackers,
+        _ => mtg_protocol::PhaseType::Main1,
+    };
+    let here = g.turn >= n && g.player_turn.is_some() && g.player_turn == view.you && g.phase == Some(phase);
+    let untapped = std::env::var("ARENA_PAUSE_UNTAPPED").is_err()
+        || !g.players.iter().flat_map(|p| &p.zones.battlefield).any(|c| c.tapped && c.state.as_ref().is_some_and(|s| s.is_land));
+    here && untapped
 }
 
 /// `--autoplay`: drive the human seat with the shared bot policy, slowly enough that the board

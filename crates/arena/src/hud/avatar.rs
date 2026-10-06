@@ -255,7 +255,7 @@ fn player_for(view: &GameView, slot: usize) -> Option<&Player> {
 fn portrait_of(view: &GameView, settings: &Settings, seats: &SeatAvatars, slot: usize) -> Option<Avatar> {
     let p = player_for(view, slot)?;
     if slot == 0 {
-        return Some(settings.avatar.clone());
+        return Some(settings.shown_avatar());
     }
     if let Some(a) = seats.0.get(&p.name) {
         return Some(a.clone());

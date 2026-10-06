@@ -30,6 +30,8 @@ import java.util.concurrent.ThreadLocalRandom;
  *   <li>{@code "precon:<name>"} — Forge's shipped Commander precons,</li>
  *   <li>{@code "theme:<name>"} — Forge's bundled constructed precon decks (quest/precons, 60-card legal only),</li>
  *   <li>{@code "archetype:…"}, {@code "tournament:…"}, {@code "forge:<path>"} — the constructed {@link DeckLibrary},</li>
+ *   <li>{@code "community:<format>/<stem>"} — this repo's {@code decks/community/<format>/} (commander-style formats;
+ *       published lists + decks built from Forge's play data, see {@code arena.engine.CommunityDecks}),</li>
  *   <li>{@code "user:<name>"} — Forge's own ~/.forge/decks/{commander,constructed},</li>
  *   <li>{@code "file:<path>"} — any .dck,</li>
  *   <li>{@code "random"} — a random legal deck of the requested format (for the AI).</li>
@@ -42,12 +44,22 @@ public final class DeckSource {
     public static final String BRAWL = "brawl", OATHBREAKER = "oathbreaker", LIMITED = "limited";
     /** Constructed legalities a match can enforce (ids are lower-case Forge format names). */
     public static final List<String> LEGALITIES = List.of("standard", "pioneer", "modern", "legacy", "vintage", "pauper");
+    /** The legalities that contain each other, smallest card pool first; Pauper stands apart. */
+    private static final List<String> NESTED = List.of("standard", "pioneer", "modern", "legacy", "vintage");
+
+    /** The smallest nested format whose bit is set in {@code legalMask} (bits = LEGALITIES), or null. */
+    public static String narrowest(final int legalMask) {
+        for (final String l : NESTED) if ((legalMask & (1 << LEGALITIES.indexOf(l))) != 0) return l;
+        return null;
+    }
 
     // Forge's deck storage + CardDb lazy-load deck sections and are not thread-safe: serialize all access.
     private static final Object LOCK = new Object();
 
     private static volatile File decksRoot;
     private static Map<String, Deck> themeCache; // lazily loaded, guarded by LOCK
+    private static Map<String, String> themeHomes; // theme name → narrowest legality, lazily, guarded by LOCK
+    private static final Map<File, Deck> communityCache = new java.util.HashMap<>(); // guarded by LOCK
 
     /** constructed|commander|brawl|oathbreaker|limited ("commander" when absent, for v1 clients); anything else is rejected. */
     public static String format(final String f) {
@@ -122,6 +134,20 @@ public final class DeckSource {
         return out;
     }
 
+    private static List<File> communityFiles(final String format) {
+        final File root = decksRoot();
+        if (root == null) return List.of();
+        final File[] fs = new File(root, "community/" + format).listFiles((d, n) -> n.toLowerCase().endsWith(".dck"));
+        if (fs == null) return List.of();
+        Arrays.sort(fs);
+        return Arrays.asList(fs);
+    }
+
+    /** A few hundred decks are listed on every deck-screen visit: parse each once. */
+    private static Deck community(final File f) {
+        return communityCache.computeIfAbsent(f, DeckSource::loadFile);
+    }
+
     private static Deck loadFile(final File f) {
         final Deck d = DeckSerializer.fromFile(f);
         if (d == null) throw new IllegalArgumentException("cannot parse deck file: " + f);
@@ -148,6 +174,18 @@ public final class DeckSource {
         }
         System.out.println("[decks] " + m.size() + " bundled constructed theme decks usable");
         return themeCache = m;
+    }
+
+    private static Map<String, String> themeHomes() {
+        if (themeHomes != null) return themeHomes;
+        final Map<String, String> m = new java.util.HashMap<>();
+        for (final Deck d : themes().values()) {
+            int mask = 0;
+            for (int i = 0; i < LEGALITIES.size(); i++) if (problem(d, CONSTRUCTED, LEGALITIES.get(i)) == null) mask |= 1 << i;
+            final String home = narrowest(mask);
+            if (home != null) m.put(d.getName(), home);
+        }
+        return themeHomes = m;
     }
 
     // ---- listing ----------------------------------------------------------------------------
@@ -190,6 +228,14 @@ public final class DeckSource {
                 a.add(o);
             }
         }
+        if (hasCommander(format)) {
+            for (final File f : communityFiles(format)) {
+                try {
+                    final Deck d = community(f);
+                    a.add(withProblem(describe("community:" + format + "/" + stem(f), d, format), d, format, null));
+                } catch (final Throwable ignored) { /* unreadable file: leave it out */ }
+            }
+        }
         switch (format) {
             case COMMANDER -> {
                 for (final Deck d : FModel.getDecks().getCommanderPrecons()) a.add(describe("precon:" + d.getName(), d, format));
@@ -199,13 +245,12 @@ public final class DeckSource {
             case OATHBREAKER -> { for (final Deck d : FModel.getDecks().getOathbreaker()) a.add(withProblem(describe("user:" + d.getName(), d, format), d, format, null)); }
             case CONSTRUCTED -> {
                 for (final Deck d : FModel.getDecks().getConstructed()) a.add(withProblem(describe("user:" + d.getName(), d, format), d, format, legality));
-                // themes are pre-filtered to legal 60-card decks; only a legality needs a check
+                // Forge's ready-made decks are listed under the format they belong to (DeckLibrary.Entry.home),
+                // not under every format that would take them; themes are pre-filtered to legal 60-card decks
                 for (final Deck d : themes().values()) {
-                    final JsonObject o = describe("theme:" + d.getName(), d, format);
-                    a.add(legality == null ? o : withProblem(o, d, format, legality));
+                    if (legality == null || legality.equals(themeHomes().get(d.getName()))) a.add(describe("theme:" + d.getName(), d, format));
                 }
-                // thousands of decks: only the playable ones are listed, not marked
-                for (final DeckLibrary.Entry e : DeckLibrary.entries().values()) if (e.legalIn(legality)) a.add(describe(e));
+                for (final DeckLibrary.Entry e : DeckLibrary.entries().values()) if (e.belongsTo(legality)) a.add(describe(e));
             }
             default -> {}
         }
@@ -255,6 +300,7 @@ public final class DeckSource {
             o.addProperty("colorIdentity", arena.engine.view.ViewJson.colors(spellColors(d)));
         }
         o.addProperty("format", format);
+        if (d.getComment() != null && !d.getComment().isBlank()) o.addProperty("description", d.getComment());
         final PaperCard cover = cover(d);
         if (cover != null) o.addProperty("cover", cover.getName());
         return o;
@@ -363,6 +409,14 @@ public final class DeckSource {
         switch (kind) {
             case "precon": return require(FModel.getDecks().getCommanderPrecons(), name, ref);
             case "archetype", "tournament", "forge": return DeckLibrary.load(ref);
+            case "community": {
+                final int slash = name.indexOf('/');
+                final String fmt = slash < 0 ? format : name.substring(0, slash);
+                if (fmt != null && hasCommander(format(fmt))) {
+                    for (final File f : communityFiles(format(fmt))) if (stem(f).equalsIgnoreCase(name.substring(slash + 1))) return community(f);
+                }
+                throw new IllegalArgumentException("deck not found: " + ref);
+            }
             case "theme": {
                 final Deck d = themes().get(name);
                 if (d != null) return d;

@@ -16,7 +16,8 @@
   var RARITY_RANK = { m: 3, r: 2, u: 1, c: 0 };
   var BASICS = /^(Snow-Covered )?(Plains|Island|Swamp|Mountain|Forest|Wastes)$/;
   var PAGE = { tiles: 24, table: 60 };
-  var SRC_LABEL = { meta: 'Archetype', event: 'Tournament', starter: 'Starter' };
+  var SRC_LABEL = { meta: 'Archetype', event: 'Tournament', starter: 'Starter', precon: 'Precon', creator: 'Published', gen: 'Generated',
+    theme: 'Theme deck', quest: 'Quest duel', genetic: 'Genetic AI' };
 
   var tabs = root.querySelector('.dx-formats');
   var q = document.getElementById('dx-q');
@@ -193,7 +194,7 @@
       case 'new':
         return (b.date || '').localeCompare(a.date || '') || placeNum(a) - placeNum(b) || (b.n || 0) - (a.n || 0);
       default: {
-        var rank = { meta: 0, event: 1, starter: 2 };
+        var rank = { meta: 0, event: 1, creator: 1, precon: 2, starter: 2, theme: 3, gen: 4, quest: 5, genetic: 6 };
         return rank[a.src] - rank[b.src] || (b.n || 0) - (a.n || 0) ||
           (b.date || '').localeCompare(a.date || '') || placeNum(a) - placeNum(b) || a.name.localeCompare(b.name);
       }
@@ -570,13 +571,28 @@
   });
 
   // --- loading -----------------------------------------------------------------------------
+  // v2 stores each deck once (formats list indices, since Legacy and Vintage share most decks) and
+  // card lists flat ([card, n, card, n]); the rest of this file wants per-format decks and pairs.
+  function unpack(json) {
+    if (json.v < 2) return json;
+    var pairs = function (flat) {
+      if (!flat) return flat;
+      var out = [];
+      for (var i = 0; i < flat.length; i += 2) out.push([flat[i], flat[i + 1]]);
+      return out;
+    };
+    json.decks.forEach(function (d) { d.cmd = pairs(d.cmd); d.main = pairs(d.main); d.side = pairs(d.side); });
+    json.formats.forEach(function (f) { f.decks = f.decks.map(function (i) { return json.decks[i]; }); });
+    return json;
+  }
+
   function load() {
     if (loading) return loading;
     loading = fetch('assets/decks.json').then(function (r) {
       if (!r.ok) throw new Error(r.status);
       return r.json();
     }).then(function (json) {
-      data = json;
+      data = unpack(json);
       cards = json.cards;
       root.setAttribute('aria-busy', 'false');
       buildTabs();

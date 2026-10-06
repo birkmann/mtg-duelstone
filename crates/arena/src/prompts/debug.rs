@@ -26,6 +26,10 @@ fn inject(time: Res<Time>, view: Res<GameView>, mut pending: ResMut<PendingPromp
     if time.elapsed_secs() < 9.0 {
         return;
     }
+    // under --autoplay the bot would answer the fake prompt; with a screenshot pause set, wait for it
+    if std::env::var("ARENA_AUTOPLAY_PAUSE").is_ok() && !crate::debug::paused_for_shot(&view) {
+        return;
+    }
     let kind = std::env::var("ARENA_PROMPT").unwrap_or_default();
     let Some(me) = view.me() else { return };
     let hand: Vec<Card> = me.zones.hand.iter().filter(|c| c.is_visible()).cloned().collect();

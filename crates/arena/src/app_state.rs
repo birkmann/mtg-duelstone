@@ -283,7 +283,7 @@ fn start_loading(
     let api = Api::new(cfg.base_url.clone());
     let mc = match_cfg.clone();
     let name = Some(settings.player_name.trim().to_string()).filter(|n| !n.is_empty());
-    let avatar = Some(settings.avatar.clone());
+    let avatar = Some(settings.shown_avatar());
     let rx = match mode.clone() {
         MatchMode::VsAi => {
             status.message = "Creating match…".into();

@@ -1,5 +1,5 @@
 //! Dev-only: `ARENA_SHOT_WHEN=<cond>` takes a screenshot the first time a live game state matches
-//! (stack, ability, attack, block, target, pay, attackdecl, blockdecl, sel), then exits. Lets us
+//! (stack, ability, attack, block, target, pay, attackdecl, blockdecl, sel, paused, won, lost), then exits. Lets us
 //! eyeball arrows / stack / combat visuals on REAL engine data under `--autoplay`.
 //! `ARENA_HOVER_HAND=<n>` pretends the pointer rests on my n-th hand card (hover lift check),
 //! `ARENA_HOVER_COMMAND` on my first command-zone card. `paused` pairs with `ARENA_AUTOPLAY_PAUSE`.
@@ -66,6 +66,7 @@ fn shot_when(
     time: Res<Time>,
     view: Res<GameView>,
     input: Res<CurrentInput>,
+    result: Res<GameResult>,
     mut commands: Commands,
     mut held: Local<f32>,
     mut fired: Local<Option<f32>>,
@@ -92,9 +93,17 @@ fn shot_when(
         "blockdecl" => crate::combat::declaring_blockers(&view, &input) && f.is_some_and(|f| !f.selectable.is_empty()),
         "sel" => f.is_some_and(|f| !f.selectable.is_empty()),
         "paused" => crate::debug::paused_for_shot(&view),
+        // the game-over banner (pair with ARENA_SHOT_DELAY so it has finished animating in)
+        "won" => result.0.as_ref().is_some_and(|r| r.you_won),
+        "lost" => result.0.as_ref().is_some_and(|r| !r.you_won),
         _ => false,
     };
-    if ok && time.elapsed_secs() > 8.0 {
+    // ARENA_SHOT_MIN_TURN: skip the first turns, whose boards are too bare to show off
+    let min_turn: i32 = std::env::var("ARENA_SHOT_MIN_TURN").ok().and_then(|s| s.parse().ok()).unwrap_or(0);
+    let ok = ok && (g.turn >= min_turn || matches!(cond.as_str(), "won" | "lost"));
+    // ARENA_SHOT_AFTER: earliest shot (s); portraits and card art stream in during the first seconds
+    let after: f32 = std::env::var("ARENA_SHOT_AFTER").ok().and_then(|s| s.parse().ok()).unwrap_or(8.0);
+    if ok && time.elapsed_secs() > after {
         *held += time.delta_secs();
     } else {
         *held = 0.0;

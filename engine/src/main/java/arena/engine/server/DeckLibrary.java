@@ -50,6 +50,22 @@ public final class DeckLibrary {
         public boolean legalIn(final String legality) {
             return legality == null || (legal & (1 << DeckSource.LEGALITIES.indexOf(legality))) != 0;
         }
+
+        /**
+         * The format the deck belongs to: the one it was built for (archetype and tournament decks name it
+         * in their ref), else the narrowest that accepts it. A Pauper list is legal in Vintage too, but a
+         * Vintage player browsing Vintage decks wants Vintage decks.
+         */
+        public String home() {
+            final int colon = ref.indexOf(':'), slash = ref.indexOf('/');
+            if ((ref.startsWith(ARCHETYPE) || ref.startsWith(TOURNAMENT)) && slash > colon) return ref.substring(colon + 1, slash);
+            return DeckSource.narrowest(legal);
+        }
+
+        /** Listed under {@code legality} (null = casual: every deck). */
+        public boolean belongsTo(final String legality) {
+            return legality == null || legality.equals(home());
+        }
     }
 
     private static final String ARCHETYPE = "archetype:", TOURNAMENT = "tournament:", FORGE = "forge:";
@@ -143,8 +159,8 @@ public final class DeckLibrary {
         }
         if (parsed > 0) writeCache(cacheFile, stamp, rows);
         final Map<String, Integer> per = new TreeMap<>();
-        for (final Entry e : out.values()) for (final String l : DeckSource.LEGALITIES) if (e.legalIn(l)) per.merge(l, 1, Integer::sum);
-        System.out.printf("[decks] library: %d decks (%d parsed, rest cached) in %d ms; legal %s%n", out.size(), parsed, System.currentTimeMillis() - t0, per);
+        for (final Entry e : out.values()) if (e.home() != null) per.merge(e.home(), 1, Integer::sum);
+        System.out.printf("[decks] library: %d decks (%d parsed, rest cached) in %d ms; by format %s%n", out.size(), parsed, System.currentTimeMillis() - t0, per);
         return Collections.unmodifiableMap(out);
     }
 

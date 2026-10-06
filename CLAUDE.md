@@ -27,8 +27,9 @@
   (+ `ARENA_DRAFT_STOP=pick:N|build`, `ARENA_CUBE=<ref>` + `ARENA_CUBE_VIEW=table|spoiler|curve|stacks|stats`, `ARENA_DESIGN=<id>,…`), `ARENA_LOBBY_HOLD` with `--quick --players N`, and for game shots
   `ARENA_AUTOPLAY_PAUSE=<turn>` + `ARENA_SHOT_WHEN=paused` (+ `ARENA_HOVER_COMMAND`) under `--autoplay`.
 - Deck select shows only playable decks (engine `problem` == null) for the mode's format + legality. Constructed draws on
-  `DeckLibrary` (engine): `decks/archetypes/` + `decks/tournament/` + Forge's quest/genetic decks, indexed by legality at startup, so every legality
-  has 100+ decks; the grid is searched/paged client-side, never spawn all tiles.
+  `DeckLibrary` (engine): `decks/archetypes/` + `decks/tournament/` + Forge's quest/genetic decks, indexed by legality at startup and listed under
+  their home format only (the one built for, else the narrowest legal), so every legality has 100+ of its own decks; Brawl/Oathbreaker get `decks/community/`, Commander Forge's 173 precons. The grid is searched/paged
+  client-side, never spawn all tiles.
 - Multiplayer: never assume one opponent. Seats are slots (`GameView::seat_order`: 0 = you), anchors per seat
   (`BoardAnchors::seats` / `avatar_of`). Engine-side, every human seat is its own `WsGuiGame`.
 - Public engine (`--public`, the website's browser play): vs-AI only, seat token required, refuses lobbies/events/writes.
@@ -53,8 +54,9 @@ cargo test --workspace
 ./run.sh                                              # build engine if stale + run the game
 tools/fetch-offline.sh                                # once, online: fill offline/ (images, rulings, vendor, m2)
 (cd engine && java -cp target/forge-ws-server.jar arena.engine.ArchetypeDecks ../decks/archetypes)  # regenerate the metagame archetype decks (random: review the diff)
-python3 tools/build-website-decks.py                  # decks/ + offline Scryfall bulk → website/assets/decks.json (the site's deck explorer); re-run after decks change
+python3 tools/build-website-decks.py                  # the engine's deck lists (starts the jar) + offline Scryfall bulk → website/assets/decks.json (the site's deck explorer); re-run after decks change
 (cd engine && java -cp target/forge-ws-server.jar arena.engine.TournamentDecks pauper ../decks/tournament)  # dev only, online: real MTGO lists from Forge's archive
+(cd engine && java -cp target/forge-ws-server.jar arena.engine.CommunityDecks brawl|oathbreaker ../decks/community)  # dev only, online: published lists, topped up to 120 from Forge's play data
 ```
 
 ## Offline

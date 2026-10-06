@@ -102,8 +102,25 @@ pub fn update_preview(
     let alt = card.alt_state.as_ref().filter(|a| !a.name.is_empty() && Some(&a.name) != card.state.as_ref().map(|s| &s.name)).cloned();
     let fonts = fonts.clone();
     let card = card.clone();
+    let landscape = crate::layout::is_landscape(&card);
     commands.entity(e).with_children(|r| {
-        let pic = spawn_card_pic(r, &fonts, &card, ImageVersion::Large, main_h).id();
+        let pic = if landscape {
+            // A plane's scan is portrait with the card on its side: give it a landscape box and turn
+            // the (overflowing, centred) portrait picture a quarter clockwise inside it.
+            let mut pic = None;
+            r.spawn((
+                Node { width: vh(main_h), height: vh(main_h * 63.0 / 88.0), justify_content: JustifyContent::Center, align_items: AlignItems::Center, ..default() },
+                Pickable::IGNORE,
+            ))
+            .with_children(|b| {
+                let id = spawn_card_pic(b, &fonts, &card, ImageVersion::Large, main_h).id();
+                b.commands().entity(id).insert(UiTransform { rotation: Rot2::FRAC_PI_2, ..default() });
+                pic = Some(id);
+            });
+            pic.expect("spawned above")
+        } else {
+            spawn_card_pic(r, &fonts, &card, ImageVersion::Large, main_h).id()
+        };
         r.commands().entity(pic).insert(BorderColor::all(Color::srgba(0.0, 0.0, 0.0, 0.0)));
         let fb = oracle_text(&card);
         let fb_id = r

@@ -164,7 +164,7 @@ fn start_lookup(st: &mut MpState, current_base: &str, invite: &str, settings: &S
     st.error = false;
     let api = Api::new(base.clone());
     let name = settings.player_name.clone();
-    let avatar = settings.avatar.clone();
+    let avatar = settings.shown_avatar();
     st.lookup = Some((
         base,
         mtg_client::spawn(async move {

@@ -105,8 +105,14 @@ impl CardImages {
         let Some(state) = card.state.as_ref().filter(|_| !card.hidden) else {
             return self.card_back.clone();
         };
+        let name = if card.oracle_name.is_empty() { &state.name } else { &card.oracle_name };
+        // A face-down permanent can reach us visible but nameless; there is no face to fetch, so it
+        // shows its back rather than a blank placeholder.
+        if name.is_empty() {
+            return self.card_back.clone();
+        }
         let req = ImageRequest {
-            name: if card.oracle_name.is_empty() { state.name.clone() } else { card.oracle_name.clone() },
+            name: name.clone(),
             set: state.set_code.clone(),
             back: false,
             version,

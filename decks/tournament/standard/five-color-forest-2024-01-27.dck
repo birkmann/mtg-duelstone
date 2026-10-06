@@ -1,0 +1,16 @@
+[metadata]
+Name=Five-Color Forest
+Deck Type=Constructed
+Comment=Standard Challenge 32 · 2024-01-27 · #49
+[Main]
+12 Forest|TRK|[325]
+12 Island|TRK|[319]
+12 Mountain|TRK|[323]
+12 Plains|TRK|[317]
+12 Swamp|TRK|[321]
+[Sideboard]
+5 Forest|TRK|[325]
+3 Island|TRK|[319]
+3 Mountain|TRK|[323]
+1 Plains|TRK|[317]
+3 Swamp|TRK|[321]

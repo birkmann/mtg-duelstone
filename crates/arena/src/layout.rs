@@ -57,6 +57,16 @@ pub struct LayoutOut {
     pub anchors: BoardAnchors,
 }
 
+/// Planes and phenomena are printed sideways, and their scans (Scryfall's) are stored portrait with
+/// the card turned a quarter counter-clockwise. Shown like any other card they lie on their side,
+/// so the table turns them like a tapped card and the preview turns them upright.
+pub fn is_landscape(c: &Card) -> bool {
+    c.state.as_ref().and_then(|s| s.type_line.as_deref()).is_some_and(|t| {
+        let t = t.trim_start();
+        (t.starts_with("Plane") && !t.starts_with("Planeswalker")) || t.contains("Phenomenon")
+    })
+}
+
 pub fn flat_rot(tapped: bool) -> Quat {
     let yaw = if tapped { -FRAC_PI_2 } else { 0.0 };
     Quat::from_rotation_y(yaw) * Quat::from_rotation_x(-FRAC_PI_2)
@@ -405,8 +415,11 @@ pub fn compute(view: &GameView, aspect: f32) -> LayoutOut {
             );
         }
         for (i, c) in p.zones.command.iter().enumerate() {
-            out.placements
-                .insert(c.id, pile_pose(cmd + Vec3::new(0.0, 0.003 * i as f32, -(i as f32) * 0.5 * f.scale), c.is_visible(), pile));
+            let mut pose = pile_pose(cmd + Vec3::new(0.0, 0.003 * i as f32, -(i as f32) * 0.5 * f.scale), c.is_visible(), pile);
+            if is_landscape(c) {
+                pose.rotation = flat_rot(true);
+            }
+            out.placements.insert(c.id, pose);
         }
 
         // ---- hand ----

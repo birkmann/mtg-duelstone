@@ -184,7 +184,7 @@ fn spawn_main_menu(mut commands: Commands, fonts: Res<ArenaFonts>, settings: Res
                     BorderColor::all(GOLD),
                     BackgroundColor(Color::srgb(0.05, 0.035, 0.03)),
                     ImageNode::new(TRANSPARENT_IMAGE_HANDLE),
-                    AvatarArt { avatar: Some(settings.avatar.clone()), fallback: TRANSPARENT_IMAGE_HANDLE },
+                    AvatarArt { avatar: Some(settings.shown_avatar()), fallback: TRANSPARENT_IMAGE_HANDLE },
                     Pickable::IGNORE,
                 ));
                 c.spawn(Node { flex_direction: FlexDirection::Column, ..default() }).with_children(|t| {
