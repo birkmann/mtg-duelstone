@@ -50,7 +50,9 @@ try {
       <span class="wordmark">MTG Duelstone</span>
     </a>
     <div class="nav-links">
+      <!-- browser play is parked until there is somewhere to run the engine (see the #play section below)
       <a href="#play">Play now</a>
+      -->
       <a href="#about">About</a>
       <a href="#modes">Game modes</a>
       <a class="nav-extra" href="#friends">Multiplayer</a>
@@ -133,10 +135,12 @@ try {
       <span>Download</span>
     </a>
     <p class="dl-meta" id="hero-download-meta">For Windows, Mac and Linux · <a href="#install">all downloads</a></p>
+    <!-- browser play is parked, see the #play section
     <a class="pill pill-secondary pill-dl" href="#play">
       <svg class="icon-play" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5.5v13l10.5-6.5z"/></svg>
       <span>Play in your browser</span>
     </a>
+    -->
     <script>
     // Offer the build for the visitor's system; one click downloads it. Anything else (phones,
     // ChromeOS, ARM Linux) keeps the plain button to the install section.
@@ -173,8 +177,12 @@ try {
   </aside>
 </section>
 
-<!-- Play in the browser. The site is static (Vercel); the game runs on the public engine named in
-     data-engine (packaging/server), which serves the browser client this section frames. -->
+<!-- PARKED: "Play in your browser". The site is static (Vercel), and the game needs the Forge engine
+     running somewhere: the section frames the browser client served by the public engine named in
+     data-engine (packaging/server). Vercel can't run Forge, and Forge inside the page (CheerpJ) hung
+     mid-game, so this stays off until there is a host. To bring it back, uncomment this section, the
+     "Play now" nav link, the capsule's "Play in your browser" link and the #play script near the end.
+
 <section class="dark" id="play">
   <div class="wrap section">
     <div class="head">
@@ -200,7 +208,7 @@ try {
         </div>
       </div>
       <div class="play-game" id="play-game" hidden></div>
-      <!-- one click in and out of full screen, on the frame itself (Esc also leaves) -->
+      [note: one click in and out of full screen, on the frame itself (Esc also leaves)]
       <button class="play-fs" type="button" id="play-fs" aria-label="Full screen" title="Full screen" hidden>
         <svg viewBox="0 0 24 24" aria-hidden="true"><path class="fs-enter" d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/><path class="fs-exit" d="M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5"/></svg>
       </button>
@@ -220,6 +228,7 @@ try {
     </ul>
   </div>
 </section>
+-->
 
 <section class="wrap section about" id="about">
   <h2>About this game</h2>
@@ -760,6 +769,7 @@ try {
   });
 })();
 
+/* PARKED with the #play section (see the comment there); it expects that markup to exist.
 // Play in the browser (#play): the public engine named in data-engine serves the browser client,
 // which is framed into the section. The section always shows; its status line says why the game
 // can't start yet (connecting, offline, full, no mouse or WebGL2).
@@ -870,6 +880,7 @@ try {
   document.getElementById('play-close').addEventListener('click', stop);
   check();
 })();
+*/
 
 // Copy the build-from-source command.
 document.querySelectorAll('.copy-btn').forEach(function (b) {

@@ -7,12 +7,19 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
+  # Bevy test binaries with full debuginfo outgrow the runner's disk (and the cache); CI never needs a debugger.
+  CARGO_PROFILE_DEV_DEBUG: '0'
 
 jobs:
   test:
     # Rust only: the tests use recorded frames and in-process fake servers, not the Java engine.
     runs-on: ubuntu-latest
     steps:
+      - name: Free disk space
+        # ubuntu-latest leaves ~14 GB free; the native + wasm builds need more. These toolchains go unused here.
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
+          df -h /
       - uses: actions/checkout@v4
       - name: Install system packages
         run: |
