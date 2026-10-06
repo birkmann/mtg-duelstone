@@ -67,8 +67,13 @@ public final class EngineServer {
             ctx.addServlet(st, "/");
             System.out.println("[server] serving static files from " + staticDir.getAbsolutePath());
         }
+        // the constructed deck list is ~2.5 MB of JSON (thousands of decks); ~10x smaller gzipped for browser play
+        final org.eclipse.jetty.server.handler.gzip.GzipHandler gzip = new org.eclipse.jetty.server.handler.gzip.GzipHandler();
+        gzip.setIncludedPaths("/api/*");
+        gzip.setIncludedMimeTypes("application/json");
+        gzip.setHandler(ctx);
         final HandlerList handlers = new HandlerList();
-        handlers.addHandler(ctx);
+        handlers.addHandler(gzip);
         server.setHandler(handlers);
         arena.engine.deck.Recommender.warmUpAsync();   // ~3 s of data/tag loading off the first deck-builder request
     }

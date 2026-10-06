@@ -29,6 +29,7 @@ import java.util.concurrent.ThreadLocalRandom;
  *   <li>{@code "starter:<name>"} — a {@code .dck} shipped in this repo's {@code decks/<format>/} dir,</li>
  *   <li>{@code "precon:<name>"} — Forge's shipped Commander precons,</li>
  *   <li>{@code "theme:<name>"} — Forge's bundled constructed precon decks (quest/precons, 60-card legal only),</li>
+ *   <li>{@code "archetype:<legality>/<stem>"}, {@code "forge:<path>"} — the constructed {@link DeckLibrary},</li>
  *   <li>{@code "user:<name>"} — Forge's own ~/.forge/decks/{commander,constructed},</li>
  *   <li>{@code "file:<path>"} — any .dck,</li>
  *   <li>{@code "random"} — a random legal deck of the requested format (for the AI).</li>
@@ -203,6 +204,8 @@ public final class DeckSource {
                     final JsonObject o = describe("theme:" + d.getName(), d, format);
                     a.add(legality == null ? o : withProblem(o, d, format, legality));
                 }
+                // thousands of decks: only the playable ones are listed, not marked
+                for (final DeckLibrary.Entry e : DeckLibrary.entries().values()) if (e.legalIn(legality)) a.add(describe(e));
             }
             default -> {}
         }
@@ -245,18 +248,44 @@ public final class DeckSource {
         o.add("commanders", cmd);
         o.addProperty("mainCount", d.getMain().countAll());
         final List<String> ci = new ArrayList<>();
-        int mask = 0;
         if (hasCommander(format)) {
             for (final PaperCard pc : d.getCommanders()) ci.add(arena.engine.view.ViewJson.colors(pc.getRules().getColorIdentity()));
             o.addProperty("colorIdentity", String.join("", ci));
         } else {
-            for (final Map.Entry<PaperCard, Integer> e : d.getMain()) mask |= e.getKey().getRules().getColorIdentity().getColor();
-            o.addProperty("colorIdentity", arena.engine.view.ViewJson.colors(ColorSet.fromMask(mask)));
+            o.addProperty("colorIdentity", arena.engine.view.ViewJson.colors(spellColors(d)));
         }
         o.addProperty("format", format);
         final PaperCard cover = cover(d);
         if (cover != null) o.addProperty("cover", cover.getName());
         return o;
+    }
+
+    private static JsonObject describe(final DeckLibrary.Entry e) {
+        final JsonObject o = new JsonObject();
+        o.addProperty("ref", e.ref());
+        o.addProperty("name", e.name());
+        o.add("commanders", new JsonArray());
+        o.addProperty("mainCount", e.mainCount());
+        o.addProperty("colorIdentity", e.colors());
+        o.addProperty("format", CONSTRUCTED);
+        if (e.cover() != null) o.addProperty("cover", e.cover());
+        if (e.description() != null) o.addProperty("description", e.description());
+        o.add("problem", com.google.gson.JsonNull.INSTANCE);
+        return o;
+    }
+
+    /**
+     * What a 60-card deck plays: its spells' colours. Colour identity would count the lands too, and a
+     * Raffine's Tower makes a two-colour control deck look like four.
+     */
+    public static ColorSet spellColors(final Deck d) {
+        int spells = 0, all = 0;
+        for (final Map.Entry<PaperCard, Integer> e : d.getMain()) {
+            final forge.card.CardRules r = e.getKey().getRules();
+            all |= r.getColorIdentity().getColor();
+            if (!r.getType().isLand()) spells |= r.getColor().getColor();
+        }
+        return ColorSet.fromMask(spells != 0 ? spells : all);
     }
 
     /** Art for the "Random deck" tile: there are no cards to choose from until it's generated. */
@@ -326,6 +355,7 @@ public final class DeckSource {
         final String name = colon < 0 ? ref : ref.substring(colon + 1);
         switch (kind) {
             case "precon": return require(FModel.getDecks().getCommanderPrecons(), name, ref);
+            case "archetype", "forge": return DeckLibrary.load(ref);
             case "theme": {
                 final Deck d = themes().get(name);
                 if (d != null) return d;

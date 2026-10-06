@@ -1,6 +1,11 @@
 //! Deck select: format toggle, deck tile grid (fetched from the engine on a background thread),
 //! AI opponent picker (incl. Random) and the deck-import modal.
 //!
+//! Only playable decks are shown: the engine checks each against the mode's format + legality, and
+//! a deck it flags would just be refused at PLAY. Constructed formats come with thousands of library
+//! decks, so the grid is searched, colour-filtered and paged rather than spawned all at once (every
+//! tile loads art); the opponent list follows the grid's page.
+//!
 //! Why tasks + channels: the Bevy schedule must never wait on the network. Each request runs as an
 //! `mtg_client::spawn` task (a thread on desktop, the page's event loop in the browser) that sends
 //! one result back.
@@ -13,6 +18,7 @@ use std::collections::{HashMap, VecDeque};
 
 use bevy::input::mouse::{MouseScrollUnit, MouseWheel};
 use bevy::prelude::*;
+use bevy::text::EditableText;
 use bevy::ui::{BackgroundGradient, ColorStop, LinearGradient, RelativeCursorPosition};
 use crossbeam_channel::{Receiver, TryRecvError};
 use mtg_client::{Api, ImageRequest, ImageVersion};
@@ -34,6 +40,7 @@ impl Plugin for DeckSelectPlugin {
             .init_resource::<DeckSelection>()
             .init_resource::<ImportState>()
             .init_resource::<CoverFallbacks>()
+            .init_resource::<DeckBrowse>()
             .add_message::<RefreshDecks>()
             .add_systems(OnEnter(AppState::DeckSelect), (spawn_screen, request_initial_fetch))
             .add_systems(
@@ -41,6 +48,7 @@ impl Plugin for DeckSelectPlugin {
                 (
                     start_fetches,
                     poll_fetch,
+                    browse_controls,
                     rebuild_lists,
                     refresh_visuals,
                     sync_tile_art,
@@ -96,6 +104,53 @@ pub struct DeckSelection {
     pub ai: Option<String>,
 }
 
+/// What part of the deck list the grid shows: search text, colour filter (WUBRG bits) and page.
+#[derive(Resource, Debug, Default)]
+struct DeckBrowse {
+    filter: String,
+    colors: u8,
+    page: usize,
+    /// Set by `poll_fetch`: open the page holding the selected deck once.
+    reveal_selection: bool,
+}
+
+/// Tiles per page: a few screens of scrolling, few enough that a page spawns and loads its art quickly.
+const PAGE: usize = 30;
+const COLORS: [char; 5] = ['W', 'U', 'B', 'R', 'G'];
+
+impl DeckBrowse {
+    fn matches(&self, d: &DeckInfo) -> bool {
+        let ci = d.color_identity.to_ascii_uppercase();
+        let colors_ok = COLORS.iter().enumerate().all(|(i, c)| self.colors & (1 << i) == 0 || ci.contains(*c));
+        colors_ok
+            && (self.filter.is_empty()
+                || d.name.to_lowercase().contains(&self.filter)
+                || d.description.as_deref().is_some_and(|x| x.to_lowercase().contains(&self.filter))
+                || d.commanders.iter().any(|c| c.to_lowercase().contains(&self.filter)))
+    }
+
+    fn filtered<'a>(&self, list: &'a DeckList) -> Vec<&'a DeckInfo> {
+        list.decks.iter().filter(|d| self.matches(d)).collect()
+    }
+
+    fn pages(n: usize) -> usize {
+        n.div_ceil(PAGE).max(1)
+    }
+}
+
+/// Grid order: Random, your decks, the curated ones, then the big pools (all by name within).
+fn deck_rank(deck_ref: &str) -> u8 {
+    match deck_ref.split_once(':').map_or(deck_ref, |(k, _)| k) {
+        "random" => 0,
+        "user" => 1,
+        "starter" => 2,
+        "precon" | "archetype" => 3,
+        "theme" => 4,
+        "forge" => 5,
+        _ => 6,
+    }
+}
+
 #[derive(Resource, Default)]
 struct DeckFetch {
     rx: Option<Receiver<(Format, Result<Vec<DeckInfo>, String>)>>,
@@ -148,6 +203,7 @@ fn poll_fetch(
     mut list: ResMut<DeckList>,
     mut sel: ResMut<DeckSelection>,
     mut settings: ResMut<Settings>,
+    mut browse: ResMut<DeckBrowse>,
 ) {
     let Some(rx) = &fetch.rx else { return };
     let Ok((fmt, res)) = rx.try_recv() else { return };
@@ -157,8 +213,11 @@ fn poll_fetch(
     }
     match res {
         Ok(mut decks) => {
-            decks.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
+            decks.retain(|d| d.problem.is_none());
+            decks.sort_by_cached_key(|d| (deck_rank(&d.deck_ref), d.name.to_lowercase()));
             list.decks = decks;
+            browse.page = 0;
+            browse.reveal_selection = true;
             list.status = Fetch::Ready;
             let valid = |d: &DeckInfo| d.problem.is_none();
             let key = fmt.as_str().to_string();
@@ -228,7 +287,16 @@ struct CoverFallbacks {
     inflight: Vec<(String, Receiver<Result<DeckFull, String>>)>,
 }
 
-fn spawn_screen(mut commands: Commands, fonts: Res<ArenaFonts>, mode: Res<MatchMode>, cfg: Res<MatchConfig>, facts: Res<ServerFacts>) {
+fn spawn_screen(
+    mut commands: Commands,
+    fonts: Res<ArenaFonts>,
+    assets: Res<AssetServer>,
+    mode: Res<MatchMode>,
+    cfg: Res<MatchConfig>,
+    facts: Res<ServerFacts>,
+    mut browse: ResMut<DeckBrowse>,
+) {
+    *browse = DeckBrowse::default(); // the search field starts empty, so must the filter
     let public = facts.is_public();
     let mode_label = super::modes::setup_label(cfg.format, &cfg.setup);
     let can_change = !matches!(*mode, MatchMode::Join { .. });
@@ -263,8 +331,9 @@ fn spawn_screen(mut commands: Commands, fonts: Res<ArenaFonts>, mode: Res<MatchM
             // ---- middle
             root.spawn(Node { width: Val::Percent(100.0), flex_grow: 1.0, min_height: Val::Px(0.0), column_gap: Val::Px(22.0), ..default() })
                 .with_children(|mid| {
-                    mid.spawn(ornate_panel(Node { flex_grow: 1.0, min_width: Val::Px(0.0), padding: UiRect::all(Val::Px(18.0)), flex_direction: FlexDirection::Column, ..default() }))
+                    mid.spawn(ornate_panel(Node { flex_grow: 1.0, min_width: Val::Px(0.0), padding: UiRect::all(Val::Px(18.0)), flex_direction: FlexDirection::Column, row_gap: Val::Px(10.0), ..default() }))
                         .with_children(|p| {
+                            spawn_browse_bar(p, &fonts, &assets);
                             p.spawn((
                                 DeckGrid,
                                 Scrollable,
@@ -343,24 +412,143 @@ fn identity_gradient(ci: &str) -> BackgroundGradient {
     BackgroundGradient::from(LinearGradient::new(std::f32::consts::FRAC_PI_2 * 1.4, stops))
 }
 
+#[derive(Component)]
+struct ColorToggle(usize);
+#[derive(Component)]
+struct PageStep(isize);
+#[derive(Component)]
+struct PageLabel;
+
+fn spawn_browse_bar(p: &mut ChildSpawnerCommands, fonts: &ArenaFonts, assets: &AssetServer) {
+    p.spawn(Node { width: Val::Percent(100.0), align_items: AlignItems::Center, column_gap: Val::Px(10.0), padding: UiRect::horizontal(Val::Px(8.0)), ..default() })
+        .with_children(|r| {
+            r.spawn(ui_text(&fonts.title, "SEARCH", 15.0, GOLD));
+            r.spawn(text_field(fonts, Field::DeckFilter, "", Val::Px(260.0), 1.0, false));
+            r.spawn(Node { width: Val::Px(8.0), ..default() });
+            for (i, &c) in COLORS.iter().enumerate() {
+                r.spawn((
+                    Button,
+                    ColorToggle(i),
+                    Node { padding: UiRect::all(Val::Px(4.0)), border: UiRect::all(Val::Px(2.0)), border_radius: BorderRadius::all(Val::Px(20.0)), ..default() },
+                    BorderColor::all(Color::NONE),
+                    BackgroundColor(Color::NONE),
+                ))
+                .with_children(|b| {
+                    b.spawn((mana_pip(assets, c, 24.0), Pickable::IGNORE));
+                });
+            }
+            r.spawn(Node { flex_grow: 1.0, ..default() });
+            let b = spawn_button(r, fonts, ButtonKind::Secondary, "<", Vec2::new(44.0, 38.0));
+            r.commands().entity(b).insert(PageStep(-1));
+            r.spawn((PageLabel, Node { min_width: Val::Px(150.0), justify_content: JustifyContent::Center, ..default() }))
+                .with_child(ui_text(&fonts.body, "", 15.0, TEXT_DIM));
+            let b = spawn_button(r, fonts, ButtonKind::Secondary, ">", Vec2::new(44.0, 38.0));
+            r.commands().entity(b).insert(PageStep(1));
+        });
+}
+
+/// Search text, colour toggles and page buttons → `DeckBrowse`; keeps the bar's labels in step.
+fn browse_controls(
+    list: Res<DeckList>,
+    sel: Res<DeckSelection>,
+    mut browse: ResMut<DeckBrowse>,
+    fields: Query<(&Field, &EditableText)>,
+    toggles: Query<(&Interaction, &ColorToggle), Changed<Interaction>>,
+    steps: Query<(&Interaction, &PageStep), Changed<Interaction>>,
+    mut pips: Query<(&ColorToggle, &Interaction, &mut BorderColor, &mut BackgroundColor), Without<PageStep>>,
+    mut step_btns: Query<(&PageStep, &mut ArenaButton)>,
+    labels: Query<&Children, With<PageLabel>>,
+    mut texts: Query<&mut Text>,
+    mut grid: Query<&mut ScrollPosition, With<DeckGrid>>,
+) {
+    let filter = fields.iter().find(|(f, _)| **f == Field::DeckFilter).map(|(_, t)| t.value().to_string().trim().to_lowercase()).unwrap_or_default();
+    if filter != browse.filter {
+        browse.filter = filter;
+        browse.page = 0;
+    }
+    for (i, t) in &toggles {
+        if *i == Interaction::Pressed {
+            browse.colors ^= 1 << t.0;
+            browse.page = 0;
+        }
+    }
+    let shown = browse.filtered(&list);
+    let pages = DeckBrowse::pages(shown.len());
+    if browse.reveal_selection && list.status == Fetch::Ready {
+        browse.reveal_selection = false;
+        if let Some(i) = sel.human.as_ref().and_then(|r| shown.iter().position(|d| &d.deck_ref == r)) {
+            browse.page = i / PAGE;
+        }
+    }
+    for (i, s) in &steps {
+        if *i == Interaction::Pressed {
+            browse.page = (browse.page as isize + s.0).clamp(0, pages as isize - 1) as usize;
+        }
+    }
+    browse.page = browse.page.min(pages - 1);
+    if browse.is_changed() {
+        for mut sp in &mut grid {
+            sp.y = 0.0;
+        }
+    }
+    for (t, i, mut bc, mut bg) in &mut pips {
+        let on = browse.colors & (1 << t.0) != 0;
+        let hov = matches!(i, Interaction::Hovered | Interaction::Pressed);
+        let want = if on { GOLD_BRIGHT } else if hov { GOLD_DIM } else { Color::NONE };
+        if bc.top != want {
+            *bc = BorderColor::all(want);
+        }
+        bg.0 = if on { Color::srgba(1.0, 0.8, 0.4, 0.18) } else { Color::NONE };
+    }
+    for (s, mut b) in &mut step_btns {
+        let disabled = if s.0 < 0 { browse.page == 0 } else { browse.page + 1 >= pages };
+        if b.disabled != disabled {
+            b.disabled = disabled;
+        }
+    }
+    let label = match shown.len() {
+        1 => "1 deck".to_string(),
+        n if pages > 1 => format!("{n} decks · {}/{pages}", browse.page + 1),
+        n => format!("{n} decks"),
+    };
+    for ch in &labels {
+        for c in ch {
+            if let Ok(mut t) = texts.get_mut(*c)
+                && t.0 != label
+            {
+                t.0 = label.clone();
+            }
+        }
+    }
+}
+
 fn rebuild_lists(
     mut commands: Commands,
     list: Res<DeckList>,
+    browse: Res<DeckBrowse>,
+    sel: Res<DeckSelection>,
     fonts: Res<ArenaFonts>,
     assets: Res<AssetServer>,
     grid: Query<(Entity, Option<&Children>), With<DeckGrid>>,
     ai: Query<(Entity, Option<&Children>), With<AiList>>,
     added: Query<(), Added<DeckGrid>>,
+    mut shown_key: Local<String>,
 ) {
-    if !list.is_changed() && added.is_empty() {
+    let shown = browse.filtered(&list);
+    let page: Vec<&DeckInfo> = shown.iter().skip(browse.page * PAGE).take(PAGE).copied().collect();
+    // the selected opponent stays listed when the page moves on
+    let pinned = sel.ai.as_ref().filter(|r| !page.iter().any(|d| &d.deck_ref == *r)).and_then(|r| list.decks.iter().find(|d| &d.deck_ref == r));
+    let key = format!("{}|{}|{}", page.iter().map(|d| d.deck_ref.as_str()).collect::<Vec<_>>().join("\n"), pinned.map_or("", |d| &d.deck_ref), list.decks.len());
+    if !list.is_changed() && added.is_empty() && key == *shown_key {
         return;
     }
+    *shown_key = key;
     if let Ok((e, ch)) = grid.single() {
         for c in ch.into_iter().flatten() {
             commands.entity(*c).despawn();
         }
         commands.entity(e).with_children(|g| {
-            for d in &list.decks {
+            for d in &page {
                 spawn_tile(g, d, &fonts, &assets);
             }
         });
@@ -371,7 +559,7 @@ fn rebuild_lists(
         }
         commands.entity(e).with_children(|g| {
             spawn_ai_row(g, None, "Random", "", &fonts, &assets);
-            for d in list.decks.iter().filter(|d| d.problem.is_none()) {
+            for d in pinned.into_iter().chain(page.iter().copied().filter(|d| d.deck_ref != "random")) {
                 spawn_ai_row(g, Some(d.deck_ref.clone()), &d.name, &d.color_identity, &fonts, &assets);
             }
         });
@@ -469,6 +657,12 @@ fn spawn_tile(g: &mut ChildSpawnerCommands, d: &DeckInfo, fonts: &ArenaFonts, as
                         p.chars().take(40).collect::<String>()
                     } else if let Some(cmd) = d.commanders.first() {
                         cmd.clone()
+                    } else if let Some(desc) = &d.description {
+                        let mut s: String = desc.chars().take(64).collect();
+                        if s.len() < desc.len() {
+                            s.push('…');
+                        }
+                        s
                     } else {
                         String::new()
                     };

@@ -478,7 +478,8 @@ fn tick_intro(
     if !clock.full {
         return;
     }
-    for (bit, at, s) in [(0, 0.45, Sfx::SpellCast), (1, 1.25, Sfx::AttackWhoosh), (2, 2.3, Sfx::Resolve)] {
+    // portal ignites, cards fan out of it, everything settles
+    for (bit, at, s) in [(0, 0.45, Sfx::SpellCast), (1, 1.25, Sfx::CardFan), (2, 2.3, Sfx::Resolve)] {
         if clock.t >= at && clock.sfx_fired & (1 << bit) == 0 {
             clock.sfx_fired |= 1 << bit;
             sfx.write(PlaySfx(s));

@@ -95,7 +95,8 @@ impl Api {
         if let Some(l) = legality {
             q.push(("legality", l));
         }
-        let all: Vec<DeckInfo> = self.get("/api/decks", &q, 20).await?.ok("decks")?.json("decks")?;
+        // a fresh engine indexes its deck library first (~15 s on a cold cache, longer on slow disks)
+        let all: Vec<DeckInfo> = self.get("/api/decks", &q, 90).await?.ok("decks")?.json("decks")?;
         Ok(all.into_iter().filter(|d| d.format.is_none_or(|f| f == format)).collect())
     }
     pub async fn create_match(&self, req: &CreateMatch) -> Result<MatchInfo> {

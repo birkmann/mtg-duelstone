@@ -36,6 +36,8 @@ pub enum Field {
     CubeLibraryFilter,
     /// Avatar studio: card search.
     AvatarSearch,
+    /// Deck select: filter the deck grid by name / description.
+    DeckFilter,
 }
 
 pub struct WidgetsPlugin;

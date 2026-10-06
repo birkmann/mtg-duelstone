@@ -159,6 +159,7 @@ pub(super) fn debug_jump(
         // the mode screen is skipped: take the remembered format, as it would
         "deck" | "play" => {
             match_cfg.format = settings.last_format;
+            match_cfg.setup.legality = settings.last_legality.clone().filter(|_| settings.last_format == Format::Constructed);
             next.set(AppState::DeckSelect);
         }
         "commander" => {

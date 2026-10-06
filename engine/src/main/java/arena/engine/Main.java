@@ -50,6 +50,7 @@ public final class Main {
             System.out.println("[server] public mode: vs-AI matches only, at most " + arena.engine.server.PublicMode.maxMatches() + " at once; no lobbies, events or deck/cube/collection writes");
         }
         Bootstrap.init(() -> new WsGuiGame(f -> {}));
+        arena.engine.server.DeckLibrary.warm(); // ~15 s on a cold cache: start before anyone opens the deck screen
         if (staticDir == null) staticDir = findWebDist();
         final EngineServer server = new EngineServer(port, staticDir, arena.engine.server.ImageCache.resolvePack(offline), publicUrl);
         server.start();

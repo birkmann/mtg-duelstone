@@ -18,7 +18,7 @@ decisions arrive as `prompt` frames listing the legal options; the client answer
 | Method | Path | Body / params | Returns |
 |---|---|---|---|
 | GET | `/api/health` | | `{ok, cards, protocol: 2, publicUrl, web, maxPlayers}` — `publicUrl` = base other machines reach this engine at (invite links: `--public-url`, `$MTG_DUELSTONE_PUBLIC_URL`, else the first LAN IPv4); `web` = the browser client is served at `/`; `public` = a [public engine](#public-engine), which also reports `liveMatches` and `maxMatches` |
-| GET | `/api/decks` | `?format=constructed\|commander` (default `commander`), `?kind=user` | `[ {ref, name, commanders[], mainCount, colorIdentity, format, problem, cover?} ]` — `cover` = card name whose art stands for the deck (commander, else its signature card; clients may override it); `ref` = `starter:<name>` (repo `decks/<format>/*.dck`) / `precon:<name>` (commander) / `theme:<name>` (Forge's bundled 60-card constructed decks) / `user:<name>` / `file:<path>`; `problem` is null for legal decks (Forge `DeckFormat` check). The special ref `random` (in `POST /api/match`) picks a legal deck of the match format (starters favoured). |
+| GET | `/api/decks` | `?format=constructed\|commander` (default `commander`), `?kind=user` | `[ {ref, name, commanders[], mainCount, colorIdentity, format, problem, cover?} ]` — `cover` = card name whose art stands for the deck (commander, else its signature card; clients may override it); `ref` = `starter:<name>` (repo `decks/<format>/*.dck`) / `precon:<name>` (commander) / `theme:<name>` (Forge's bundled 60-card constructed decks) / `archetype:<legality>/<stem>` (repo `decks/archetypes/`, one per Forge metagame archetype, `arena.engine.ArchetypeDecks`) / `forge:<path>` (Forge's quest duel, quest world and genetic-AI decks) / `user:<name>` / `file:<path>`; `problem` is null for legal decks (Forge `DeckFormat` check). `description?` = one line on the deck (library decks). The `archetype:`/`forge:` library (~9k decks) is indexed by legality in the background at startup (cached in Forge's cache dir) and only its playable decks are listed, never marked; the first listing waits for the index (~15 s on a cold cache). The special ref `random` (in `POST /api/match`) picks a legal deck of the match format (starters favoured). |
 | GET | `/api/deck`, `/api/deck/export` | `?ref=…&format=?` | full deck / `.dck` text |
 | POST | `/api/deck`, `/api/deck/validate`, `/api/deck/import` | body gains `format?` (default commander); constructed decks save to `~/.forge/decks/constructed` and need no `commanders` | as before |
 | DELETE | `/api/deck` | `?name=…&format=?` | |
@@ -247,7 +247,7 @@ Extra body fields, echoed in `hello`, `lobby` frames and `matchInfo`:
   else is one team), `momir` (generated 60-basics decks + Momir avatar; deck refs are ignored), `teams` (2v2: seats
   alternate teams, exactly 4 players; Forge has no Two-Headed Giant rules, so teammates keep their own life and turns).
   `archenemy` and `teams` exclude each other; `momir` needs `constructed`.
-- `GET /api/decks?format=…&legality=…` marks illegal decks via `problem` and always lists the pseudo-deck
+- `GET /api/decks?format=…&legality=…` marks illegal decks via `problem` (library decks that aren't legal are left out instead) and always lists the pseudo-deck
   `{ref:"random", generated:true}`: a random legal saved deck, or one Forge generates (Pauper, Brawl, Oathbreaker…).
 - `GET /api/formats` → `{formats, legalities, variants}` (`[{id, name, description}]`).
 

@@ -162,7 +162,8 @@ impl Format {
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default, rename_all = "camelCase")]
 pub struct DeckInfo {
-    /// `precon:<name>` / `user:<name>` / `file:<path>` / `starter:<name>`
+    /// `precon:<name>` / `user:<name>` / `file:<path>` / `starter:<name>` / `theme:<name>` /
+    /// `archetype:<legality>/<stem>` / `forge:<path>` (the engine's constructed deck library)
     #[serde(rename = "ref")]
     pub deck_ref: String,
     pub name: String,
@@ -173,6 +174,8 @@ pub struct DeckInfo {
     pub problem: Option<String>,
     /// Card whose art stands for the deck (engine's pick; the client may override it per deck).
     pub cover: Option<String>,
+    /// One line on what the deck is (library decks: archetype, opponent and quest world, …).
+    pub description: Option<String>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]

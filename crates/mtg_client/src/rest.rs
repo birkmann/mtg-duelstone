@@ -77,7 +77,7 @@ impl Rest {
     }
     /// Decks with legality problems marked (`?legality=pauper` …).
     pub fn decks_for(&self, format: Format, legality: Option<&str>) -> Result<Vec<DeckInfo>> {
-        let mut r = agent(Duration::from_secs(20)).get(self.url("/api/decks")).query("format", format.as_str());
+        let mut r = agent(Duration::from_secs(90)).get(self.url("/api/decks")).query("format", format.as_str());
         if let Some(l) = legality {
             r = r.query("legality", l);
         }

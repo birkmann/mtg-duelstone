@@ -608,6 +608,8 @@ pub enum Sfx {
     HoverTick,
     Victory,
     Defeat,
+    /// A hand of cards fanned out (the menu intro's card burst).
+    CardFan,
 }
 
 /// Play a sound (rate-limited per kind by audio). Owner: audio (reader).

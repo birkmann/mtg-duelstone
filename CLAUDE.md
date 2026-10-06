@@ -26,6 +26,9 @@
   are global: touch draft state only under `EventSession.DRAFT_LOCK`. Dev jumps: `ARENA_MENU_SCREEN=modes|cubes|draft|avatar|designer[-box|-mat]`
   (+ `ARENA_DRAFT_STOP=pick:N|build`, `ARENA_CUBE=<ref>` + `ARENA_CUBE_VIEW=table|spoiler|curve|stacks|stats`, `ARENA_DESIGN=<id>,…`), `ARENA_LOBBY_HOLD` with `--quick --players N`, and for game shots
   `ARENA_AUTOPLAY_PAUSE=<turn>` + `ARENA_SHOT_WHEN=paused` (+ `ARENA_HOVER_COMMAND`) under `--autoplay`.
+- Deck select shows only playable decks (engine `problem` == null) for the mode's format + legality. Constructed draws on
+  `DeckLibrary` (engine): `decks/archetypes/` + Forge's quest/genetic decks, indexed by legality at startup, so every legality
+  has 100+ decks; the grid is searched/paged client-side, never spawn all tiles.
 - Multiplayer: never assume one opponent. Seats are slots (`GameView::seat_order`: 0 = you), anchors per seat
   (`BoardAnchors::seats` / `avatar_of`). Engine-side, every human seat is its own `WsGuiGame`.
 - Public engine (`--public`, the website's browser play): vs-AI only, seat token required, refuses lobbies/events/writes.
@@ -49,6 +52,7 @@ packaging/server/build.sh                             # public engine (--public)
 cargo test --workspace
 ./run.sh                                              # build engine if stale + run the game
 tools/fetch-offline.sh                                # once, online: fill offline/ (images, rulings, vendor, m2)
+(cd engine && java -cp target/forge-ws-server.jar arena.engine.ArchetypeDecks ../decks/archetypes)  # regenerate the metagame archetype decks (random: review the diff)
 ```
 
 ## Offline
