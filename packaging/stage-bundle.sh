@@ -6,6 +6,8 @@
 #   DEST/decks/                  starter decks (the engine finds them by walking up from its jar)
 #   DEST/forge/res/              Forge's rules data, card scripts zipped into cardsfolder.zip
 #   DEST/jre/                    a jlink'd Java runtime with only the modules the engine uses
+#   DEST/web/                    the browser client invitees open (tools/build-web.sh → web/dist),
+#                                when it has been built
 #   DEST/offline/data/           rulings + showcase data (committed)
 #   DEST/offline/img/            card images, only with --with-images: Wizards' art stays out of
 #                                public releases; such users run the bundled fetch-offline once
@@ -31,6 +33,11 @@ cp "$jar" "$dest/engine/forge-ws-server.jar"
 cp -R decks "$dest/decks"
 cp LICENSE "$dest/"
 cp "$forge/LICENSE.txt" "$dest/forge/"
+if [[ -f web/dist/index.html ]]; then
+    cp -R web/dist "$dest/web"
+else
+    echo "note: no web/dist (tools/build-web.sh): invitees will need the desktop app" >&2
+fi
 mkdir -p "$dest/offline"
 cp -R offline/README.md "$dest/offline/"
 [[ -d offline/data ]] && cp -R offline/data "$dest/offline/"

@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>MTG Duelstone</title>
+  <style>
+    html, body { margin: 0; height: 100%; background: #0b0705; overflow: hidden; }
+    /* Bevy fits the canvas to this box (fit_canvas_to_parent) */
+    #game { position: fixed; inset: 0; }
+    canvas#mtg-duelstone { width: 100%; height: 100%; display: block; outline: none; }
+    #splash {
+      position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center;
+      gap: 18px; color: #ecdcb8; font: 16px/1.4 system-ui, sans-serif; background: radial-gradient(#2a170c, #0b0705 70%);
+      transition: opacity .6s ease; z-index: 10;
+    }
+    #splash h1 { font: 600 54px/1 Georgia, serif; letter-spacing: .08em; color: #ffd27f; margin: 0; text-shadow: 0 4px 18px #000; }
+    #splash .bar { width: 320px; height: 6px; border-radius: 3px; background: #2b1d12; overflow: hidden; }
+    #splash .bar i { display: block; height: 100%; width: 0; background: linear-gradient(90deg, #c96f1c, #ffb64d); transition: width .2s; }
+    #splash.gone { opacity: 0; pointer-events: none; }
+    #splash .err { color: #ff8a70; max-width: 560px; text-align: center; }
+  </style>
+</head>
+<body>
+  <div id="game"><canvas id="mtg-duelstone" tabindex="0"></canvas></div>
+  <div id="splash">
+    <h1>MTG DUELSTONE</h1>
+    <div class="bar"><i id="progress"></i></div>
+    <div id="status">Loading the game…</div>
+  </div>
+  <script type="module">
+    // Browsers start every AudioContext suspended until the user interacts with the page; Bevy's
+    // audio backend creates its context at startup, so resume them all on the first gesture.
+    const contexts = [];
+    const Orig = window.AudioContext || window.webkitAudioContext;
+    if (Orig) {
+      window.AudioContext = window.webkitAudioContext = class extends Orig {
+        constructor(...a) { super(...a); contexts.push(this); }
+      };
+      const resume = () => contexts.forEach((c) => c.state === 'suspended' && c.resume());
+      ['pointerdown', 'keydown', 'touchstart'].forEach((e) => window.addEventListener(e, resume, { capture: true }));
+    }
+
+    const splash = document.getElementById('splash');
+    const status = document.getElementById('status');
+    const bar = document.getElementById('progress');
+    const fail = (msg) => { status.className = 'err'; status.textContent = msg; };
+
+    const gl = document.createElement('canvas').getContext('webgl2');
+    if (!gl) fail('This browser has no WebGL2, which the game needs. Try a current Firefox, Chrome, Edge or Safari.');
+
+    // Download the (large) wasm with progress, then hand the bytes to wasm-bindgen.
+    async function fetchWithProgress(url) {
+      const resp = await fetch(url);
+      if (!resp.ok) throw new Error(`${url}: HTTP ${resp.status}`);
+      // Served gzipped, Content-Length is the compressed size while the stream yields inflated bytes,
+      // so progress is an estimate against the inflated size (~4.4× for this wasm).
+      const gz = (resp.headers.get('Content-Encoding') || '').includes('gzip');
+      const total = (+resp.headers.get('Content-Length') || 0) * (gz ? 4.4 : 1);
+      if (!total || !resp.body) return resp.arrayBuffer();
+      const reader = resp.body.getReader();
+      const chunks = []; let got = 0;
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        chunks.push(value); got += value.length;
+        bar.style.width = `${Math.min(100, (got / total) * 100).toFixed(1)}%`;
+        status.textContent = `Loading the game… ${Math.min(99, Math.round((got / total) * 100))}%`;
+      }
+      const out = new Uint8Array(got); let o = 0;
+      for (const c of chunks) { out.set(c, o); o += c.length; }
+      return out.buffer;
+    }
+
+    if (gl) {
+      const { default: init } = await import('./mtg-duelstone.js');
+      try {
+        const bytes = await fetchWithProgress('./mtg-duelstone_bg.wasm');
+        status.textContent = 'Starting…';
+        // the canvas exists before Bevy looks for it; hide the splash once Bevy owns the page
+        setTimeout(() => splash.classList.add('gone'), 800);
+        await init({ module_or_path: bytes });
+      } catch (e) {
+        // winit hands control to the browser's event loop by throwing this on purpose
+        if (!String(e && e.message || e).includes('Using exceptions for control flow')) {
+          console.error(e);
+          splash.classList.remove('gone');
+          fail(`The game failed to start: ${e && e.message || e}`);
+        }
+      }
+      document.getElementById('mtg-duelstone').focus();
+    }
+  </script>
+</body>
+</html>

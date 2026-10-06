@@ -187,7 +187,7 @@ fn rest_health_decks_match_and_images() {
     let _ = rx.recv();
 
     let info = rest
-        .create_match(&CreateMatch { human_deck: "a".into(), ai_deck: "b".into(), format: Format::Constructed, seed: Some(4), human_name: Some("T".into()) })
+        .create_match(&CreateMatch { human_deck: "a".into(), ai_deck: "b".into(), format: Format::Constructed, seed: Some(4), human_name: Some("T".into()), setup: Default::default() })
         .unwrap();
     assert_eq!(info.id, "m7");
     let req = rx.recv().unwrap();

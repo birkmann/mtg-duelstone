@@ -143,13 +143,17 @@ fn role_target(format: Format, key: &str) -> u32 {
         (Format::Commander, "draw") => 10,
         (Format::Commander, "removal") => 8,
         (Format::Commander, "wipe") => 3,
-        (Format::Constructed, "removal") => 6,
+        (Format::Constructed | Format::Brawl | Format::Oathbreaker, "removal") => 6,
         _ => 0,
     }
 }
 
 pub fn analyze(format: Format, commanders: &[&CatalogCard], main: &[Entry]) -> DeckStats {
-    let mut s = DeckStats { format, required: if format == Format::Commander { 100 } else { 60 }, ..Default::default() };
+    let mut s = DeckStats { format, required: match format {
+        Format::Commander => 100,
+        Format::Limited => 40,
+        Format::Constructed | Format::Brawl | Format::Oathbreaker => 60,
+    }, ..Default::default() };
     let all = commanders.iter().map(|c| Entry { card: c, qty: 1 }).chain(main.iter().cloned());
     let mut cmc_sum = 0u32;
     let mut role_counts: BTreeMap<&str, u32> = BTreeMap::new();
@@ -195,9 +199,12 @@ pub fn analyze(format: Format, commanders: &[&CatalogCard], main: &[Entry]) -> D
         .map(|(k, l)| RoleCount { key: k, label: l, count: role_counts.get(k).copied().unwrap_or(0), target: role_target(format, k) })
         .collect();
     // Frank Karsten's regressions ("How many lands do you need…", 2022): 60-card and 99-card versions.
+    // 40-card Limited decks scale the 60-card fit by deck size (≈17 lands at an average curve).
+    let sixty = 19.59 + 1.90 * s.avg_cmc - 0.28 * cheap_helpers as f32;
     s.suggested_lands = match format {
         Format::Commander => 31.42 + 3.13 * s.avg_cmc - 0.28 * cheap_helpers as f32,
-        Format::Constructed => 19.59 + 1.90 * s.avg_cmc - 0.28 * cheap_helpers as f32,
+        Format::Constructed | Format::Brawl | Format::Oathbreaker => sixty,
+        Format::Limited => sixty * 40.0 / 60.0,
     }
     .max(0.0);
 

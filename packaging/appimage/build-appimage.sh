@@ -25,6 +25,10 @@ fetch runtime-x86_64 https://github.com/AppImage/type2-runtime/releases/download
 if [[ "${SKIP_BUILD:-0}" != 1 ]]; then
     cargo build --release -p arena -p mtg_client --bin mtg-duelstone --bin fetch-offline
 fi
+# The browser client the bundled engine serves to invitees (CI builds it once and sets SKIP_WEB=1).
+if [[ "${SKIP_WEB:-0}" != 1 ]]; then
+    tools/build-web.sh
+fi
 
 appdir="$here/AppDir"
 rm -rf "$appdir"

@@ -275,7 +275,7 @@ fn on_board_events(
                     continue;
                 }
                 let mine = view.is_me(*player);
-                let a = Anchor::World(anchors.avatar(mine) + Vec3::Y * 0.25);
+                let a = Anchor::World(anchors.avatar_of(*player, mine) + Vec3::Y * 0.25);
                 let (txt, col) = if d < 0 { (format!("{d}"), RED_DAMAGE) } else { (format!("+{d}"), GREEN_HEAL) };
                 spawn_float(&mut commands, &fonts, a, txt, col, 52.0 + (d.abs() as f32).min(12.0) * 3.0, 1.3 / sp);
                 if d < 0 {

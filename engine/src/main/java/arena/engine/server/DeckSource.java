@@ -5,7 +5,10 @@ import com.google.gson.JsonObject;
 import forge.card.ColorSet;
 import forge.deck.Deck;
 import forge.deck.DeckFormat;
+import forge.deck.DeckgenUtil;
 import forge.deck.io.DeckSerializer;
+import forge.game.GameFormat;
+import forge.game.GameType;
 import forge.item.PaperCard;
 import forge.localinstance.properties.ForgeConstants;
 import forge.model.FModel;
@@ -35,6 +38,9 @@ public final class DeckSource {
     private DeckSource() {}
 
     public static final String COMMANDER = "commander", CONSTRUCTED = "constructed";
+    public static final String BRAWL = "brawl", OATHBREAKER = "oathbreaker", LIMITED = "limited";
+    /** Constructed legalities a match can enforce (ids are lower-case Forge format names). */
+    public static final List<String> LEGALITIES = List.of("standard", "pioneer", "modern", "legacy", "vintage", "pauper");
 
     // Forge's deck storage + CardDb lazy-load deck sections and are not thread-safe: serialize all access.
     private static final Object LOCK = new Object();
@@ -42,12 +48,44 @@ public final class DeckSource {
     private static volatile File decksRoot;
     private static Map<String, Deck> themeCache; // lazily loaded, guarded by LOCK
 
-    /** "constructed" or "commander" (default, back-compat); anything unknown is rejected. */
+    /** constructed|commander|brawl|oathbreaker|limited ("commander" when absent, for v1 clients); anything else is rejected. */
     public static String format(final String f) {
         if (f == null || f.isBlank()) return COMMANDER;
         final String n = f.trim().toLowerCase();
-        if (n.equals(COMMANDER) || n.equals(CONSTRUCTED)) return n;
-        throw new IllegalArgumentException("unknown format: " + f + " (constructed|commander)");
+        if (n.equals(COMMANDER) || n.equals(CONSTRUCTED) || n.equals(BRAWL) || n.equals(OATHBREAKER) || n.equals(LIMITED)) return n;
+        throw new IllegalArgumentException("unknown format: " + f + " (constructed|commander|brawl|oathbreaker|limited)");
+    }
+
+    /** Has a commander-style command zone (the deck's Commander section matters). */
+    public static boolean hasCommander(final String format) {
+        return COMMANDER.equals(format) || BRAWL.equals(format) || OATHBREAKER.equals(format);
+    }
+
+    /** Deck-construction rules of a format (size, copies, commander checks). */
+    public static DeckFormat deckFormat(final String format) {
+        return switch (format(format)) {
+            case CONSTRUCTED -> DeckFormat.Constructed;
+            case BRAWL -> DeckFormat.Brawl;
+            case OATHBREAKER -> DeckFormat.Oathbreaker;
+            case LIMITED -> DeckFormat.Limited;
+            default -> DeckFormat.Commander;
+        };
+    }
+
+    /** null/""/"casual" → null (anything goes); otherwise one of {@link #LEGALITIES}. */
+    public static String legality(final String l) {
+        if (l == null || l.isBlank() || l.equalsIgnoreCase("casual")) return null;
+        final String n = l.trim().toLowerCase();
+        if (!LEGALITIES.contains(n)) throw new IllegalArgumentException("unknown legality: " + l + " " + LEGALITIES);
+        return n;
+    }
+
+    /** Forge's card-pool rules (sets, bans, restricted, rarity) for a legality id. */
+    public static GameFormat gameFormat(final String legality) {
+        if (legality == null) return null;
+        final GameFormat gf = FModel.getFormats().getFormat(Character.toUpperCase(legality.charAt(0)) + legality.substring(1));
+        if (gf == null) throw new IllegalArgumentException("Forge has no " + legality + " format data");
+        return gf;
     }
 
     // ---- repo decks dir ---------------------------------------------------------------------
@@ -115,16 +153,33 @@ public final class DeckSource {
 
     public static JsonArray list() { return list(COMMANDER); }
 
-    public static JsonArray list(final String format) {
-        synchronized (LOCK) { return listLocked(format(format)); }
+    public static JsonArray list(final String format) { return list(format, null); }
+
+    public static JsonArray list(final String format, final String legality) {
+        synchronized (LOCK) { return listLocked(format(format), legality(legality)); }
     }
 
-    private static JsonArray listLocked(final String format) {
+    private static JsonArray listLocked(final String format) { return listLocked(format, null); }
+
+    private static JsonArray listLocked(final String format, final String legality) {
         final JsonArray a = new JsonArray();
+        // The engine can always make a legal deck (generated when no saved deck qualifies, e.g. Pauper).
+        if (!LIMITED.equals(format)) {
+            final JsonObject rnd = new JsonObject();
+            rnd.addProperty("ref", "random");
+            rnd.addProperty("name", "Random deck");
+            rnd.add("commanders", new JsonArray());
+            rnd.addProperty("mainCount", hasCommander(format) && !COMMANDER.equals(format) ? 60 : COMMANDER.equals(format) ? 100 : 60);
+            rnd.addProperty("colorIdentity", "WUBRG");
+            rnd.addProperty("format", format);
+            rnd.add("problem", com.google.gson.JsonNull.INSTANCE);
+            rnd.addProperty("generated", true);
+            a.add(rnd);
+        }
         for (final File f : starterFiles(format)) {
             try {
                 final Deck d = loadFile(f);
-                a.add(withProblem(describe("starter:" + stem(f), d, format), d, format));
+                a.add(withProblem(describe("starter:" + stem(f), d, format), d, format, legality));
             } catch (final Throwable t) {
                 final JsonObject o = new JsonObject();
                 o.addProperty("ref", "starter:" + stem(f)); o.addProperty("name", stem(f)); o.add("commanders", new JsonArray());
@@ -133,27 +188,48 @@ public final class DeckSource {
                 a.add(o);
             }
         }
-        if (format.equals(COMMANDER)) {
-            for (final Deck d : FModel.getDecks().getCommanderPrecons()) a.add(describe("precon:" + d.getName(), d, format));
-            for (final Deck d : FModel.getDecks().getCommander()) a.add(describe("user:" + d.getName(), d, format));
-        } else {
-            for (final Deck d : FModel.getDecks().getConstructed()) a.add(withProblem(describe("user:" + d.getName(), d, format), d, format));
-            for (final Deck d : themes().values()) a.add(describe("theme:" + d.getName(), d, format));
+        switch (format) {
+            case COMMANDER -> {
+                for (final Deck d : FModel.getDecks().getCommanderPrecons()) a.add(describe("precon:" + d.getName(), d, format));
+                for (final Deck d : FModel.getDecks().getCommander()) a.add(describe("user:" + d.getName(), d, format));
+            }
+            case BRAWL -> { for (final Deck d : FModel.getDecks().getBrawl()) a.add(withProblem(describe("user:" + d.getName(), d, format), d, format, null)); }
+            case OATHBREAKER -> { for (final Deck d : FModel.getDecks().getOathbreaker()) a.add(withProblem(describe("user:" + d.getName(), d, format), d, format, null)); }
+            case CONSTRUCTED -> {
+                for (final Deck d : FModel.getDecks().getConstructed()) a.add(withProblem(describe("user:" + d.getName(), d, format), d, format, legality));
+                // themes are pre-filtered to legal 60-card decks; only a legality needs a check
+                for (final Deck d : themes().values()) {
+                    final JsonObject o = describe("theme:" + d.getName(), d, format);
+                    a.add(legality == null ? o : withProblem(o, d, format, legality));
+                }
+            }
+            default -> {}
         }
         return a;
     }
 
-    private static JsonObject withProblem(final JsonObject o, final Deck d, final String format) {
-        final String p = problem(d, format);
-        o.addProperty("problem", p);
+    private static JsonObject withProblem(final JsonObject o, final Deck d, final String format) { return withProblem(o, d, format, null); }
+
+    private static JsonObject withProblem(final JsonObject o, final Deck d, final String format, final String legality) {
+        o.addProperty("problem", problem(d, format, legality));
         return o;
     }
 
     private static String stem(final File f) { return f.getName().replaceFirst("(?i)\\.dck$", ""); }
 
-    public static String problem(final Deck d, final String format) {
+    public static String problem(final Deck d, final String format) { return problem(d, format, null); }
+
+    /**
+     * Why a deck can't be played in a format (+ legality), or null. Forge splits the check in two:
+     * {@link DeckFormat} = construction (size, copies, commander), {@link GameFormat} = card pool (sets,
+     * bans, restricted list, Pauper's rarity rule).
+     */
+    public static String problem(final Deck d, final String format, final String legality) {
         try {
-            return (format.equals(CONSTRUCTED) ? DeckFormat.Constructed : DeckFormat.Commander).getDeckConformanceProblem(d);
+            final String p = deckFormat(format).getDeckConformanceProblem(d);
+            if (p != null || legality == null) return p;
+            final String q = gameFormat(legality).getDeckConformanceProblem(d);
+            return q == null ? null : "not " + legality + "-legal: " + q;
         } catch (final Exception e) { return "could not validate: " + e.getMessage(); }
     }
 
@@ -169,7 +245,7 @@ public final class DeckSource {
         o.addProperty("mainCount", d.getMain().countAll());
         final List<String> ci = new ArrayList<>();
         int mask = 0;
-        if (format.equals(COMMANDER)) {
+        if (hasCommander(format)) {
             for (final PaperCard pc : d.getCommanders()) ci.add(arena.engine.view.ViewJson.colors(pc.getRules().getColorIdentity()));
             o.addProperty("colorIdentity", String.join("", ci));
         } else {
@@ -189,9 +265,24 @@ public final class DeckSource {
         synchronized (LOCK) { return loadLocked(ref, format == null ? null : format(format)); }
     }
 
+    /** Load and, for a legality, insist the deck is legal ("random" picks/generates a legal one). */
+    public static Deck load(final String ref, final String format, final String legality) {
+        synchronized (LOCK) {
+            final String f = format == null ? null : format(format);
+            final String l = legality(legality);
+            if ("random".equals(ref)) return random(f == null ? COMMANDER : f, l);
+            final Deck d = loadLocked(ref, f);
+            if (l != null) {
+                final String p = problem(d, f == null ? CONSTRUCTED : f, l);
+                if (p != null) throw new IllegalArgumentException(d.getName() + ": " + p);
+            }
+            return d;
+        }
+    }
+
     private static Deck loadLocked(final String ref, final String format) {
         if (ref == null) throw new IllegalArgumentException("deck ref required");
-        if (ref.equals("random")) return random(format == null ? COMMANDER : format);
+        if (ref.equals("random")) return random(format == null ? COMMANDER : format, null);
         final int colon = ref.indexOf(':');
         final String kind = colon < 0 ? "precon" : ref.substring(0, colon);
         final String name = colon < 0 ? ref : ref.substring(colon + 1);
@@ -210,6 +301,8 @@ public final class DeckSource {
                 throw new IllegalArgumentException("deck not found: " + ref);
             }
             case "user": {
+                if (BRAWL.equals(format)) return require(FModel.getDecks().getBrawl(), name, ref);
+                if (OATHBREAKER.equals(format)) return require(FModel.getDecks().getOathbreaker(), name, ref);
                 if (format == null || format.equals(COMMANDER)) {
                     final Deck d = find(FModel.getDecks().getCommander(), name);
                     if (d != null) return d;
@@ -229,20 +322,34 @@ public final class DeckSource {
         }
     }
 
-    private static Deck random(final String format) {
-        final JsonArray all = listLocked(format);
+    private static Deck random(final String format, final String legality) {
+        final JsonArray all = listLocked(format, legality);
         final List<String> ok = new ArrayList<>();
         for (final var e : all) {
             final JsonObject o = e.getAsJsonObject();
             if (o.has("problem") && !o.get("problem").isJsonNull()) continue;
+            if ("random".equals(o.get("ref").getAsString())) continue;
             ok.add(o.get("ref").getAsString());
         }
-        if (ok.isEmpty()) throw new IllegalArgumentException("no usable " + format + " decks for random");
+        if (ok.isEmpty()) return generate(format, legality);
         // The big bundled theme pool would drown out the curated starters: favour starters 3:1 when present.
         final List<String> starters = new ArrayList<>();
         for (final String r : ok) if (r.startsWith("starter:")) starters.add(r);
         final List<String> pool = !starters.isEmpty() && ThreadLocalRandom.current().nextInt(4) != 0 ? starters : ok;
         return loadLocked(pool.get(ThreadLocalRandom.current().nextInt(pool.size())), format);
+    }
+
+    /** Forge's deck generator, for formats/legalities nobody has a saved deck for (Pauper, Brawl…). */
+    private static Deck generate(final String format, final String legality) {
+        final Deck d = switch (format) {
+            case BRAWL -> DeckgenUtil.generateCommanderDeck(true, GameType.Brawl);
+            case OATHBREAKER -> DeckgenUtil.generateCommanderDeck(true, GameType.Oathbreaker);
+            case COMMANDER -> DeckgenUtil.generateCommanderDeck(true, GameType.Commander);
+            case CONSTRUCTED -> legality == null ? DeckgenUtil.getRandomColorDeck(true) : DeckgenUtil.getRandomColorDeck(gameFormat(legality).getFilterRules(), true);
+            default -> throw new IllegalArgumentException("no usable " + format + " decks for random");
+        };
+        if (d.getName() == null || d.getName().isBlank()) d.setName("Random " + format + (legality == null ? "" : " (" + legality + ")"));
+        return d;
     }
 
     private static Deck find(final IStorage<Deck> store, final String name) {

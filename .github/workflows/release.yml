@@ -43,16 +43,45 @@ jobs:
           compression-level: 0
           retention-days: 3
 
+  web:
+    # The browser client (wasm) is the same for every package: build it once.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@v2
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cargo/bin/wasm-bindgen
+          key: wasm-bindgen-${{ hashFiles('Cargo.lock') }}
+      - name: Build the browser client
+        run: tools/build-web.sh
+      - run: tar -czf web-dist.tar.gz web/dist
+      - uses: actions/upload-artifact@v4
+        with:
+          name: web-dist
+          path: web-dist.tar.gz
+          compression-level: 0
+          retention-days: 3
+
   appimage:
     # An older Ubuntu keeps the glibc requirement low (2.35).
     runs-on: ubuntu-22.04
-    needs: engine
+    needs: [engine, web]
+    env:
+      SKIP_WEB: '1'
     steps:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
         with:
           name: engine-bundle
       - run: tar -xzf engine-bundle.tar.gz && rm engine-bundle.tar.gz
+      - uses: actions/download-artifact@v4
+        with:
+          name: web-dist
+      - run: tar -xzf web-dist.tar.gz && rm web-dist.tar.gz
       - name: Install system packages
         run: |
           sudo apt-get update
@@ -84,15 +113,20 @@ jobs:
   macos:
     # Apple silicon.
     runs-on: macos-15
-    needs: engine
+    needs: [engine, web]
     env:
       MACOSX_DEPLOYMENT_TARGET: '12.0'
+      SKIP_WEB: '1'
     steps:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
         with:
           name: engine-bundle
       - run: tar -xzf engine-bundle.tar.gz && rm engine-bundle.tar.gz
+      - uses: actions/download-artifact@v4
+        with:
+          name: web-dist
+      - run: tar -xzf web-dist.tar.gz && rm web-dist.tar.gz
       - uses: actions/setup-java@v4
         with:
           distribution: temurin

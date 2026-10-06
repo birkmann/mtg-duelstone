@@ -3,6 +3,12 @@
 Server: `forge-ws-server` (Java, wraps Forge). One match = one WebSocket endpoint `ws://host/ws/match/{id}`.
 Any number of sockets may attach to a match (reconnects/tabs); every one gets a full snapshot on connect.
 
+Multiplayer (up to 4 seats, humans and/or Forge AI): a **lobby** match is opened with `POST /api/lobby`; every human
+seat has a secret **token** and its sockets connect with `ws://host/ws/match/{id}?token={token}`. Each human seat is
+its own Forge GUI, so `state`/`input`/`prompt`/`log`/`events` frames are per seat (hidden info redacted for *that*
+player) and only reach that seat's sockets. A socket without a token is accepted only by classic (`POST /api/match`)
+matches, where it is the human. See [Multiplayer](#multiplayer).
+
 Design rule: **the client never computes legality**. Cards are clickable when the engine says so
 (`input.selectable`, or the engine accepts/rejects a click and answers with `flash`), and blocking
 decisions arrive as `prompt` frames listing the legal options; the client answers by index.
@@ -11,7 +17,7 @@ decisions arrive as `prompt` frames listing the legal options; the client answer
 
 | Method | Path | Body / params | Returns |
 |---|---|---|---|
-| GET | `/api/health` | | `{ok, cards, protocol: 2}` |
+| GET | `/api/health` | | `{ok, cards, protocol: 2, publicUrl, web, maxPlayers}` — `publicUrl` = base other machines reach this engine at (invite links: `--public-url`, `$MTG_DUELSTONE_PUBLIC_URL`, else the first LAN IPv4); `web` = the browser client is served at `/` |
 | GET | `/api/decks` | `?format=constructed\|commander` (default `commander`), `?kind=user` | `[ {ref, name, commanders[], mainCount, colorIdentity, format, problem} ]` — `ref` = `starter:<name>` (repo `decks/<format>/*.dck`) / `precon:<name>` (commander) / `theme:<name>` (Forge's bundled 60-card constructed decks) / `user:<name>` / `file:<path>`; `problem` is null for legal decks (Forge `DeckFormat` check). The special ref `random` (in `POST /api/match`) picks a legal deck of the match format (starters favoured). |
 | GET | `/api/deck`, `/api/deck/export` | `?ref=…&format=?` | full deck / `.dck` text |
 | POST | `/api/deck`, `/api/deck/validate`, `/api/deck/import` | body gains `format?` (default commander); constructed decks save to `~/.forge/decks/constructed` and need no `commanders` | as before |
@@ -26,6 +32,9 @@ decisions arrive as `prompt` frames listing the legal options; the client answer
 | GET | `/api/cards/search` | `?q=&ci=WUBG&type=&text=&commander=1&cmc=&tag=&sort=name\|popular&offset=0&limit=60` (limit ≤ 200). `cmc` = exact mana value, `7` means 7+. `tag` = one [card tag](#card-tags) key (unknown → 400). `sort` defaults to `name` (prefix matches first) when `q` is non-empty and to `popular` when it is empty | `[ card ]` (see `card` below) |
 | GET | `/api/cards/get` | `?name=` | `card` |
 | POST | `/api/deck/recommend` | see [Deck-builder recommendations](#deck-builder-recommendations) | `{format, colorIdentity, commanderDecks?, themes[], archetypes[], sections[], unresolved[]}` |
+| POST | `/api/lobby` | `{format, players: 2..4, name, deck}` | **seat ticket** for the host (seat 0): `{id, seat: 0, token, name, invite, …lobby}` — `id` is the 6-letter table code, `invite` = `publicUrl + "/?join=" + id` |
+| GET | `/api/lobby/{code}` | | lobby info (the `lobby` frame body without `you`); code is case-insensitive; 404 = no such table |
+| POST | `/api/lobby/{code}/join` | `{name, deck}` | seat ticket `{id, seat, token, name, format}`; 409 when full / started. Names are made unique at the table; `file:` deck refs are refused |
 
 ## Deck-builder recommendations
 
@@ -172,6 +181,12 @@ then see the new state. Ids are the same trackable card/player ids as in `state`
 | `destroyed` / `sacrificed` | `card` (battlefield → graveyard; derived from the zone change, `sacrificed` when Forge announced a sacrifice; tokens excluded) |
 | `turnBegan` | `targetPlayer`, `amount` = turn number |
 
+### `lobby` — a multiplayer table before the start (multiplayer)
+`{t:"lobby", id, format, maxPlayers, host: 0, started, invite, you: <your seat>, canStart, seats: [ {seat, kind: "human"|"ai"|"open", name, deck, deckName, connected, you} ]}`
+— sent to every socket of the table on every change (join, seat edit, a player's socket opening/closing). `canStart` =
+≥ 2 filled seats and every seated human connected. When the host starts, each socket receives `hello` (with `seat`
+and `players`) followed by its seat's normal snapshot; open seats are left out of the game.
+
 ### Others
 `{t:"log", entries:[{i, type, text}]}` (incremental) · `{t:"message", title, text, error}` · `{t:"gameOver", winner, youWon}` ·
 `{t:"flash"}` (rejected action) · `{t:"alert"}` (your attention needed) · `{t:"error", text}` · `{t:"pong"}`.
@@ -181,9 +196,76 @@ then see the new state. Ids are the same trackable card/player ids as in `state`
 - `{t:"click", action:"card", id}` · `{t:"click", action:"player", id}`
 - `{t:"answer", id, value}` — reply to a `prompt`
 - `{t:"settings", stops: { myTurn?: [PhaseType...], oppTurn?: [PhaseType...] }}` — PhaseType = UNTAP, UPKEEP, DRAW, MAIN1, COMBAT_BEGIN, COMBAT_DECLARE_ATTACKERS, COMBAT_DECLARE_BLOCKERS, COMBAT_FIRST_STRIKE_DAMAGE, COMBAT_DAMAGE, COMBAT_END, MAIN2, END_OF_TURN, CLEANUP
-- `{t:"concede"}` · `{t:"resync"}` (re-send snapshot) · `{t:"ping"}`
+- `{t:"concede"}` — takes effect at your seat's next input (conceding while rules resolve would race Forge's game thread); at a multiplayer table the game goes on without you
+- `{t:"resync"}` (re-send snapshot; in a lobby: the `lobby` frame) · `{t:"ping"}`
+- Lobby only: `{t:"lobbyDeck", deck}` (change your deck) · host: `{t:"lobbySeat", seat, kind: "ai"|"open", deck?}` (fill a seat with Forge AI, or reopen it — removes a human, whose token stops working) · host: `{t:"start", seed?}`
+
+## Multiplayer
+
+1. Host: `POST /api/lobby` → ticket; connect with its token; share `invite`.
+2. Invitee: opens `invite` in a browser (the engine serves the wasm client at `/`, which reads `?join=`), or pastes it /
+   the code into the desktop client: `GET /api/lobby/{code}` (format, free seats) → pick a deck → `POST …/join` → connect.
+3. Host fills empty seats with AI (`lobbySeat`) or leaves them out, then `start`.
+4. Turn order is Forge's; `state.game.players` lists everyone, each client draws its own seat at the bottom.
+   A player who is out (`hasLost`) keeps receiving state until `gameOver` (spectating).
+5. A seated human whose sockets stay closed for 2 minutes mid-game concedes automatically and their seat answers
+   every remaining question with defaults, so the table never waits on someone who closed the tab. Reconnecting
+   with the same token within that window resumes the seat (`hello` + snapshot).
 
 ## Threading notes (server)
 Game thread = Forge's; it blocks inside `prompt`s and inside Inputs. Clicks are applied on the headless "EDT"
 (single thread) exactly like Forge's own GUIs do. State frames are coalesced and read snapshot collections,
 so they may lag a few ms behind the engine; a prompt is always preceded by a fresh state.
+
+## Protocol v3: formats, variants, limited events, cubes
+
+`hello.protocol` / `/api/health.protocol` = 3. Everything below is additive; v2 clients keep working.
+
+### Game setup (`POST /api/match`, `POST /api/lobby`)
+Extra body fields, echoed in `hello`, `lobby` frames and `matchInfo`:
+- `format`: `constructed` | `commander` | `brawl` (60-card singleton commander, Standard pool, 25 life) | `oathbreaker`
+  (planeswalker + signature spell, both in the deck's Commander section) | `limited` (event tables only).
+- `legality` (constructed only): `standard` | `pioneer` | `modern` | `legacy` | `vintage` | `pauper`, null = casual.
+  Decks are checked twice — construction (`DeckFormat`: size, copies) and card pool (`GameFormat`: sets, bans,
+  restricted list, Pauper's commons rule). An illegal deck ref is refused with 400 and the reason.
+- `variants`: any of `planechase` (generated planar decks; roll the planar die by activating the "Planar Dice" card
+  in your command zone), `archenemy` (seat 0 is the archenemy: generated scheme deck, 40 life, goes first; everyone
+  else is one team), `momir` (generated 60-basics decks + Momir avatar; deck refs are ignored), `teams` (2v2: seats
+  alternate teams, exactly 4 players; Forge has no Two-Headed Giant rules, so teammates keep their own life and turns).
+  `archenemy` and `teams` exclude each other; `momir` needs `constructed`.
+- `GET /api/decks?format=…&legality=…` marks illegal decks via `problem` and always lists the pseudo-deck
+  `{ref:"random", generated:true}`: a random legal saved deck, or one Forge generates (Pauper, Brawl, Oathbreaker…).
+- `GET /api/formats` → `{formats, legalities, variants}` (`[{id, name, description}]`).
+
+### Cubes
+| Method | Path | Body / params | Returns |
+|---|---|---|---|
+| GET | `/api/cubes` | | `[{ref, name, size, user}]` — `bundled:<name>` = Forge's res/draft cubes (MTGO Legacy/Vintage, Pauper, Peasant, Arena…), `user:<name>` = `~/.forge/duelstone-cubes/*.json` |
+| GET | `/api/cube` | `?ref=` | `{ref, name, description?, packs, packSize, cards:[catalog card + qty]}` |
+| POST | `/api/cube` | `{name, description?, packs?(3), packSize?(15), cards:[{name, set?, qty?}], previousName?}` | the saved cube (+ `size`, `fullPodCards` = cards an 8-player draft needs); bundled names are refused |
+| DELETE | `/api/cube` | `?name=` | |
+| POST | `/api/cube/import` | `{text}` (one card per line: `1 Name`, `2x Name`, `Name (SET)`) | `{cards:[…], unresolved:[{line, suggestions}]}` |
+| GET | `/api/sets` | | draftable sets with boosters, newest first `[{code, name, date}]` |
+| GET | `/api/cards/search` | `?q=| GET | `/api/cards/search` | `?q=&limit=` | catalog cards (cube designer search) |limit=` | catalog cards (cube designer search; the full filter set is above) |
+
+### Limited events (cube draft, set draft, sealed)
+- `POST /api/event` `{kind: "cubeDraft"|"setDraft"|"sealed", source: <cube ref or set code>, podSize: 2..8, name, seed?}`
+  → the host's seat ticket `{id, seat: 0, token, invite}`; `invite` = `publicUrl/?event=<id>`.
+- `GET /api/event/{id}` → the pod (event frame body without your pack/pool); `POST /api/event/{id}/join {name}` →
+  seat ticket (409 when started or 4 humans are already in: games seat at most 4).
+- Socket: `ws://host/ws/event/{id}?token=…`. Frames:
+  - `{t:"event", id, kind, source, sourceName, phase: "lobby"|"drafting"|"building"|"ready", host, you, invite, minDeck: 40,
+    round, rounds, pick, passLeft, seats:[{seat, kind, name, connected, you, picked, thinking, deckReady}],
+    pack:[card + id], pool:[card + id], deck?: LimitedDeck, canStart, games:[{matchId, players, over, winner?}]}` —
+    on every change. Cards are catalog cards (`name, manaCost, cmc, type, colors, set, rarity, …`) with an `id`.
+  - `{t:"deckSuggestion", deck}` — answer to `suggestDeck` (Forge's sealed deck builder over your pool).
+  - `{t:"eventMatch", id, seat, token, name, format:"limited"}` — the host dealt you a game: connect to
+    `/ws/match/{id}?token=` (it starts when every seated human is connected; return to the event socket afterwards).
+- Client → server: `{t:"eventSeat", seat, kind:"ai"|"open"}` (host, lobby) · `{t:"startEvent"}` (host; open seats become
+  AI drafters) · `{t:"pick", id}` · `{t:"suggestDeck"}` · `{t:"submitDeck", deck: {main:[pool ids], basics:{"W":n,…}}}`
+  (≥ 40 cards; resubmitting replaces) · `{t:"dealGames", pairing:"duels"|"table", tableSize: 2..4}` (host, once all decks are in;
+  duels pair humans, the odd one out plays an AI drafter; table = everyone plus AI drafters up to `tableSize`).
+- Drafting: three packs passed left/right/left; every seat picks at its own pace, AI drafters pick as soon as they hold a
+  pack (Forge's `LimitedPlayerAI` with the cube's rankings). Pick ids are `packId*1000 + index`; a seat's head pack only
+  changes on its own pick. A drafter disconnected for 60 s gets their picks made for them. Sealed: everyone opens
+  six packs (cubes: 3–6 depending on the cube).

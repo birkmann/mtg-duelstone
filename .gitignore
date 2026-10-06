@@ -23,3 +23,4 @@
 !/offline/README.md
 # Written by tools/fetch-offline.sh to point cargo at offline/vendor; machine-specific
 /.cargo/config.toml
+/web/dist/

@@ -138,6 +138,13 @@ pub fn ensure_engine(cfg: &LaunchConfig, progress: &mut dyn FnMut(&str)) -> anyh
     if let Some(pack) = crate::offline::dir() {
         cmd.arg("--offline").arg(pack);
     }
+    // Serve the browser client so the invite links this engine hands out open the game for people
+    // without the app: a packaged build's `web/`, else the jar's checkout (`<repo>/web/dist`, from
+    // tools/build-web.sh).
+    let checkout_dist = || jar.canonicalize().ok().and_then(|j| j.ancestors().nth(3).map(|r| r.join("web/dist")));
+    if let Some(dist) = find_bundled("web/index.html").and_then(|i| i.parent().map(Path::to_path_buf)).or_else(checkout_dist).filter(|d| d.join("index.html").is_file()) {
+        cmd.arg("--static").arg(dist);
+    }
     cmd.stdin(Stdio::null()).stdout(Stdio::from(out)).stderr(Stdio::from(err));
     // If we die without running destructors (Ctrl+C, crash, process::exit), take the engine with
     // us instead of leaving an orphaned JVM holding the port.

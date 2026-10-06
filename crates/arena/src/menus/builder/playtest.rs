@@ -27,7 +27,7 @@ pub struct Playtest {
 
 impl Playtest {
     pub fn new(deck: &BuilderDeck) -> Self {
-        let seed = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_nanos() as u64).unwrap_or(1);
+        let seed = mtg_client::now_millis().wrapping_mul(6_364_136_223_846_793_005) | 1;
         let mut p = Self { library: Vec::new(), hand: Vec::new(), mulligans: 0, draws: 0, rng: Rng::new(seed), rev: 0 };
         p.deal(deck, 0);
         p

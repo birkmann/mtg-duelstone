@@ -5,7 +5,7 @@ use bevy::prelude::*;
 use bevy::ui::{BackgroundGradient, ColorStop, LinearGradient};
 
 use super::MenuAction;
-use crate::shared::{AppState, ArenaFonts, GameResult};
+use crate::shared::{AppState, ArenaFonts, GameResult, GameView, MatchMode};
 use crate::style::*;
 
 pub struct GameOverPlugin;
@@ -23,13 +23,18 @@ struct BannerText;
 #[derive(Component)]
 struct FadeIn(f32);
 
-fn spawn_overlay(mut commands: Commands, fonts: Res<ArenaFonts>, result: Res<GameResult>) {
+fn spawn_overlay(mut commands: Commands, fonts: Res<ArenaFonts>, result: Res<GameResult>, view: Res<GameView>, mode: Res<MatchMode>) {
     let won = result.0.as_ref().is_some_and(|r| r.you_won);
-    let (title, sub, col) = if won {
-        ("VICTORY", "You defeated your opponent", Color::srgb(1.0, 0.82, 0.38))
-    } else {
-        ("DEFEAT", "Better luck next time", Color::srgb(0.9, 0.3, 0.25))
+    let table = view.is_multiplayer();
+    let winner = result.0.as_ref().and_then(|r| r.winner.clone()).filter(|w| !w.is_empty());
+    let sub = match (won, table, winner) {
+        (true, true, _) => "Last one standing".to_string(),
+        (true, false, _) => "You defeated your opponent".to_string(),
+        (false, _, Some(w)) => format!("{w} wins"),
+        (false, true, None) => "You're out — the table plays on behind this screen".to_string(),
+        (false, false, None) => "Better luck next time".to_string(),
     };
+    let (title, col) = if won { ("VICTORY", Color::srgb(1.0, 0.82, 0.38)) } else { ("DEFEAT", Color::srgb(0.9, 0.3, 0.25)) };
     let band = |c: Color| {
         let s = c.to_srgba();
         BackgroundGradient::from(LinearGradient::to_right(vec![
@@ -62,8 +67,16 @@ fn spawn_overlay(mut commands: Commands, fonts: Res<ArenaFonts>, result: Res<Gam
                     b.spawn(ui_text(&fonts.body, sub, 20.0, TEXT));
                 });
             root.spawn(Node { column_gap: Val::Px(22.0), ..default() }).with_children(|r| {
-                let b = spawn_button(r, &fonts, ButtonKind::Primary, "REMATCH", Vec2::new(280.0, 64.0));
-                r.commands().entity(b).insert(MenuAction::Rematch);
+                if let MatchMode::Event { .. } = *mode {
+                    // the pod is still there: build again, play the next game
+                    let b = spawn_button(r, &fonts, ButtonKind::Primary, "RETURN TO POD", Vec2::new(300.0, 64.0));
+                    r.commands().entity(b).insert(MenuAction::ReturnToPod);
+                }
+                // a table can't be re-dealt from one seat; its host opens a new one
+                if !mode.is_multiplayer() {
+                    let b = spawn_button(r, &fonts, ButtonKind::Primary, "REMATCH", Vec2::new(280.0, 64.0));
+                    r.commands().entity(b).insert(MenuAction::Rematch);
+                }
                 let b = spawn_button(r, &fonts, ButtonKind::Secondary, "MAIN MENU", Vec2::new(240.0, 64.0));
                 r.commands().entity(b).insert(MenuAction::ToMainMenu);
             });

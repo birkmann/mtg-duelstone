@@ -335,7 +335,14 @@ pub fn update_tags(
     mut names: Query<(&NameTag, &mut Text), Without<TurnTag>>,
 ) {
     for mut t in &mut tag {
-        let who = if view.my_turn() { "Your turn" } else { "Opponent's turn" };
+        let active = view.game.player_turn.and_then(|id| view.game.player(id)).map(|p| p.name.clone()).filter(|n| !n.is_empty());
+        let who = if view.my_turn() {
+            "Your turn".to_string()
+        } else if view.is_multiplayer() {
+            active.map(|n| format!("{n}'s turn")).unwrap_or_else(|| "Opponent's turn".into())
+        } else {
+            "Opponent's turn".to_string()
+        };
         let ph = view.phase().map(|p| p.label()).unwrap_or("");
         let s = if view.has_state() { format!("Turn {}  -  {}  -  {}", view.game.turn, who, ph) } else { String::new() };
         if t.0 != s {
@@ -343,12 +350,17 @@ pub fn update_tags(
         }
     }
     for (n, mut t) in &mut names {
-        let p = if n.0 { view.me() } else { view.opponent() };
-        if let Some(p) = p
-            && !p.name.is_empty()
-            && t.0 != p.name
+        // the top tag names every opponent at a multiplayer table
+        let name = if n.0 {
+            view.me().map(|p| p.name.clone())
+        } else {
+            let names: Vec<String> = view.opponents().iter().map(|p| p.name.clone()).filter(|n| !n.is_empty()).collect();
+            (!names.is_empty()).then(|| names.join("  ·  "))
+        };
+        if let Some(name) = name.filter(|n| !n.is_empty())
+            && t.0 != name
         {
-            t.0 = p.name.clone();
+            t.0 = name;
         }
     }
 }

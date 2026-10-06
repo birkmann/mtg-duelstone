@@ -219,7 +219,7 @@ dependencies = [
 
 [[package]]
 name = "arena"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "bevy",
@@ -229,6 +229,8 @@ dependencies = [
  "mtg_protocol",
  "serde",
  "serde_json",
+ "wasm-bindgen",
+ "web-sys",
 ]
 
 [[package]]
@@ -3632,12 +3634,13 @@ dependencies = [
 
 [[package]]
 name = "mtg_client"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "crossbeam-channel",
  "directories",
  "flate2",
+ "js-sys",
  "libc",
  "mtg_protocol",
  "serde",
@@ -3645,11 +3648,14 @@ dependencies = [
  "thiserror 2.0.21",
  "tungstenite",
  "ureq",
+ "wasm-bindgen",
+ "wasm-bindgen-futures",
+ "web-sys",
 ]
 
 [[package]]
 name = "mtg_protocol"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "serde",
  "serde_json",

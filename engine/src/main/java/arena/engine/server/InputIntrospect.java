@@ -23,6 +23,20 @@ public final class InputIntrospect {
 
     private static final Field TARGETS_SA = field(InputSelectTargets.class, "sa");
     private static final Field ENTITIES_VALID = field(InputSelectEntitiesFromList.class, "validChoices");
+    private static final Field INPUT_FINISHED = field(forge.gamemodes.match.input.InputBase.class, "finished");
+
+    /**
+     * Is the game thread parked on this Input right now (shown and not yet released)? Only
+     * {@link forge.gamemodes.match.input.InputSynchronized} Inputs block the game thread — a waiting player
+     * sees {@code InputLockUI} ("Waiting for …") while the rules engine runs — and an Input object outlives
+     * its release, so it must also not be finished. Conceding outside this window races the game thread.
+     * If the field moved we can't tell and say no: the seat then simply never auto-concedes.
+     */
+    public static boolean awaiting(final Object input) {
+        if (!(input instanceof forge.gamemodes.match.input.InputSynchronized) || !(input instanceof forge.gamemodes.match.input.InputBase)) return false;
+        if (INPUT_FINISHED == null) return false;
+        try { return !INPUT_FINISHED.getBoolean(input); } catch (final Exception e) { return false; }
+    }
 
     private static Field field(final Class<?> c, final String name) {
         try { final Field f = c.getDeclaredField(name); f.setAccessible(true); return f; }

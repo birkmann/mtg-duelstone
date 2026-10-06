@@ -5,7 +5,9 @@
 **A desktop Magic: The Gathering client written in Rust + Bevy:<br>
 a tilted 3D table, art-framed cards, targeting arrows and the full rules engine behind it.**
 
-Play 1v1 against the Forge AI in **60-card Constructed** or **Commander**.
+Play the Forge AI or up to three friends in **Constructed** (Casual to Vintage, Pauper), **Commander**, **Brawl**
+and **Oathbreaker**, with **Planechase**, **Archenemy**, **Momir Basic** and **2v2 teams** on top, or draft a
+**cube**, a **set** or **sealed**.
 
 ![Rust](https://img.shields.io/badge/Rust-2024-b7410e?logo=rust)
 ![Bevy](https://img.shields.io/badge/Bevy-0.19-232326)
@@ -42,6 +44,13 @@ Play 1v1 against the Forge AI in **60-card Constructed** or **Commander**.
 - **Full Magic rules.** The [Forge](https://github.com/Card-Forge/forge) engine (~33 000 scripted cards) runs
   headless and decides everything: priority, the stack, combat, triggers, layers, mulligans and the AI. The
   client never computes legality. It renders what the engine says and answers its questions.
+- **Every way to play.** Four formats with Constructed legality checks, four casual variants, cube draft, set
+  draft and sealed, against the AI or at a table of up to four. See [Game modes](#game-modes).
+- **Multiplayer, up to 4 players.** Host a table and send the invite link; friends join from a browser with nothing
+  to install. Forge AI fills any empty seat, and three- and four-player games lay the opponents out in columns
+  across the far side of the table.
+- **Runs in the browser.** The same Bevy client compiles to WebAssembly (WebGL2), and the engine serves it to
+  invitees.
 - **A 3D card table.** Perspective camera over a themed playmat (Sanctum, Jungle, Storm), fanned hand on its
   own overlay camera, lands and tokens grouped into "x4" stacks, piles with counters, a stack column and a big
   hover preview.
@@ -76,6 +85,90 @@ Play 1v1 against the Forge AI in **60-card Constructed** or **Commander**.
   - *Testing:* sample hands with mulligan and draw. PLAY saves the deck and starts a match with it; the engine
     validates the deck after every edit.
 
+## Game modes
+
+**PLAY** opens the mode screen. Pick a format, a legality and any casual variants, then a deck. The deck list only
+offers decks that are legal for that choice, plus *Random deck*: a random legal saved deck, or one Forge generates
+when you have none (Pauper, Brawl, Oathbreaker…). Every mode works against the AI and at a multiplayer table.
+
+### Formats
+
+| format | deck | life | |
+|---|---|---|---|
+| **Constructed** | 60 cards | 20 | Casual, or checked for **Standard**, **Pioneer**, **Modern**, **Legacy**, **Vintage** or **Pauper**: sets, bans, the restricted list and Pauper's commons rule |
+| **Commander** | 100-card singleton led by a legendary commander | 40 | commander damage is shown next to each life total |
+| **Brawl** | 60-card singleton with a commander, Standard cards only | 25 | |
+| **Oathbreaker** | 60-card singleton led by a planeswalker and its signature spell | 20 | |
+| **Limited** | 40 cards from your draft or sealed pool | 20 | only through a draft or sealed event (below) |
+
+### Casual variants
+
+Switch any of these on over a format:
+
+| variant | |
+|---|---|
+| **Planechase** | Generated planar decks; roll the planar die by activating the *Planar Dice* card in your command zone. |
+| **Archenemy** | The first seat is the archenemy, with a generated scheme deck and 40 life, and goes first. Everyone else plays as one team. |
+| **Momir Basic** | No decklist: everyone gets 60 basic lands and the Momir avatar. Discard a card to make a random creature of that mana value. Constructed only. |
+| **2v2 Teams** | Exactly four players in two teams; a team wins together. Forge has no Two-Headed Giant rules, so teammates keep their own life and turns. Against the AI, three AI seats are filled. |
+
+Archenemy and 2v2 Teams both pick sides, so only one of them can be on.
+
+### Draft and sealed
+
+The **LIMITED** tiles on the mode screen open a pod of 2 to 8 seats:
+
+| event | |
+|---|---|
+| **Cube draft** | Any of Forge's 94 bundled cubes (MTGO Legacy and Vintage cubes, Pauper Cube, Peasant, Arena…) or one of yours |
+| **Set draft** | Booster draft of a real Magic set |
+| **Sealed** | Open six packs of a set (3 to 6 for a cube, depending on the cube) and build from them |
+
+1. Choose the cube or set and the pod size, then share the pod's invite link. Up to three friends can join; Forge AI
+   drafters take the empty seats.
+2. Three packs are passed left, right, left. Click a card to pick it; everyone picks at their own pace. A drafter who
+   is disconnected for 60 seconds has their picks made for them.
+3. Build a 40-card deck: click cards in and out of the deck, add basics, or press *Suggest a deck* to let Forge's
+   sealed deck builder do it. Then submit.
+4. The host deals the games: 1v1 duels (humans are paired; the odd one out plays an AI drafter) or one free-for-all
+   table of up to four. After a game, *Return to pod* plays again with the same decks.
+
+### Cube designer
+
+**CUBES** in the main menu opens the cube designer. Browse every bundled cube, edit a copy or start a new one, add
+cards by search or by pasting a list (CubeCobra or MTGO: `1 Name`, `2x Name`, `Name (SET)`), save it and press
+*Draft this cube*. Your cubes are saved as JSON in `~/.forge/duelstone-cubes/`.
+
+## Multiplayer
+
+1. **Host:** *Multiplayer → Host a table*, then pick 2 to 4 players, the mode and your deck. The lobby shows an invite
+   link like `http://192.168.1.20:8080/?join=K7QF2M`. Press **Copy link** and send it.
+2. **Friends:** open the link in a browser (Chrome, Firefox, Edge or Safari with WebGL2), pick a deck and press
+   **Take seat**. Desktop players can paste the link or the code into *Multiplayer → Join a table*, or run
+   `./run.sh --join <link>`.
+3. **Host:** add Forge AI to any empty seat you want filled, then press **Start game**.
+
+A player who is out keeps watching until the game ends. Someone whose connection stays closed for two minutes
+concedes and their seat plays itself out with defaults, so the table never waits on a closed tab; reconnecting
+before that resumes the seat.
+
+For browser invitees, the engine has to serve the web client. The Mac and Linux downloads include it; from
+source, build it once:
+
+```bash
+tools/build-web.sh        # → web/dist (≈60 MB wasm, sent gzipped ≈13 MB); the engine picks it up automatically
+./run.sh --web            # desktop host, rebuilding the browser client first if it is stale
+./run.sh --serve          # no desktop window: everyone, host included, plays at http://<this machine>:8080/
+```
+
+The invite uses this machine's LAN address, so it works for people on the same network. To play over the internet,
+make the engine reachable (port forward, a VPN such as Tailscale, or a tunnel) and tell it its public address:
+`java -jar engine/target/forge-ws-server.jar --public-url https://my-tunnel.example` (or set `MTG_DUELSTONE_PUBLIC_URL`).
+Anyone with the link can take an open seat; the seats themselves are protected by per-player tokens.
+
+Short on friends? Fill seats with headless bots that play over the real protocol:
+`cargo run -p mtg_client --bin autopilot -- --engine http://127.0.0.1:8080 --join <link> --bots 2`.
+
 ## Download
 
 | | |
@@ -83,8 +176,9 @@ Play 1v1 against the Forge AI in **60-card Constructed** or **Commander**.
 | **Mac** (Apple chip, macOS 12+) | [mtg-duelstone-macos-arm64.dmg](https://github.com/birkmann/mtg-duelstone/releases/latest/download/mtg-duelstone-macos-arm64.dmg): open it and drag MTG Duelstone into Applications. The app is not notarized, so on first launch allow it under System Settings → Privacy & Security → **Open Anyway**. |
 | **Linux** (x86_64) | [mtg-duelstone-x86_64.AppImage](https://github.com/birkmann/mtg-duelstone/releases/latest/download/mtg-duelstone-x86_64.AppImage): `chmod +x` it and run it. Needs Vulkan graphics drivers. |
 
-Both bundle the engine, Forge's card data and a Java runtime, so there is nothing else to install. The first
-match needs network access to fetch card images. Releases are built by
+Both bundle the engine, Forge's card data, a Java runtime and the browser client for multiplayer invitees, so
+there is nothing else to install. Card images are not included (Wizards' art is not redistributed): the bundled
+`fetch-offline` tool downloads them once, see [offline/README.md](offline/README.md). Releases are built by
 [`.github/workflows/release.yml`](.github/workflows/release.yml) when a `v*` tag is pushed; the scripts are in
 [`packaging/`](packaging).
 
@@ -122,6 +216,7 @@ Skip the menus and jump straight into a game:
 | `--format constructed\|commander` | game format |
 | `--deck REF`, `--ai-deck REF` | decks as listed by the engine (`starter:…`, `theme:…`, `precon:…`, `user:…`, `random`) |
 | `--seed N` | engine RNG seed |
+| `--join LINK-OR-CODE` | join a multiplayer table (in a browser, open the link, i.e. `/?join=CODE`) |
 | `--engine URL`, `--no-autolaunch` | use an engine that is already running |
 | `--autoplay` | a built-in bot plays your seat (demos, screenshots) |
 | `--screenshot out.png --exit-after SECS` | save a frame and quit |
@@ -176,7 +271,9 @@ Skip the menus and jump straight into a game:
 crates/mtg_protocol   serde types for every frame (no Bevy)
 crates/mtg_client     WS link, REST, engine launcher, recorder/replayer, autoplay policy, autopilot bot
 crates/arena          the game: one Plugin per module + assets (fonts, textures, shaders, sfx)
-engine/               forge-ws-server: Forge + format selection, art crops, event cues
+engine/               forge-ws-server: Forge + game setup (formats, legality, variants), multiplayer lobbies,
+                      draft/sealed events, cubes, art crops, event cues; serves the browser client
+web/                  page shell for the WebAssembly build (tools/build-web.sh → web/dist)
 decks/                starter decks
 ```
 
@@ -185,6 +282,9 @@ decks/                starter decks
 ```bash
 cargo test --workspace                                                   # protocol, client, layout, view, prompts
 cargo run -p mtg_client --bin autopilot -- --launch --format constructed --games 10   # headless soak vs the AI
+cargo run -p mtg_client --bin autopilot -- --launch --format commander --players 4 --games 3   # 4 bots at one table
+cargo run -p mtg_client --bin autopilot -- --launch --legality pauper --variant planechase     # modes soak
+tools/build-web.sh --dev                                                 # quicker browser build for iterating
 cargo run -p arena -- --replay crates/arena/tests/replays/commander_mid.jsonl --engine http://127.0.0.1:8080
 python3 crates/arena/assets/tools/gen_textures.py                        # regenerate card back, playmats, icons
 python3 crates/arena/assets/tools/gen_sfx.py                             # regenerate sound effects and music

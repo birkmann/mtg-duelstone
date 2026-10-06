@@ -35,6 +35,18 @@ pub enum AppState {
     /// Design studio: sleeves, deckboxes and playmats with a live 3D preview. Entered from the
     /// main menu or deck select; leaves back to where it came from. Owner: menus.
     Designer,
+    /// Host or join a multiplayer table (invite link / code). Owner: menus.
+    Multiplayer,
+    /// Seated at a multiplayer table, waiting for players / the host's start. Socket is open.
+    Lobby,
+    /// v3: pick the format / legality / variants (or a limited event) before choosing a deck. Owner: menus.
+    ModeSelect,
+    /// v3: choose the cube or set and pod size for a draft / sealed event. Owner: menus.
+    EventSetup,
+    /// v3: in a limited event (pod lobby → draft → deck building → games). Owner: menus (event).
+    Event,
+    /// v3: browse, design and import cubes. Owner: menus.
+    CubeDesigner,
 }
 
 /// Parsed command line. Owner: main.rs (inserted before the app runs).
@@ -63,6 +75,8 @@ pub struct CliArgs {
     pub exit_after: Option<f32>,
     /// `--autoplay`: the human seat is played by `mtg_client::autoplay` (debug / screenshots)
     pub autoplay: bool,
+    /// `--join <invite link or code>` (browser: `?join=CODE`): go straight to joining that table.
+    pub join: Option<String>,
 }
 
 /// Engine connection settings. Owner: app_state (from CliArgs + Settings).
@@ -90,6 +104,8 @@ pub struct MatchConfig {
     pub human_deck: String,
     pub ai_deck: String,
     pub seed: Option<i64>,
+    /// v3: constructed legality + casual variants
+    pub setup: mtg_protocol::GameSetup,
 }
 
 /// Status line for splash/loading screens. Owner: app_state.
@@ -146,6 +162,28 @@ impl GameView {
     pub fn opponent(&self) -> Option<&Player> {
         let you = self.you;
         self.game.players.iter().find(|p| Some(p.id) != you)
+    }
+    /// Table seats as drawn: slot 0 = the viewer (bottom), then the opponents left → right in turn
+    /// order starting after the viewer (the next player sits to your left, as at a real table).
+    pub fn seat_order(&self) -> Vec<PlayerId> {
+        let ids: Vec<PlayerId> = self.game.players.iter().map(|p| p.id).collect();
+        let me = self.you.and_then(|y| ids.iter().position(|&i| i == y)).unwrap_or(0);
+        (0..ids.len()).map(|k| ids[(me + k) % ids.len()]).collect()
+    }
+    /// Seat slot of a player (see [`Self::seat_order`]).
+    pub fn slot_of(&self, id: PlayerId) -> Option<usize> {
+        self.seat_order().iter().position(|&p| p == id)
+    }
+    pub fn player_in_slot(&self, slot: usize) -> Option<&Player> {
+        let id = *self.seat_order().get(slot)?;
+        self.game.player(id)
+    }
+    /// Opponents in slot order (1 in a duel, up to 3 at a four-player table).
+    pub fn opponents(&self) -> Vec<&Player> {
+        self.seat_order().into_iter().skip(1).filter_map(|id| self.game.player(id)).collect()
+    }
+    pub fn is_multiplayer(&self) -> bool {
+        self.game.players.len() > 2
     }
     pub fn is_me(&self, id: PlayerId) -> bool {
         self.you == Some(id)
@@ -361,11 +399,33 @@ pub struct BoardAnchors {
     pub stack: Vec3,
     /// z of the line between the two halves of the battlefield
     pub center_z: f32,
+    /// Per seat slot (0 = viewer, see `GameView::seat_order`); `my_*`/`opp_*` mirror slots 0/1.
+    pub seats: Vec<SeatAnchors>,
+}
+
+/// One player's corner of the table. Owner: layout.
+#[derive(Debug, Clone, Default)]
+pub struct SeatAnchors {
+    pub player: PlayerId,
+    pub avatar: Vec3,
+    pub library: Vec3,
+    pub graveyard: Vec3,
+    pub exile: Vec3,
+    pub command: Vec3,
+    /// Avatar/HUD size relative to a duel (opponents shrink at a crowded table).
+    pub ui_scale: f32,
 }
 
 impl BoardAnchors {
     pub fn avatar(&self, mine: bool) -> Vec3 {
         if mine { self.my_avatar } else { self.opp_avatar }
+    }
+    pub fn seat_of(&self, player: PlayerId) -> Option<&SeatAnchors> {
+        self.seats.iter().find(|s| s.player == player)
+    }
+    /// Avatar of a specific player (falls back to the duel anchors before the first layout).
+    pub fn avatar_of(&self, player: PlayerId, mine: bool) -> Vec3 {
+        self.seat_of(player).map(|s| s.avatar).unwrap_or_else(|| self.avatar(mine))
     }
 }
 
@@ -411,6 +471,9 @@ pub struct Settings {
     pub deckbox: String,
     /// Per-deck sleeve/deckbox choices, keyed by deck ref. The playmat is `theme`.
     pub deck_looks: HashMap<String, DeckLook>,
+    /// v3: last Constructed legality (None = casual) and casual variants chosen on the mode screen.
+    pub last_legality: Option<String>,
+    pub last_variants: Vec<mtg_protocol::Variant>,
 }
 
 /// Cosmetics chosen for one deck; `None` = use the default from `Settings`.
@@ -438,6 +501,8 @@ impl Default for Settings {
             sleeve: "classic".into(),
             deckbox: "leather-tome".into(),
             deck_looks: HashMap::new(),
+            last_legality: None,
+            last_variants: Vec::new(),
         }
     }
 }
@@ -543,3 +608,56 @@ pub struct PlaySfx(pub Sfx);
 /// design studio edits it. `Paints`: painted textures per design (anyone may call `get`).
 /// `Cosmetics`: textures of what's equipped right now (readers: cards, table, menus).
 pub use crate::cosmetics::{Cosmetics, DesignLibrary, Paints};
+
+// =============================================================================================
+// Multiplayer (owner: app_state unless noted)
+// =============================================================================================
+
+/// How the next match is set up. Owner: menus (writer), app_state (reader in Loading).
+#[derive(Resource, Debug, Clone, Default, PartialEq, Eq)]
+pub enum MatchMode {
+    /// One human vs. the Forge AI (the classic flow).
+    #[default]
+    VsAi,
+    /// Open a table for `players` (2..=4) and invite the others.
+    Host { players: u8 },
+    /// Take a seat at someone's table (`EngineConfig.base_url` already points at their engine).
+    Join { code: String },
+    /// A game dealt by a limited event (`code` = event id): GameOver leads back to the pod.
+    Event { code: String },
+}
+
+impl MatchMode {
+    pub fn is_multiplayer(&self) -> bool {
+        !matches!(self, Self::VsAi)
+    }
+}
+
+/// This client's seat credential at a multiplayer table (None in a vs-AI match).
+#[derive(Resource, Debug, Clone, Default)]
+pub struct SeatTicket(pub Option<mtg_protocol::SeatTicket>);
+
+/// Latest `lobby` frame from the engine (None before the first one). Reader: menus (lobby screen).
+#[derive(Resource, Debug, Clone, Default)]
+pub struct LobbyView {
+    pub frame: Option<mtg_protocol::LobbyFrame>,
+    /// Last `error` frame text while in the lobby (e.g. "only the host can start").
+    pub error: Option<String>,
+}
+
+/// Engine facts from `/api/health` (public invite URL, whether it serves the browser client).
+#[derive(Resource, Debug, Clone, Default)]
+pub struct ServerFacts(pub Option<mtg_protocol::ServerInfo>);
+
+// =============================================================================================
+// Limited events & cubes (v3; owner: menus)
+// =============================================================================================
+
+/// Which event the event-setup screen opens (cube draft / set draft / sealed). Writer: menus (modes,
+/// cube designer). Reader: event setup.
+#[derive(Resource, Debug, Clone, Default)]
+pub struct EventSetupChoice(pub mtg_protocol::EventKind, pub Option<String>);
+
+/// A game the event dealt us, waiting for Loading to connect it (writer: event, reader: app_state).
+#[derive(Resource, Debug, Clone)]
+pub struct PendingEventMatch(pub mtg_protocol::SeatTicket);

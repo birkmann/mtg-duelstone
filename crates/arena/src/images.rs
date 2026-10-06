@@ -5,9 +5,10 @@
 //! `CardImages::card_back` is always valid. `Assets<Image>::contains(handle)` tells whether the
 //! real image has arrived yet (until then, draw `card_blank` instead).
 //!
-//! Why threads: fetching + JPEG decoding + mip generation are all blocking CPU/IO work; four
-//! worker threads do them and hand finished `Image`s back over a channel, so the main schedule
-//! only ever inserts into `Assets<Image>`.
+//! Why tasks: fetching + JPEG decoding + mip generation are blocking CPU/IO work; each request runs
+//! as an `mtg_client::spawn` task (a worker thread on desktop, the page's event loop in the browser)
+//! and hands the finished `Image` back over a channel, so the main schedule only ever inserts into
+//! `Assets<Image>`. At most `MAX_IN_FLIGHT` requests run at once.
 
 use std::collections::{HashMap, HashSet};
 use std::f32::consts::TAU;
@@ -20,7 +21,7 @@ use bevy::image::{
 use bevy::prelude::*;
 use bevy::render::render_resource::{Extent3d, TextureDimension, TextureFormat};
 use crossbeam_channel::{Receiver, Sender, unbounded};
-use mtg_client::{ImageRequest, ImageVersion, Rest};
+use mtg_client::{Api, ImageRequest, ImageVersion};
 use mtg_protocol::Card;
 
 use crate::shared::{AppState, EngineConfig};
@@ -28,6 +29,7 @@ use crate::shared::{AppState, EngineConfig};
 /// Directory holding `textures/`, `fonts/`, … — works from the repo root or the crate dir.
 pub fn assets_dir() -> PathBuf {
     // A packaged build must use its own copy, even when built on this machine from a checkout.
+    #[cfg(not(target_arch = "wasm32"))]
     if let Some(p) = mtg_client::launcher::find_bundled("assets") {
         return p;
     }
@@ -50,9 +52,9 @@ impl Plugin for ImagesPlugin {
     fn build(&self, app: &mut App) {
         let provider = app.world().resource::<Assets<Image>>().get_handle_provider();
         let mut ci = CardImages::new(provider);
-        // A real card back from the polish pass wins over the procedural one.
+        // A real card back from the polish pass wins over the procedural one (the web build always ships it).
         let file = assets_dir().join("textures/card_back.png");
-        if file.exists() {
+        if crate::platform::WEB || file.exists() {
             ci.card_back = app.world().resource::<AssetServer>().load("textures/card_back.png");
         } else {
             ci.pending_procedural_back = true;
@@ -75,14 +77,15 @@ pub struct CardImages {
     pub queue: Vec<ImageRequest>,
     provider: AssetHandleProvider,
     pending_procedural_back: bool,
-    work_tx: Option<Sender<ImageRequest>>,
-    done_rx: Option<Receiver<Decoded>>,
+    done_tx: Sender<Decoded>,
+    done_rx: Receiver<Decoded>,
     in_flight: usize,
     failed: HashSet<ImageRequest>,
 }
 
 impl CardImages {
     fn new(provider: AssetHandleProvider) -> Self {
+        let (done_tx, done_rx) = unbounded::<Decoded>();
         Self {
             card_back: provider.reserve_handle().typed(),
             card_blank: provider.reserve_handle().typed(),
@@ -90,8 +93,8 @@ impl CardImages {
             queue: Vec::new(),
             provider,
             pending_procedural_back: false,
-            work_tx: None,
-            done_rx: None,
+            done_tx,
+            done_rx,
             in_flight: 0,
             failed: HashSet::new(),
         }
@@ -126,25 +129,20 @@ impl CardImages {
         self.queue.len() + self.in_flight
     }
 
-    fn start_workers(&mut self, base: &str) {
-        let (wtx, wrx) = unbounded::<ImageRequest>();
-        let (dtx, drx) = unbounded::<Decoded>();
-        for _ in 0..4 {
-            let (wrx, dtx) = (wrx.clone(), dtx.clone());
-            let rest = Rest::new(base);
-            std::thread::spawn(move || {
-                while let Ok(req) = wrx.recv() {
-                    let res = rest.image_bytes(&req).map_err(|e| format!("{e:#}")).and_then(|b| decode(&b));
-                    if dtx.send((req, res)).is_err() {
-                        break;
-                    }
-                }
-            });
-        }
-        self.work_tx = Some(wtx);
-        self.done_rx = Some(drx);
+    fn start_fetch(&mut self, base: &str, req: ImageRequest) {
+        let api = Api::new(base);
+        let tx = self.done_tx.clone();
+        self.in_flight += 1;
+        // The task reports through the shared channel; its own one-shot receiver is not needed.
+        drop(mtg_client::spawn(async move {
+            let res = api.image_bytes(&req).await.map_err(|e| format!("{e:#}")).and_then(|b| decode(&b));
+            let _ = tx.send((req, res));
+        }));
     }
 }
+
+/// Concurrent image downloads (the engine proxies Scryfall, which asks clients to stay polite).
+const MAX_IN_FLIGHT: usize = 8;
 
 fn init_procedural(mut images: ResMut<Assets<Image>>, ci: ResMut<CardImages>) {
     if ci.pending_procedural_back {
@@ -158,26 +156,20 @@ fn pump_requests(mut ci: ResMut<CardImages>, cfg: Res<EngineConfig>, state: Res<
     if *state.get() == AppState::Boot {
         return;
     }
-    if ci.work_tx.is_none() {
-        ci.start_workers(&cfg.base_url);
-    }
     if ci.queue.is_empty() {
         return;
     }
     // Hand out at most a small batch so late high-priority requests don't sit behind 100 preloads.
-    let room = 8usize.saturating_sub(ci.in_flight);
+    let room = MAX_IN_FLIGHT.saturating_sub(ci.in_flight);
     let n = room.min(ci.queue.len());
     let batch: Vec<_> = ci.queue.drain(0..n).collect();
     for req in batch {
-        if let Some(tx) = &ci.work_tx {
-            let _ = tx.send(req);
-            ci.in_flight += 1;
-        }
+        ci.start_fetch(&cfg.base_url, req);
     }
 }
 
 fn receive_images(mut ci: ResMut<CardImages>, mut images: ResMut<Assets<Image>>) {
-    let Some(rx) = ci.done_rx.clone() else { return };
+    let rx = ci.done_rx.clone();
     let mut got = 0;
     while got < 6 {
         let Ok((req, res)) = rx.try_recv() else { break };

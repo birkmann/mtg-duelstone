@@ -1,9 +1,10 @@
-//! Persisted user settings (`~/.config/mtg-duelstone/settings.json`).
+//! Persisted user settings (`~/.config/mtg-duelstone/settings.json`; in the browser: localStorage).
 //!
 //! Why here: every other module just reads `Res<Settings>`; this plugin loads it before any
 //! Startup system runs, writes it back (debounced) after menus edit it, and applies the
 //! settings that need an engine-side effect (fullscreen, master volume).
 
+#[cfg(not(target_arch = "wasm32"))]
 use std::path::PathBuf;
 
 use bevy::audio::{GlobalVolume, Volume};
@@ -23,10 +24,28 @@ impl Plugin for SettingsPlugin {
     }
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 pub fn settings_path() -> Option<PathBuf> {
     directories::ProjectDirs::from("", "", "mtg-duelstone").map(|d| d.config_dir().join("settings.json"))
 }
 
+const WEB_KEY: &str = "mtg-duelstone.settings";
+
+#[cfg(target_arch = "wasm32")]
+fn load() -> Settings {
+    crate::platform::storage_get(WEB_KEY).and_then(|t| serde_json::from_str(&t).ok()).unwrap_or_default()
+}
+
+#[cfg(target_arch = "wasm32")]
+fn save(s: &Settings) {
+    if let Ok(text) = serde_json::to_string(s)
+        && !crate::platform::storage_set(WEB_KEY, &text)
+    {
+        warn!("settings: localStorage unavailable");
+    }
+}
+
+#[cfg(not(target_arch = "wasm32"))]
 fn load() -> Settings {
     let Some(path) = settings_path() else { return Settings::default() };
     match std::fs::read_to_string(&path) {
@@ -38,7 +57,9 @@ fn load() -> Settings {
     }
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 fn save(s: &Settings) {
+    let _ = WEB_KEY;
     let Some(path) = settings_path() else { return };
     if let Some(dir) = path.parent() {
         let _ = std::fs::create_dir_all(dir);

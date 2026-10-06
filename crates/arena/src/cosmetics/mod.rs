@@ -15,10 +15,11 @@ pub mod mesh;
 pub mod paint;
 
 use std::collections::HashMap;
+#[cfg(not(target_arch = "wasm32"))]
 use std::path::PathBuf;
 
 use bevy::prelude::*;
-use crossbeam_channel::{Receiver, unbounded};
+use crossbeam_channel::Receiver;
 
 use crate::shared::{CardImages, MatchConfig, Settings};
 pub use design::{Design, DesignKind, Emblem, Finish, Frame, PALETTE, Pattern, Rgb};
@@ -46,22 +47,54 @@ pub struct DesignLibrary {
     pub designs: Vec<Design>,
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 fn designs_path() -> Option<PathBuf> {
     crate::settings::settings_path().map(|p| p.with_file_name("designs.json"))
+}
+
+/// The saved custom designs (JSON), and where they came from for warnings.
+#[cfg(not(target_arch = "wasm32"))]
+fn read_designs() -> Option<(String, String)> {
+    let path = designs_path()?;
+    std::fs::read_to_string(&path).ok().map(|t| (t, path.display().to_string()))
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn write_designs(text: &str) {
+    let Some(path) = designs_path() else { return };
+    if let Some(dir) = path.parent() {
+        let _ = std::fs::create_dir_all(dir);
+    }
+    if let Err(e) = std::fs::write(&path, text) {
+        warn!("cosmetics: cannot write {}: {e}", path.display());
+    }
+}
+
+#[cfg(target_arch = "wasm32")]
+const WEB_KEY: &str = "mtg-duelstone.designs";
+
+#[cfg(target_arch = "wasm32")]
+fn read_designs() -> Option<(String, String)> {
+    crate::platform::storage_get(WEB_KEY).map(|t| (t, "localStorage".to_string()))
+}
+
+#[cfg(target_arch = "wasm32")]
+fn write_designs(text: &str) {
+    if !crate::platform::storage_set(WEB_KEY, text) {
+        warn!("cosmetics: localStorage unavailable");
+    }
 }
 
 impl DesignLibrary {
     fn load() -> Self {
         let mut designs = design::presets();
-        if let Some(path) = designs_path()
-            && let Ok(text) = std::fs::read_to_string(&path)
-        {
+        if let Some((text, from)) = read_designs() {
             match serde_json::from_str::<Vec<Design>>(&text) {
                 Ok(custom) => designs.extend(custom.into_iter().filter(|d| !d.id.is_empty()).map(|mut d| {
                     d.builtin = false;
                     d
                 })),
-                Err(e) => warn!("cosmetics: {} unreadable ({e}); custom designs skipped", path.display()),
+                Err(e) => warn!("cosmetics: {from} unreadable ({e}); custom designs skipped"),
             }
         }
         Self { designs }
@@ -109,7 +142,7 @@ impl DesignLibrary {
 
     /// A fresh id for a custom design.
     pub fn new_id(&self, kind: DesignKind) -> String {
-        let n = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_millis()).unwrap_or(0);
+        let n = mtg_client::now_millis();
         let mut id = format!("custom-{}-{n:x}", kind.singular());
         while self.get(&id).is_some() {
             id.push('x');
@@ -138,17 +171,9 @@ fn save_library(time: Res<Time>, lib: Res<DesignLibrary>, mut st: ResMut<Library
         return;
     }
     st.dirty_for = None;
-    let Some(path) = designs_path() else { return };
     let custom: Vec<&Design> = lib.designs.iter().filter(|d| !d.builtin).collect();
-    if let Some(dir) = path.parent() {
-        let _ = std::fs::create_dir_all(dir);
-    }
     match serde_json::to_string_pretty(&custom) {
-        Ok(text) => {
-            if let Err(e) = std::fs::write(&path, text) {
-                warn!("cosmetics: cannot write {}: {e}", path.display());
-            }
-        }
+        Ok(text) => write_designs(&text),
         Err(e) => warn!("cosmetics: serialize failed: {e}"),
     }
 }
@@ -228,13 +253,10 @@ fn pump_paints(mut paints: ResMut<Paints>, mut images: ResMut<Assets<Image>>) {
             continue;
         }
         let Some(d) = e.want.take() else { continue };
-        let (tx, rx) = unbounded();
         let t = *target;
-        e.job = Some((d.fingerprint(), rx));
+        // a worker thread on desktop; in the browser it runs on the page's event loop
+        e.job = Some((d.fingerprint(), mtg_client::spawn(async move { paint::render(&d, t) })));
         running += 1;
-        std::thread::spawn(move || {
-            let _ = tx.send(paint::render(&d, t));
-        });
     }
 }
 

@@ -8,6 +8,10 @@
 //! Cards lie flat (rotation `Rx(-90°)`: front faces +Y, card "up" points to -Z for both seats —
 //! the opponent's cards are not turned around). Tapped = extra `-90°` yaw.
 //!
+//! Multiplayer (3–4 players): the far half is split into one column per opponent, left → right in
+//! turn order (`GameView::seat_order`), each a scaled-down copy of the duel layout with its piles and
+//! avatar along the back edge. A duel is exactly the original layout (one full-width "column").
+//!
 //! HAND_LAYER is a separate orthographic world: `HAND_VIEW_H` units tall (y∈[-H/2,H/2], centred on
 //! 0), `HAND_VIEW_H*aspect` wide, cards face +Z.
 
@@ -133,6 +137,29 @@ impl Item {
     }
 }
 
+/// Where one player's board sits: a column of the table, cards scaled by `scale`.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct SeatFrame {
+    /// x of the column centre
+    pub cx: f32,
+    /// half the usable column width (world units)
+    pub half_w: f32,
+    /// card scale (1 = duel size)
+    pub scale: f32,
+}
+
+/// Seat `slot` of `players` (slot 0 = viewer). Opponents split the far half into equal columns.
+pub fn seat_frame(slot: usize, players: usize) -> SeatFrame {
+    let opps = players.saturating_sub(1).max(1);
+    if slot == 0 || opps == 1 {
+        return SeatFrame { cx: 0.0, half_w: ROW_MAX_W / 2.0, scale: 1.0 };
+    }
+    let col_w = 2.0 * TABLE_HALF_W / opps as f32;
+    let cx = -TABLE_HALF_W + col_w * (slot as f32 - 0.5);
+    let scale = if opps == 2 { 0.72 } else { 0.56 };
+    SeatFrame { cx, half_w: col_w / 2.0 - 0.12, scale }
+}
+
 #[derive(Clone, Copy)]
 enum Align {
     Center,
@@ -174,6 +201,8 @@ fn build_items(cards: &[&Card]) -> Vec<Item> {
 struct RowCtx<'a> {
     z: f32,
     max_w: f32,
+    /// card scale of the seat (multiplayer columns are smaller)
+    base: f32,
     align: Align,
     x_anchor: f32,
     out: &'a mut LayoutOut,
@@ -186,17 +215,18 @@ fn place_row(items: &[Item], ctx: &mut RowCtx) {
     let mut y_counter = 0.0_f32;
     let ctx_y = &mut y_counter;
     let k = items.len();
-    let sum: f32 = items.iter().map(|i| i.width()).sum();
+    let b = ctx.base;
+    let sum: f32 = items.iter().map(|i| i.width() * b).sum();
     let gaps = (k.saturating_sub(1)) as f32;
-    let total = sum + gaps * CARD_GAP;
+    let total = sum + gaps * CARD_GAP * b;
     let mut scale = 1.0;
-    let mut gap = CARD_GAP;
+    let mut gap = CARD_GAP * b;
     if total > ctx.max_w {
         // First shrink the cards a little, then let them overlap.
         scale = (ctx.max_w / total).clamp(0.72, 1.0);
         let sum_s = sum * scale;
         gap = if k > 1 { (ctx.max_w - sum_s) / gaps } else { 0.0 };
-        gap = gap.min(CARD_GAP);
+        gap = gap.min(CARD_GAP * b);
     }
     let width_total = sum * scale + gaps * gap;
     let mut x = match ctx.align {
@@ -205,8 +235,8 @@ fn place_row(items: &[Item], ctx: &mut RowCtx) {
         Align::Right => ctx.x_anchor - width_total,
     };
     for item in items {
-        let w = item.width() * scale;
-        let extra = item.extra() * scale;
+        let w = item.width() * scale * b;
+        let extra = item.extra() * scale * b;
         let cw = w - extra;
         let top_cx = x + extra + cw / 2.0;
         let n = item.ids.len();
@@ -216,13 +246,13 @@ fn place_row(items: &[Item], ctx: &mut RowCtx) {
             let depth = (vis - 1 - layer) as f32;
             let y = *ctx_y;
             *ctx_y += 0.004;
-            let pos = Vec3::new(top_cx - depth * GROUP_DX * scale, Y_MAT + y, ctx.z - depth * GROUP_DZ);
+            let pos = Vec3::new(top_cx - depth * GROUP_DX * scale * b, Y_MAT + y, ctx.z - depth * GROUP_DZ * b);
             ctx.out.placements.insert(
                 *id,
                 TargetPlacement {
                     translation: pos,
                     rotation: flat_rot(item.tapped),
-                    scale,
+                    scale: scale * b,
                     layer: TABLE_LAYER,
                     face_up: true,
                 },
@@ -247,10 +277,16 @@ pub fn compute(view: &GameView, aspect: f32) -> LayoutOut {
     let mut attach_count: HashMap<CardId, i32> = HashMap::new();
     let on_battlefield: HashSet<CardId> =
         view.game.players.iter().flat_map(|p| p.zones.battlefield.iter().map(|c| c.id)).collect();
+    let order = view.seat_order();
+    let n_players = order.len();
+    out.anchors.seats = vec![SeatAnchors::default(); n_players];
 
     for p in &view.game.players {
         let mine = Some(p.id) == you;
         let s = if mine { 1.0 } else { -1.0 };
+        let slot = order.iter().position(|&id| id == p.id).unwrap_or(0);
+        let f = seat_frame(slot, n_players);
+        let duel_sized = f.scale == 1.0;
 
         // ---- battlefield ----
         let mut creatures = Vec::new();
@@ -284,26 +320,29 @@ pub fn compute(view: &GameView, aspect: f32) -> LayoutOut {
             &row_items,
             &mut RowCtx {
                 z: s * Z_CREATURES,
-                max_w: ROW_MAX_W,
+                max_w: 2.0 * f.half_w,
+                base: f.scale,
                 align: Align::Center,
-                x_anchor: 0.0,
+                x_anchor: f.cx,
                 out: &mut out,
             },
         );
         // Lands left-aligned, artifacts/enchantments right-aligned on the same row. The lands get
         // two thirds of the width unless there are no others.
+        let row_w = 2.0 * f.half_w;
         let other_items = build_items(&others);
-        let other_w: f32 = other_items.iter().map(|i| i.width() + CARD_GAP).sum();
-        let other_w = other_w.min(ROW_MAX_W * 0.4);
+        let other_w: f32 = other_items.iter().map(|i| (i.width() + CARD_GAP) * f.scale).sum();
+        let other_w = other_w.min(row_w * 0.4);
         let land_items = build_items(&lands);
-        let land_max = (ROW_MAX_W - other_w - if other_w > 0.0 { 0.6 } else { 0.0 }).max(4.0);
+        let land_max = (row_w - other_w - if other_w > 0.0 { 0.6 * f.scale } else { 0.0 }).max(row_w * 0.44);
         place_row(
             &land_items,
             &mut RowCtx {
                 z: s * Z_LANDS,
                 max_w: land_max,
+                base: f.scale,
                 align: Align::Left,
-                x_anchor: -ROW_MAX_W / 2.0,
+                x_anchor: f.cx - f.half_w,
                 out: &mut out,
             },
         );
@@ -311,9 +350,10 @@ pub fn compute(view: &GameView, aspect: f32) -> LayoutOut {
             &other_items,
             &mut RowCtx {
                 z: s * Z_LANDS,
-                max_w: other_w.max(1.0),
+                max_w: other_w.max(f.scale),
+                base: f.scale,
                 align: Align::Right,
-                x_anchor: ROW_MAX_W / 2.0,
+                x_anchor: f.cx + f.half_w,
                 out: &mut out,
             },
         );
@@ -322,40 +362,51 @@ pub fn compute(view: &GameView, aspect: f32) -> LayoutOut {
         let px = if mine { -1.0 } else { 1.0 };
         let pz = s * Z_PILES;
         let a = &mut out.anchors;
-        let (lib, gy, ex, cmd) = (
-            Vec3::new(px * 2.9, Y_MAT, pz),
-            Vec3::new(px * 3.75, Y_MAT, pz),
-            Vec3::new(px * 2.05, Y_MAT, pz),
-            Vec3::new(px * 4.4, Y_MAT, pz),
-        );
+        let (lib, gy, ex, cmd, avatar) = if duel_sized {
+            (
+                Vec3::new(px * 2.9, Y_MAT, pz),
+                Vec3::new(px * 3.75, Y_MAT, pz),
+                Vec3::new(px * 2.05, Y_MAT, pz),
+                Vec3::new(px * 4.4, Y_MAT, pz),
+                Vec3::new(0.0, Y_MAT, pz),
+            )
+        } else {
+            // a column's back edge: command zone left, avatar left of centre, piles right
+            let at = |k: f32| Vec3::new(f.cx + k * f.half_w, Y_MAT, pz);
+            (at(0.56), at(0.86), at(0.28), at(-0.82), at(-0.22))
+        };
         if mine {
             (a.my_library, a.my_graveyard, a.my_exile, a.my_command) = (lib, gy, ex, cmd);
-        } else {
-            (a.opp_library, a.opp_graveyard, a.opp_exile, a.opp_command) = (lib, gy, ex, cmd);
+        } else if slot == 1 {
+            (a.opp_library, a.opp_graveyard, a.opp_exile, a.opp_command, a.opp_avatar) = (lib, gy, ex, cmd, avatar);
         }
+        if let Some(seat) = a.seats.get_mut(slot) {
+            *seat = SeatAnchors { player: p.id, avatar, library: lib, graveyard: gy, exile: ex, command: cmd, ui_scale: f.scale.max(0.6) };
+        }
+        let pile = LAND_PILE_SCALE * f.scale;
         let n_lib = p.zones.library.len();
         for (i, c) in p.zones.library.iter().enumerate() {
             let h = (n_lib - i) as f32 * 0.0025;
-            out.placements.insert(c.id, pile_pose(lib + Vec3::Y * h, false, LAND_PILE_SCALE));
+            out.placements.insert(c.id, pile_pose(lib + Vec3::Y * h, false, pile));
         }
         for (i, c) in p.zones.graveyard.iter().enumerate() {
             // last = most recent = top; slight random-ish jitter so the pile reads as a pile
             let j = ((c.id % 7) as f32 - 3.0) * 0.008;
             out.placements.insert(
                 c.id,
-                pile_pose(gy + Vec3::new(j, i as f32 * 0.003, -j), c.is_visible(), LAND_PILE_SCALE),
+                pile_pose(gy + Vec3::new(j, i as f32 * 0.003, -j), c.is_visible(), pile),
             );
         }
         for (i, c) in p.zones.exile.iter().enumerate() {
             let j = ((c.id % 5) as f32 - 2.0) * 0.01;
             out.placements.insert(
                 c.id,
-                pile_pose(ex + Vec3::new(j, i as f32 * 0.003, j), c.is_visible(), LAND_PILE_SCALE * 0.85),
+                pile_pose(ex + Vec3::new(j, i as f32 * 0.003, j), c.is_visible(), pile * 0.85),
             );
         }
         for (i, c) in p.zones.command.iter().enumerate() {
             out.placements
-                .insert(c.id, pile_pose(cmd + Vec3::new(0.0, 0.003 * i as f32, -(i as f32) * 0.5), c.is_visible(), LAND_PILE_SCALE));
+                .insert(c.id, pile_pose(cmd + Vec3::new(0.0, 0.003 * i as f32, -(i as f32) * 0.5 * f.scale), c.is_visible(), pile));
         }
 
         // ---- hand ----
@@ -375,14 +426,16 @@ pub fn compute(view: &GameView, aspect: f32) -> LayoutOut {
                 );
             }
         } else {
-            let fan = opp_hand_fan(n, aspect);
+            // the duel fan sits right of centre; a column's fan hangs above that column
+            let fan = if duel_sized { opp_hand_fan(n, aspect) } else { column_hand_fan(n, aspect, f) };
+            let hs = if duel_sized { OPP_HAND_SCALE } else { OPP_HAND_SCALE * 0.7 };
             for (c, f) in p.zones.hand.iter().zip(fan) {
                 out.placements.insert(
                     c.id,
                     TargetPlacement {
                         translation: f.0,
                         rotation: Quat::from_rotation_z(PI + f.1),
-                        scale: OPP_HAND_SCALE,
+                        scale: hs,
                         layer: HAND_LAYER,
                         face_up: false,
                     },
@@ -397,7 +450,7 @@ pub fn compute(view: &GameView, aspect: f32) -> LayoutOut {
             if let Some(hp) = out.placements.get(host).copied() {
                 let k = (*idx + 1) as f32;
                 let mut p = hp;
-                p.translation += Vec3::new(-0.2 * k, -0.01 * k, -0.24 * k);
+                p.translation += Vec3::new(-0.2 * k, -0.01 * k, -0.24 * k) * hp.scale.min(1.0);
                 p.scale = hp.scale;
                 out.placements.insert(*aura, p);
             }
@@ -487,6 +540,26 @@ pub fn opp_hand_fan(n: usize, aspect: f32) -> Vec<(Vec3, f32)> {
         .map(|i| {
             let o = i as f32 - (n as f32 - 1.0) / 2.0;
             (Vec3::new(o * spacing + 3.0, base_y + o * o * 0.02, 0.1 + i as f32 * 0.02), o * 0.03)
+        })
+        .collect()
+}
+
+/// An opponent column's hand: small backs hanging from the top edge above that column.
+pub fn column_hand_fan(n: usize, aspect: f32, f: SeatFrame) -> Vec<(Vec3, f32)> {
+    if n == 0 {
+        return vec![];
+    }
+    let h = CARD_H * OPP_HAND_SCALE * 0.7;
+    let w = CARD_W * OPP_HAND_SCALE * 0.7;
+    let view_w = HAND_VIEW_H * aspect;
+    // the far edge of the table is foreshortened: map table x to ~70% of the screen half-width
+    let cx = f.cx / TABLE_HALF_W * view_w * 0.36;
+    let spacing = (w * 0.45).min(view_w * 0.12 / n as f32);
+    let base_y = HAND_VIEW_H / 2.0 + h / 2.0 - 0.42;
+    (0..n)
+        .map(|i| {
+            let o = i as f32 - (n as f32 - 1.0) / 2.0;
+            (Vec3::new(cx + o * spacing, base_y + o * o * 0.015, 0.1 + i as f32 * 0.02), o * 0.03)
         })
         .collect()
 }
@@ -646,6 +719,39 @@ mod tests {
         assert!(out.placements[&503].translation.y < -HAND_VIEW_H / 2.0 + CARD_H * HAND_SCALE);
         let fan = hand_fan(7, 16.0 / 9.0);
         assert!(fan[0].1 > fan[6].1, "left card rolls counter-clockwise");
+    }
+
+    #[test]
+    fn four_players_get_separate_columns() {
+        let mut v = view(vec![creature(1)], vec![creature(3)], 0);
+        for id in [5, 6] {
+            v.game.players.push(Player { id, zones: Zones { battlefield: vec![creature(id * 10)], ..default() }, ..default() });
+        }
+        let out = compute(&v, 16.0 / 9.0);
+        let p = |id| out.placements[&id];
+        // my board is untouched by the crowd
+        assert_eq!(p(1).scale, 1.0);
+        assert!(p(1).translation.z > 0.0);
+        // opponents: far half, smaller, left → right in turn order (players after me first)
+        let xs: Vec<f32> = [3, 50, 60].iter().map(|&id| p(id).translation.x).collect();
+        assert!(xs.windows(2).all(|w| w[0] < w[1]), "{xs:?}");
+        for id in [3, 50, 60] {
+            assert!(p(id).translation.z < 0.0 && p(id).scale < 1.0);
+        }
+        assert_eq!(out.anchors.seats.len(), 4);
+        assert_eq!(out.anchors.seats[0].player, 1);
+        assert_eq!(out.anchors.seats[1].player, 2);
+        assert!(out.anchors.seats[1].avatar.x < out.anchors.seats[3].avatar.x);
+        // columns stay on the mat
+        for id in [3, 50, 60] {
+            assert!(p(id).translation.x.abs() < TABLE_HALF_W);
+        }
+    }
+
+    #[test]
+    fn duel_layout_matches_single_column() {
+        assert_eq!(seat_frame(1, 2), seat_frame(0, 2));
+        assert_eq!(seat_frame(1, 2).scale, 1.0);
     }
 
     #[test]

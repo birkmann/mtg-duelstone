@@ -210,7 +210,7 @@ fn client_frames_roundtrip() {
 
 #[test]
 fn rest_payloads() {
-    let c = CreateMatch { human_deck: "a".into(), ai_deck: "b".into(), format: Format::Commander, seed: Some(5), human_name: None };
+    let c = CreateMatch { human_deck: "a".into(), ai_deck: "b".into(), format: Format::Commander, seed: Some(5), human_name: None, setup: Default::default() };
     assert_eq!(serde_json::to_value(&c).unwrap(), json!({"humanDeck":"a","aiDeck":"b","format":"commander","seed":5}));
     let d: DeckInfo = serde_json::from_str(r#"{"ref":"precon:X","name":"X","commanders":["C"],"mainCount":99,"colorIdentity":"WB"}"#).unwrap();
     assert_eq!(d.deck_ref, "precon:X");

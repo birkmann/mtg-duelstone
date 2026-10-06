@@ -291,7 +291,11 @@ fn sync_cards(
                 let image = images.request(c, ImageVersion::Normal);
                 let face = CardFace { image, loaded: false, hidden, name: c.display_name().to_string() };
                 // Cards appear from their owner's library (a draw reads as a draw).
-                let from = if loc.mine { anchors.my_library } else { anchors.opp_library };
+                let from = loc
+                    .owner
+                    .and_then(|o| anchors.seat_of(o))
+                    .map(|s| s.library)
+                    .unwrap_or(if loc.mine { anchors.my_library } else { anchors.opp_library });
                 let from = if s.zone == ZoneKind::Library { from } else { from + Vec3::Y * 0.3 };
                 let e = spawn_card(&mut commands, &assets, c.id, loc, face, from);
                 registry.0.insert(c.id, e);

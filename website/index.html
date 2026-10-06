@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>MTG Duelstone · free Magic: The Gathering client for Mac and Linux</title>
-<meta name="description" content="A free, open-source Magic: The Gathering client for Mac and Linux with a tilted 3D table and art-framed cards. Play Constructed or Commander against the Forge AI, with the full rules and about 33,000 cards.">
+<meta name="description" content="A free, open-source Magic: The Gathering client for Mac and Linux with a tilted 3D table and art-framed cards. Play Constructed, Commander, Brawl, Oathbreaker, cube draft, set draft or sealed against the Forge AI or up to three friends, with the full rules and about 33,000 cards.">
 <meta name="theme-color" content="#0f0906">
 <script>
 // Apply a saved theme before first paint. Without one the page is dark, like the game.
@@ -21,7 +21,7 @@ try {
 <link rel="stylesheet" href="style.css">
 <meta property="og:type" content="website">
 <meta property="og:title" content="MTG Duelstone · free Magic client for Mac and Linux">
-<meta property="og:description" content="Play Magic: The Gathering against the Forge AI on a tilted 3D table. Constructed or Commander, free and open source.">
+<meta property="og:description" content="Play Magic: The Gathering against the Forge AI or your friends on a tilted 3D table. Constructed, Commander, Brawl, Oathbreaker, draft and sealed, free and open source.">
 <meta property="og:image" content="assets/img/og.png">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
@@ -52,6 +52,7 @@ try {
     </a>
     <div class="nav-links">
       <a href="#features">Features</a>
+      <a href="#modes">Modes</a>
       <a class="nav-extra" href="#commander">Commander</a>
       <a href="#decks">Decks</a>
       <a class="nav-extra" href="#studio">Studio</a>
@@ -69,10 +70,10 @@ try {
 <main id="main">
 
 <section class="wrap hero" id="top">
-  <span class="label">mac &amp; linux · free · v0.1.0</span>
+  <span class="label">mac &amp; linux · free · v0.2.0</span>
   <h1>Open source<br>Magic client</h1>
   <div class="hero-copy">
-    <p class="lead">Play Magic: The Gathering against the computer on a digital card table with art-framed cards and glowing targeting arrows. Constructed or Commander, with the full rules and about 33,000 cards.</p>
+    <p class="lead">Play Magic: The Gathering against the computer on a digital card table with art-framed cards and glowing targeting arrows. Constructed, Commander, Brawl, Oathbreaker, draft and sealed, against the computer or up to three friends, with the full rules and about 33,000 cards.</p>
     <div class="actions">
       <a class="pill pill-play pill-dl" id="hero-download" href="#install">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg>
@@ -125,10 +126,10 @@ try {
   <dl>
     <div><dt>Works on</dt><dd>Mac, Linux</dd></div>
     <div><dt>Price</dt><dd>Free, open source</dd></div>
-    <div><dt>Formats</dt><dd>Constructed, Commander</dd></div>
-    <div><dt>Cards</dt><dd>About 33,000</dd></div>
+    <div><dt>Modes</dt><dd>4 formats, draft, sealed</dd></div>
+    <div><dt>Players</dt><dd>2 to 4, AI or friends</dd></div>
   </dl>
-  <p class="note">An unofficial fan project, not affiliated with Wizards of the Coast. You play against the computer; there is no online play.</p>
+  <p class="note">An unofficial fan project, not affiliated with Wizards of the Coast. Play the computer, or invite up to three friends with a link; they can join from a browser.</p>
 </section>
 
 <section class="wrap section" id="features">
@@ -139,13 +140,79 @@ try {
     <article><span class="idx">03</span><h3>Art-framed cards</h3><p>Cards on the table show their art in a frame tinted by the card's colours, with power and toughness, loyalty and counters.</p></article>
     <article><span class="idx">04</span><h3>Targeting arrows</h3><p>Glowing arrows show what a spell targets. Attacks and blocks get ribbons, so you can read combat at a glance.</p></article>
     <article><span class="idx">05</span><h3>Every prompt</h3><p>Scry, surveil, X values, trigger order, trample damage: every question the engine asks gets its own dialog.</p></article>
-    <article><span class="idx">06</span><h3>Commander</h3><p>100-card games with commander damage, two starter decks of their own and all of Forge's Commander precons.</p></article>
+    <article><span class="idx">06</span><h3>Formats</h3><p>Constructed from Casual to Vintage and Pauper, Commander, Brawl and Oathbreaker. The deck list only offers decks that are legal.</p></article>
     <article><span class="idx">07</span><h3>Deck importer</h3><p>Paste a list from MTGO, Moxfield or most deck sites. Names it can't find are shown with suggestions.</p></article>
     <article><span class="idx">08</span><h3>Deck builder</h3><p>Search every card by name, rules text, colour, type and mana value. The engine checks your deck after every edit.</p></article>
     <article><span class="idx">09</span><h3>Suggestions</h3><p>EDHREC-style recommendations that work offline, built from the deck lists that come with Forge.</p></article>
     <article><span class="idx">10</span><h3>Stats and testing</h3><p>Mana curve, colour sources, opening-hand odds, sample hands and a goldfish run of what you can cast on curve.</p></article>
     <article><span class="idx">11</span><h3>Design Studio</h3><p>Sleeves, deckboxes and playmats. Pick a preset or design your own, for every deck or just one.</p></article>
     <article><span class="idx">12</span><h3>Feel</h3><p>Cards move on springs, damage numbers float up, sparks fly, and the music crossfades between menu and match.</p></article>
+    <article><span class="idx">13</span><h3>Casual variants</h3><p>Planechase, Archenemy, Momir Basic and 2v2 teams, on top of any format that fits.</p></article>
+    <article><span class="idx">14</span><h3>Draft and sealed</h3><p>Draft a cube or a real set, or open sealed packs, in a pod of up to eight with AI drafters.</p></article>
+    <article><span class="idx">15</span><h3>Cube designer</h3><p>Open any of Forge's 94 cubes, edit a copy or build your own from search or a pasted list, then draft it.</p></article>
+    <article><span class="idx">16</span><h3>Multiplayer</h3><p>Tables of up to four. Send an invite link and friends join from a browser; the AI fills empty seats.</p></article>
+  </div>
+</section>
+
+<section class="dark" id="modes">
+  <div class="wrap section">
+    <div class="head">
+      <div class="copy">
+        <span class="label">game modes</span>
+        <h2>Every way to play</h2>
+      </div>
+      <p class="lead">Press PLAY and pick a format, a legality and any variants, then a deck. The deck list only offers decks that are legal for your choice. Every mode works against the AI and at a table with friends.</p>
+    </div>
+
+    <div class="mode-group">
+      <h3 class="label">Formats</h3>
+      <div class="grid features">
+        <article><span class="idx">60 cards · 20 life</span><h3>Constructed</h3><p>Play anything, or have your deck checked for a format: sets, bans, the restricted list and Pauper's commons rule.</p></article>
+        <article><span class="idx">100 cards · 40 life</span><h3>Commander</h3><p>Singleton, led by a legendary commander. Commander damage shows next to each life total.</p></article>
+        <article><span class="idx">60 cards · 25 life</span><h3>Brawl</h3><p>Singleton with a commander, built from Standard cards only.</p></article>
+        <article><span class="idx">60 cards · 20 life</span><h3>Oathbreaker</h3><p>Singleton, led by a planeswalker and its signature spell.</p></article>
+      </div>
+      <ul class="tags" aria-label="Constructed legality">
+        <li>Casual</li><li>Standard</li><li>Pioneer</li><li>Modern</li><li>Legacy</li><li>Vintage</li><li>Pauper</li>
+      </ul>
+    </div>
+
+    <div class="mode-group">
+      <h3 class="label">Casual variants</h3>
+      <div class="grid features">
+        <article><h3>Planechase</h3><p>Planar decks and the planar die: the battlefield itself changes. Roll by activating the Planar Dice card in your command zone.</p></article>
+        <article><h3>Archenemy</h3><p>The first seat runs a scheme deck with 40 life and goes first. Everyone else plays as one team against it.</p></article>
+        <article><h3>Momir Basic</h3><p>No decklist: 60 basic lands and the Momir avatar. Discard a card to make a random creature of that mana value.</p></article>
+        <article><h3>2v2 Teams</h3><p>Four players in two teams, and a team wins together. Teammates keep their own life and turns. Against the AI, three AI seats are filled.</p></article>
+      </div>
+    </div>
+
+    <div class="mode-group">
+      <h3 class="label">Limited</h3>
+      <div class="grid features">
+        <article><h3>Cube draft</h3><p>Draft any of Forge's 94 cubes, such as the MTGO Legacy and Vintage cubes, Pauper Cube or Peasant, or one of your own.</p></article>
+        <article><h3>Set draft</h3><p>Booster draft a real Magic set: three packs, passed left, right, left.</p></article>
+        <article><h3>Sealed</h3><p>Open six packs of a set, or three to six of a cube, and build from what you get.</p></article>
+        <article><h3>Cube designer</h3><p>CUBES in the main menu. Edit a copy of any cube or start your own from search or a pasted CubeCobra or MTGO list.</p></article>
+      </div>
+      <p class="note">Pods have 2 to 8 seats. Up to three friends join with the pod's invite link and Forge AI drafters take the rest. Build a 40-card deck yourself or press Suggest a deck, then play 1v1 duels or one free-for-all table, and return to the pod for another round.</p>
+    </div>
+
+    <div class="cols">
+      <div>
+        <h3>Host a table</h3>
+        <p>Multiplayer → Host a table. Pick 2 to 4 players, the mode and your deck, then copy the invite link from the lobby and send it.</p>
+      </div>
+      <div>
+        <h3>Join from a browser</h3>
+        <p>Friends open the link in Chrome, Firefox, Edge or Safari, pick a deck and take a seat, with nothing to install. Desktop players can paste the link or code instead.</p>
+      </div>
+      <div>
+        <h3>Fill seats with AI</h3>
+        <p>The host can give any empty seat to the Forge AI before starting. A player who is knocked out keeps watching until the game ends.</p>
+      </div>
+    </div>
+    <p class="note">Invite links use your local network address, so they work at home out of the box. To play over the internet, see <a href="https://github.com/birkmann/mtg-duelstone#multiplayer">Multiplayer in the README</a>.</p>
   </div>
 </section>
 
@@ -178,7 +245,7 @@ try {
     <div class="copy">
       <span class="label">commander</span>
       <h2>Commander, too</h2>
-      <p>Switch the format to Commander and play 100-card singleton against the AI's own commander deck. Commander damage is tracked next to each life total.</p>
+      <p>Pick Commander on the mode screen and play 100-card singleton against the AI's own commander deck, or a table of up to four. Commander damage is tracked next to each life total. Brawl and Oathbreaker are there too.</p>
       <p>Tokens pile up into stacks with a count, so eleven elves and five goblins still fit on the table. Start with Lathril's elves or Krenko's goblins, or pick any of Forge's precons.</p>
       <ul class="tags">
         <li>100 cards</li><li>Commander damage</li><li>Token stacks</li><li>Forge precons</li>
@@ -420,11 +487,11 @@ try {
     <div class="install-more">
       <div>
         <h3>Card images</h3>
-        <p>Your first match needs an internet connection. Card images are fetched from Scryfall as you play and kept on your computer, so cards you have seen load from disk next time.</p>
+        <p>Card art belongs to Wizards of the Coast, so it isn't in the download. The game comes with a small tool that fetches every card image from Scryfall once and keeps them on your computer; after that, nothing needs the internet.</p>
       </div>
       <div>
         <h3>What's inside</h3>
-        <p>The game, the Forge rules engine with its AI, a Java runtime and Forge's card data. The engine starts when you open the game and stops when you quit.</p>
+        <p>The game, the Forge rules engine with its AI, a Java runtime, Forge's card data and the browser version your friends join with. The engine starts when you open the game and stops when you quit.</p>
       </div>
       <div>
         <h3>Build it yourself</h3>

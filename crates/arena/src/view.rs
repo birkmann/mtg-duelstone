@@ -103,6 +103,12 @@ fn apply_frames(
                     }
                 }
                 *view = new;
+                // At a multiplayer table the game goes on after we are out; that is our game over.
+                if view.is_multiplayer() && result.0.is_none() && view.me().is_some_and(|p| p.has_lost) {
+                    let winner = view.game.winner.clone();
+                    result.0 = Some(MatchOutcome { winner, you_won: false });
+                    events.write(BoardEvent::GameOver { you_won: false });
+                }
             }
             ServerFrame::Input(i) => {
                 if prompt.0.is_some() && i.seq != tracking.prompt_input_seq {
@@ -165,7 +171,14 @@ fn apply_frames(
                 }
             }
             ServerFrame::Error { text } => warn!("engine error: {text}"),
-            ServerFrame::Pong | ServerFrame::Unknown => {}
+            // lobby frames are app_state's (LobbyView); the game view starts with `hello`
+            // lobby/event frames belong to app_state and the event screens; the game view starts with `hello`
+            ServerFrame::Pong
+            | ServerFrame::Lobby(_)
+            | ServerFrame::Event(_)
+            | ServerFrame::EventMatch(_)
+            | ServerFrame::DeckSuggestion { .. }
+            | ServerFrame::Unknown => {}
         }
     }
 }

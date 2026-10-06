@@ -6,7 +6,7 @@
 
     <groupId>arena</groupId>
     <artifactId>forge-ws-server</artifactId>
-    <version>0.1.0-SNAPSHOT</version>
+    <version>0.2.0-SNAPSHOT</version>
     <packaging>jar</packaging>
     <name>Commander Arena - Forge engine server</name>
     <description>Headless Forge engine wrapper exposing a WebSocket/JSON game protocol (GPL-3.0, links Forge).</description>

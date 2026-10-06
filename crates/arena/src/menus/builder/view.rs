@@ -11,7 +11,7 @@ use bevy::ui::{BackgroundGradient, ColorStop, LinearGradient, RelativeCursorPosi
 use bevy::window::PrimaryWindow;
 use mtg_client::deckstats::{COLORS, CURVE_BUCKETS, mana_symbols};
 use mtg_client::{ImageRequest, ImageVersion};
-use mtg_protocol::{CardKind, CatalogCard, Format, RecCard};
+use mtg_protocol::{CardKind, CatalogCard, RecCard};
 
 use super::super::widgets::{Field, text_field};
 use super::{BuilderAction, BuilderDeck, BuilderStats, BuilderUi, RecsState, SearchState, Tab};
@@ -94,10 +94,7 @@ pub(super) struct CommanderChip;
 // =============================================================================================
 
 pub(super) fn spawn_screen(mut commands: Commands, fonts: Res<ArenaFonts>, assets: Res<AssetServer>, deck: Res<BuilderDeck>) {
-    let fmt_label = match deck.format {
-        Format::Commander => "COMMANDER",
-        Format::Constructed => "CONSTRUCTED",
-    };
+    let fmt_label = deck.format.label().to_uppercase();
     commands
         .spawn((
             Name::new("DeckBuilder"),
@@ -446,7 +443,7 @@ fn section_title(g: &mut ChildSpawnerCommands, fonts: &ArenaFonts, title: &str, 
 fn build_recs(g: &mut ChildSpawnerCommands, fonts: &ArenaFonts, images: &mut CardImages, deck: &BuilderDeck, recs: &RecsState) {
     let Some(d) = &recs.data else { return };
     // what the suggestions are based on
-    let basis = if deck.format == Format::Commander {
+    let basis = if deck.format.has_commander() {
         match deck.commanders.first() {
             Some(c) if d.commander_decks > 0 => format!("Based on {} decks led by {}", d.commander_decks, c.name),
             Some(c) => format!("{} isn't in the deck data — suggestions come from themes and popularity", c.name),
@@ -499,7 +496,7 @@ fn build_deck_list(g: &mut ChildSpawnerCommands, fonts: &ArenaFonts, assets: &As
         g.spawn(ui_text(&fonts.body, "Loading deck…", 15.0, TEXT_DIM));
         return;
     }
-    if deck.format == Format::Commander {
+    if deck.format.has_commander() {
         group_header(g, fonts, "Commander", deck.commanders.len() as u32);
         if deck.commanders.is_empty() {
             g.spawn((Node { padding: UiRect::all(Val::Px(6.0)), ..default() }, ui_text(&fonts.body, "Click a legendary creature in the search to lead this deck (right-click any eligible card later to swap).", 13.0, TEXT_DIM)));
@@ -508,7 +505,7 @@ fn build_deck_list(g: &mut ChildSpawnerCommands, fonts: &ArenaFonts, assets: &As
             deck_row(g, fonts, assets, c, 1, false, BuilderAction::RemoveCommander(c.name.clone()), false);
         }
     }
-    if deck.main.is_empty() && !(deck.format == Format::Commander && deck.commanders.is_empty()) {
+    if deck.main.is_empty() && !(deck.format.has_commander() && deck.commanders.is_empty()) {
         g.spawn((Node { padding: UiRect::all(Val::Px(6.0)), ..default() }, ui_text(&fonts.body, "Click cards in the search or recommendations to add them. Click a row here to remove one.", 13.0, TEXT_DIM)));
     }
     for kind in CardKind::ALL {
@@ -884,7 +881,7 @@ pub(super) fn identity_row(
     mut cmd_chip: Query<&mut Node, (With<CommanderChip>, Without<ColorFilterRow>, Without<IdentityRow>)>,
     mut built: Local<Option<(Entity, Option<String>)>>,
 ) {
-    let commander = deck.format == Format::Commander;
+    let commander = deck.format.has_commander();
     let show = |on: bool| if on { Display::Flex } else { Display::None };
     for mut n in &mut color_row {
         if n.display != show(!commander) {
@@ -938,8 +935,8 @@ pub(super) fn status_texts(
         }
     };
     let n = deck.count();
-    let req = stats.stats.required.max(if deck.format == Format::Commander { 100 } else { 60 });
-    let count_col = if (deck.format == Format::Commander && n == req) || (deck.format == Format::Constructed && n >= req) { GREEN_HEAL } else { GOLD_BRIGHT };
+    let req = stats.stats.required;
+    let count_col = if (deck.format.has_commander() && n == req) || (!deck.format.has_commander() && n >= req) { GREEN_HEAL } else { GOLD_BRIGHT };
     for (mut t, mut c) in &mut q.p0() {
         set(&mut t, &mut c, format!("{n} / {req}"), count_col);
     }
@@ -962,7 +959,7 @@ pub(super) fn status_texts(
         (format!("Search failed: {e}"), RED_DAMAGE)
     } else if search.busy {
         ("Searching…".to_string(), TEXT_DIM)
-    } else if deck.format == Format::Commander && deck.commanders.is_empty() {
+    } else if deck.format.has_commander() && deck.commanders.is_empty() {
         ("Choose your commander: click one below (search by name to find a specific one).".to_string(), GOLD_BRIGHT)
     } else if search.results.is_empty() {
         ("No cards match these filters.".to_string(), TEXT_DIM)

@@ -25,7 +25,7 @@ use bevy::prelude::*;
 use bevy::render::render_resource::{Extent3d, TextureDimension, TextureFormat};
 use bevy::text::EditableText;
 use bevy::ui::RelativeCursorPosition;
-use mtg_client::scryfall::CURATED;
+use mtg_client::curated::CURATED;
 use mtg_client::{ImageRequest, ImageVersion};
 
 use super::deck_select::{DeckList, DeckSelection};
@@ -498,7 +498,7 @@ fn handle_clicks(
                 studio.select(kind, next);
             }
             StudioAction::Randomize => {
-                let seed = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.subsec_nanos()).unwrap_or(7);
+                let seed = (mtg_client::now_millis() as u32).wrapping_mul(2_654_435_761) | 7;
                 edit(&mut lib, &mut studio, false, |d| d.randomize(seed));
             }
             StudioAction::Equip => {

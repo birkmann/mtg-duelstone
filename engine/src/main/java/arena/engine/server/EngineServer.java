@@ -27,14 +27,23 @@ import java.nio.charset.StandardCharsets;
 
 /**
  * Embedded Jetty: REST under /api, the game WebSocket at /ws/match/{id}, and (optionally) the built
- * frontend as static files. Designed for one local user; CORS is wide open for the Vite dev server.
+ * frontend as static files (the wasm client, so invitees only need a browser). Listens on all interfaces so
+ * LAN players can join; CORS is wide open for dev servers.
  */
 public final class EngineServer {
     private final MatchManager matches = new MatchManager();
     private final Server server;
     private final ImageCache images;
+    /** Base URL other machines use to reach us (invite links); see {@link #detectPublicUrl}. */
+    private final String publicUrl;
+    private final boolean servesWeb;
 
-    public EngineServer(final int port, final File staticDir, final java.nio.file.Path offlinePack) throws IOException {
+    public EngineServer(final int port, final File staticDir, final java.nio.file.Path offlinePack) throws IOException { this(port, staticDir, offlinePack, null); }
+
+    public EngineServer(final int port, final File staticDir, final java.nio.file.Path offlinePack, final String publicUrl) throws IOException {
+        this.publicUrl = publicUrl != null && !publicUrl.isBlank() ? publicUrl.replaceAll("/+$", "") : detectPublicUrl(port);
+        this.servesWeb = staticDir != null && new File(staticDir, "index.html").isFile();
+        System.out.println("[server] invite links use " + this.publicUrl + (servesWeb ? "" : "  (no web client: pass --static web/dist so invitees can play in a browser)"));
         images = new ImageCache(offlinePack);
         System.out.println("[server] offline pack: " + offlinePack + " (" + images.size() + " card names with images)");
         server = new Server(port);
@@ -47,6 +56,14 @@ public final class EngineServer {
             st.setInitParameter("resourceBase", staticDir.getAbsolutePath());
             st.setInitParameter("dirAllowed", "false");
             st.setInitParameter("welcomeServlets", "true");
+            st.setInitParameter("cacheControl", "no-cache"); // a rebuilt wasm bundle must not be shadowed by a stale one
+            // tools/build-web.sh writes .gz twins: the ~60 MB wasm goes over the wire as ~13 MB
+            st.setInitParameter("precompressed", "gzip=.gz");
+            // Browsers only stream-compile wasm served as application/wasm.
+            ctx.getMimeTypes().addMimeMapping("wasm", "application/wasm");
+            ctx.getMimeTypes().addMimeMapping("ogg", "audio/ogg");
+            ctx.getMimeTypes().addMimeMapping("ttf", "font/ttf");
+            ctx.getMimeTypes().addMimeMapping("wgsl", "text/plain");
             ctx.addServlet(st, "/");
             System.out.println("[server] serving static files from " + staticDir.getAbsolutePath());
         }
@@ -59,6 +76,28 @@ public final class EngineServer {
     public void start() throws Exception { server.start(); }
     public void join() throws InterruptedException { server.join(); }
     public MatchManager matches() { return matches; }
+
+    /**
+     * Best guess at an address other machines on the LAN can reach: the first up, non-loopback,
+     * site-local IPv4 (192.168/10/172.16), else any non-loopback IPv4, else localhost. For play across
+     * the internet pass {@code --public-url} (e.g. a tunnel or port-forwarded address).
+     */
+    static String detectPublicUrl(final int port) {
+        String fallback = null;
+        try {
+            for (final java.net.NetworkInterface ni : java.util.Collections.list(java.net.NetworkInterface.getNetworkInterfaces())) {
+                if (!ni.isUp() || ni.isLoopback() || ni.isVirtual()) continue;
+                final String n = ni.getName();
+                if (n.startsWith("docker") || n.startsWith("br-") || n.startsWith("veth") || n.startsWith("virbr")) continue;
+                for (final java.net.InetAddress a : java.util.Collections.list(ni.getInetAddresses())) {
+                    if (!(a instanceof java.net.Inet4Address) || a.isLoopbackAddress() || a.isLinkLocalAddress()) continue;
+                    if (a.isSiteLocalAddress()) return "http://" + a.getHostAddress() + ":" + port;
+                    if (fallback == null) fallback = "http://" + a.getHostAddress() + ":" + port;
+                }
+            }
+        } catch (final Exception ignored) {}
+        return fallback != null ? fallback : "http://localhost:" + port;
+    }
 
     // ---- REST -------------------------------------------------------------------------------
 
@@ -118,7 +157,14 @@ public final class EngineServer {
             final arena.engine.deck.CardCatalog catalog = arena.engine.deck.CardCatalog.get();
             switch (m + " " + path) {
                 // ---- engine / images -------------------------------------------------------------
-                case "GET /health" -> { final JsonObject o = new JsonObject(); o.addProperty("ok", true); o.addProperty("protocol", 2); o.addProperty("cards", StaticData.instance().getCommonCards().getAllCards().size()); json(resp, 200, o); }
+                case "GET /health" -> {
+                    final JsonObject o = new JsonObject();
+                    o.addProperty("ok", true); o.addProperty("protocol", 3);
+                    o.addProperty("cards", StaticData.instance().getCommonCards().getAllCards().size());
+                    o.addProperty("publicUrl", publicUrl); o.addProperty("web", servesWeb);
+                    o.addProperty("maxPlayers", MatchSession.MAX_SEATS);
+                    json(resp, 200, o);
+                }
                 case "GET /img" -> {
                     final String name = req.getParameter("name");
                     if (name == null || name.isBlank()) throw new IllegalArgumentException("name required");
@@ -151,9 +197,24 @@ public final class EngineServer {
                     final String human = Json.str(b, "humanDeck"), ai = Json.str(b, "aiDeck");
                     if (human == null || ai == null) throw new IllegalArgumentException("humanDeck and aiDeck refs required");
                     final Integer seedI = b.has("seed") && !b.get("seed").isJsonNull() ? b.get("seed").getAsInt() : null;
-                    final String fmt = DeckSource.format(Json.str(b, "format"));
-                    json(resp, 201, matches.create(human, ai, fmt, seedI == null ? null : seedI.longValue(), Json.str(b, "humanName")).describe());
+                    json(resp, 201, matches.create(human, ai, GameSetup.fromJson(b), seedI == null ? null : seedI.longValue(), Json.str(b, "humanName")).describe());
                 }
+                case "POST /lobby" -> { // {format, players: 2..4, name, deck} → host ticket (seat 0 token + invite)
+                    final JsonObject b = body(req);
+                    final Integer players = Json.integer(b, "players");
+                    final MatchSession lm = matches.createLobby(GameSetup.fromJson(b), players == null ? 2 : players,
+                            Json.str(b, "name"), Json.str(b, "deck"), publicUrl);
+                    json(resp, 201, lm.hostTicket());
+                }
+                // ---- game setup / cubes / events (v3) ----------------------------------------------
+                case "GET /formats" -> json(resp, 200, formatsJson());
+                case "GET /cubes" -> json(resp, 200, CubeStore.list());
+                case "GET /cube" -> json(resp, 200, CubeStore.get(req.getParameter("ref")));
+                case "POST /cube" -> json(resp, 200, CubeStore.save(body(req)));
+                case "DELETE /cube" -> { CubeStore.delete(req.getParameter("name")); json(resp, 200, new JsonObject()); }
+                case "POST /cube/import" -> { final JsonObject b = body(req); json(resp, 200, CubeStore.importText(Json.str(b, "text") == null ? "" : Json.str(b, "text"))); }
+                case "GET /sets" -> json(resp, 200, CubeStore.draftableSets());
+                case "POST /event" -> json(resp, 201, matches.createEvent(body(req), publicUrl).hostTicket());
                 // ---- cards ----------------------------------------------------------------------------
                 case "GET /cards/search" -> {
                     final Integer cmc = req.getParameter("cmc") == null || req.getParameter("cmc").isBlank() ? null : intParam(req, "cmc", 0);
@@ -171,7 +232,7 @@ public final class EngineServer {
                     final String fmt = DeckSource.format(req.getParameter("format"));
                     final String kind = req.getParameter("kind") == null ? "all" : req.getParameter("kind");
                     if ("user".equals(kind)) json(resp, 200, deckStore.list(fmt));
-                    else json(resp, 200, DeckSource.list(fmt));
+                    else json(resp, 200, DeckSource.list(fmt, req.getParameter("legality")));
                 }
                 case "GET /deck" -> {
                     final String ref = req.getParameter("ref");
@@ -207,6 +268,25 @@ public final class EngineServer {
                     if ("GET".equals(m) && path.startsWith("/match/")) {
                         final MatchSession ms = matches.get(path.substring("/match/".length()));
                         if (ms == null) json(resp, 404, err("no such match")); else json(resp, 200, ms.describe());
+                    } else if (path.startsWith("/event/")) { // GET /event/{code} · POST /event/{code}/join {name}
+                        final String[] parts = path.substring("/event/".length()).split("/");
+                        final EventSession ev = matches.event(parts[0]);
+                        if (ev == null) { json(resp, 404, err("no event with code " + parts[0])); return true; }
+                        if ("GET".equals(m) && parts.length == 1) json(resp, 200, ev.describe());
+                        else if ("POST".equals(m) && parts.length == 2 && "join".equals(parts[1])) {
+                            try { json(resp, 200, ev.join(Json.str(body(req), "name"))); }
+                            catch (final IllegalStateException e) { json(resp, 409, err(e.getMessage())); }
+                        } else return false;
+                    } else if (path.startsWith("/lobby/")) { // GET /lobby/{id} (public info) · POST /lobby/{id}/join {name, deck}
+                        final String[] parts = path.substring("/lobby/".length()).split("/");
+                        final MatchSession lm = matches.get(parts[0]);
+                        if (lm == null || !lm.lobby) { json(resp, 404, err("no lobby with code " + parts[0])); return true; }
+                        if ("GET".equals(m) && parts.length == 1) json(resp, 200, lm.describe());
+                        else if ("POST".equals(m) && parts.length == 2 && "join".equals(parts[1])) {
+                            final JsonObject b = body(req);
+                            try { json(resp, 200, lm.join(Json.str(b, "name"), Json.str(b, "deck"))); }
+                            catch (final IllegalStateException e) { json(resp, 409, err(e.getMessage())); }
+                        } else return false;
                     } else if ("DELETE".equals(m) && path.startsWith("/match/")) {
                         matches.remove(path.substring("/match/".length())); json(resp, 200, new JsonObject());
                     } else return false;
@@ -224,27 +304,76 @@ public final class EngineServer {
             factory.getPolicy().setMaxTextMessageSize(4 * 1024 * 1024);
             factory.setCreator(new WebSocketCreator() {
                 @Override public Object createWebSocket(final ServletUpgradeRequest req, final ServletUpgradeResponse resp) {
-                    final String path = req.getRequestPath(); // /ws/match/{id}
+                    final String path = req.getRequestPath(); // /ws/match/{id} · /ws/event/{id}
+                    final java.util.List<String> etok = req.getParameterMap().get("token");
+                    if (path.startsWith("/ws/event/")) {
+                        final EventSession ev = matches.event(path.substring("/ws/event/".length()));
+                        final EventSession.ESeat es = ev == null ? null : ev.seatFor(etok == null || etok.isEmpty() ? null : etok.get(0));
+                        if (es == null) { try { resp.sendForbidden("unknown event or seat token"); } catch (final IOException ignored) {} return null; }
+                        return new EventSocket(ev, es);
+                    }
                     final String prefix = "/ws/match/";
                     if (!path.startsWith(prefix)) return null;
                     final MatchSession m = matches.get(path.substring(prefix.length()));
                     if (m == null) return null;
-                    return new MatchSocket(m);
+                    final java.util.List<String> tok = req.getParameterMap().get("token");
+                    final Seat seat = m.seatFor(tok == null || tok.isEmpty() ? null : tok.get(0));
+                    if (seat == null) {
+                        try { resp.sendForbidden("unknown seat token"); } catch (final IOException ignored) {}
+                        return null;
+                    }
+                    return new MatchSocket(m, seat);
                 }
             });
         }
     }
 
+    private static final class EventSocket extends WebSocketAdapter {
+        private final EventSession ev;
+        private final EventSession.ESeat seat;
+        EventSocket(final EventSession ev, final EventSession.ESeat seat) { this.ev = ev; this.seat = seat; }
+        @Override public void onWebSocketConnect(final Session sess) { super.onWebSocketConnect(sess); ev.attach(seat, sess); }
+        @Override public void onWebSocketText(final String message) {
+            try { ev.onFrame(seat, getSession(), Json.parse(message)); } catch (final Exception e) { e.printStackTrace(); }
+        }
+        @Override public void onWebSocketClose(final int statusCode, final String reason) {
+            if (getSession() != null) ev.detach(seat, getSession());
+            super.onWebSocketClose(statusCode, reason);
+        }
+        @Override public void onWebSocketError(final Throwable cause) { if (getSession() != null) ev.detach(seat, getSession()); }
+    }
+
+    /** Everything a client can set up: formats, legalities (with Forge's names), casual variants. */
+    private static JsonObject formatsJson() {
+        final JsonObject o = new JsonObject();
+        final JsonArray f = new JsonArray(), l = new JsonArray(), v = new JsonArray();
+        for (final String[] x : new String[][] { {"constructed", "Constructed"}, {"commander", "Commander"}, {"brawl", "Brawl"}, {"oathbreaker", "Oathbreaker"} }) f.add(named(x[0], x[1], null));
+        for (final String id : DeckSource.LEGALITIES) {
+            final forge.game.GameFormat gf = DeckSource.gameFormat(id);
+            l.add(named(id, gf.getName(), gf.getBannedCardNames().size() + " banned"));
+        }
+        for (final String[] x : new String[][] { {"planechase", "Planechase"}, {"archenemy", "Archenemy"}, {"momir", "Momir Basic"}, {"teams", "2v2 Teams"} }) v.add(named(x[0], x[1], null));
+        o.add("formats", f); o.add("legalities", l); o.add("variants", v);
+        return o;
+    }
+
+    private static JsonObject named(final String id, final String name, final String desc) {
+        final JsonObject o = new JsonObject();
+        o.addProperty("id", id); o.addProperty("name", name); o.addProperty("description", desc);
+        return o;
+    }
+
     private static final class MatchSocket extends WebSocketAdapter {
         private final MatchSession match;
-        MatchSocket(final MatchSession match) { this.match = match; }
+        private final Seat seat;
+        MatchSocket(final MatchSession match, final Seat seat) { this.match = match; this.seat = seat; }
 
         @Override public void onWebSocketConnect(final Session sess) {
             super.onWebSocketConnect(sess);
-            match.attach(sess);
+            match.attach(seat, sess);
         }
         @Override public void onWebSocketText(final String message) {
-            try { match.onFrame(getSession(), Json.parse(message)); }
+            try { match.onFrame(seat, getSession(), Json.parse(message)); }
             catch (final Exception e) {
                 e.printStackTrace();
                 final JsonObject f = Json.frame("error"); f.addProperty("text", String.valueOf(e));
@@ -252,11 +381,11 @@ public final class EngineServer {
             }
         }
         @Override public void onWebSocketClose(final int statusCode, final String reason) {
-            if (getSession() != null) match.detach(getSession());
+            if (getSession() != null) match.detach(seat, getSession());
             super.onWebSocketClose(statusCode, reason);
         }
         @Override public void onWebSocketError(final Throwable cause) {
-            if (getSession() != null) match.detach(getSession());
+            if (getSession() != null) match.detach(seat, getSession());
         }
     }
 }

@@ -8,6 +8,7 @@
 mod card;
 mod cmd;
 mod deck;
+mod event;
 mod frames;
 mod game;
 mod prompt;
@@ -15,6 +16,7 @@ mod prompt;
 pub use card::*;
 pub use cmd::*;
 pub use deck::*;
+pub use event::*;
 pub use frames::*;
 pub use game::*;
 pub use prompt::*;

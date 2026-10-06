@@ -21,6 +21,10 @@ version=$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -n1)
 if [[ "${SKIP_BUILD:-0}" != 1 ]]; then
     cargo build --release -p arena -p mtg_client --bin mtg-duelstone --bin fetch-offline
 fi
+# The browser client the bundled engine serves to invitees (CI builds it once and sets SKIP_WEB=1).
+if [[ "${SKIP_WEB:-0}" != 1 ]]; then
+    tools/build-web.sh
+fi
 
 app="$out/MTG Duelstone.app"
 rm -rf "$app"

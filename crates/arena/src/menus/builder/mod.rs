@@ -8,8 +8,9 @@
 //! and out (BACK / PLAY) touch shared app flow, and those go through the same resources the other
 //! menu screens use (`MatchConfig`, `DeckSelection`).
 //!
-//! Why threads + channels, as in deck select: `Rest` is blocking. Every request carries a
-//! generation number so a slow answer for an old query can never overwrite a newer one.
+//! Why `mtg_client::spawn` + channels, as in deck select: requests run off the render loop (a thread
+//! on desktop, the page's event loop in the browser). Every request carries a generation number so
+//! a slow answer for an old query can never overwrite a newer one.
 //!
 //! The engine stays the authority on legality: the deck is validated by `POST /api/deck/validate`
 //! after every edit and PLAY is only enabled when the engine accepts it. Local copy limits
@@ -20,8 +21,7 @@ mod view;
 
 use bevy::prelude::*;
 use bevy::text::EditableText;
-use crossbeam_channel::{Receiver, unbounded};
-use mtg_client::Rest;
+use crossbeam_channel::Receiver;
 use mtg_client::deckstats::{self, DeckStats, Entry, Goldfish};
 use mtg_protocol::{CardQuery, CatalogCard, DeckBody, DeckFull, DeckLine, Format, RecommendRequest, Recommendations};
 
@@ -112,7 +112,7 @@ impl BuilderDeck {
     }
     /// Combined colour identity of the commanders (`WUBG`); None outside Commander or without one.
     pub fn identity(&self) -> Option<String> {
-        if self.format != Format::Commander || self.commanders.is_empty() {
+        if !self.format.has_commander() || self.commanders.is_empty() {
             return None;
         }
         Some(deckstats::COLORS.iter().filter(|c| self.commanders.iter().any(|k| k.color_identity.contains(**c))).collect())
@@ -200,7 +200,7 @@ fn max_copies(format: Format, card: &CatalogCard) -> u32 {
     let text = card.oracle_text.as_deref().unwrap_or("").to_ascii_lowercase();
     if card.is_basic_land || text.contains("any number of cards named") {
         u32::MAX
-    } else if format == Format::Commander {
+    } else if format.has_commander() {
         1
     } else {
         4
@@ -384,7 +384,7 @@ fn enter(
 ) {
     // problem_rev ≠ rev: nothing has been validated yet, so PLAY waits for the engine's verdict
     *deck = BuilderDeck { format: open.format, name: "New Deck".into(), problem_rev: u64::MAX, ..default() };
-    *search = SearchState { commander_only: open.format == Format::Commander && open.deck_ref.is_none(), dirty_at: Some(time.elapsed_secs()), ..default() };
+    *search = SearchState { commander_only: open.format.has_commander() && open.deck_ref.is_none(), dirty_at: Some(time.elapsed_secs()), ..default() };
     *recs = RecsState::default();
     *ui = BuilderUi::default();
     // dev aid for screenshots, see `debug_open`
@@ -397,11 +397,7 @@ fn enter(
         deck.loading = true;
         let base = engine_base(&cfg, &settings);
         let fmt = open.format;
-        let (tx, rx) = unbounded();
-        net.load = Some(rx);
-        std::thread::spawn(move || {
-            let _ = tx.send(Rest::new(base).deck(&r, fmt).map_err(|e| format!("{e:#}")));
-        });
+        net.load = Some(mtg_client::spawn(async move { mtg_client::Api::new(base).deck(&r, fmt).await.map_err(|e| format!("{e:#}")) }));
     }
 }
 
@@ -509,7 +505,7 @@ fn handle_actions(
 /// Left-click semantics: in a Commander deck without a commander, a commander-eligible card
 /// becomes the commander (the screen opens on a commander search); otherwise add one copy.
 fn add_card(deck: &mut BuilderDeck, search: &mut SearchState, ui: &mut BuilderUi, card: &CatalogCard, now: f32) {
-    if deck.format == Format::Commander && deck.commanders.is_empty() && card.can_be_commander {
+    if deck.format.has_commander() && deck.commanders.is_empty() && card.can_be_commander {
         deck.set_commander(card);
         ui.say(format!("{} is your commander — now add the 99", card.name), now);
         if search.commander_only {
@@ -535,7 +531,7 @@ fn right_click_cards(
     time: Res<Time>,
 ) {
     for c in clicks.read() {
-        if c.button != PointerButton::Secondary || deck.format != Format::Commander {
+        if c.button != PointerButton::Secondary || !deck.format.has_commander() {
             continue;
         }
         // the pick may land on the tile's image child: walk up to the tile
@@ -601,11 +597,7 @@ fn start_save(deck: &mut BuilderDeck, ui: &mut BuilderUi, net: &mut BuilderNet, 
     }
     ui.saving = true;
     let body = deck.body();
-    let (tx, rx) = unbounded();
-    net.save = Some(rx);
-    std::thread::spawn(move || {
-        let _ = tx.send((then, Rest::new(base).save_deck_body(&body).map_err(|e| format!("{e:#}"))));
-    });
+    net.save = Some(mtg_client::spawn(async move { (then, mtg_client::Api::new(base).save_deck_body(&body).await.map_err(|e| format!("{e:#}"))) }));
 }
 
 fn search_query(search: &SearchState, deck: &BuilderDeck) -> CardQuery {
@@ -622,7 +614,7 @@ fn search_query(search: &SearchState, deck: &BuilderDeck) -> CardQuery {
         text: opt(&search.text),
         cmc: search.cmc,
         tag: None,
-        commander_only: search.commander_only && deck.format == Format::Commander,
+        commander_only: search.commander_only && deck.format.has_commander(),
         sort: None,
         offset: if search.append { search.results.len() as u32 } else { 0 },
         limit: PAGE,
@@ -648,12 +640,8 @@ fn start_requests(
         search.busy = true;
         let q = search_query(&search, &deck);
         let (generation, append) = (search.generation, search.append);
-        let (tx, rx) = unbounded();
-        net.search = Some(rx);
         let b = base();
-        std::thread::spawn(move || {
-            let _ = tx.send((generation, append, Rest::new(b).search_cards(&q).map_err(|e| format!("{e:#}"))));
-        });
+        net.search = Some(mtg_client::spawn(async move { (generation, append, mtg_client::Api::new(b).catalog_search(&q).await.map_err(|e| format!("{e:#}"))) }));
     }
     // recommendations: only while the tab is open, and after edits settle
     if ui.tab == Tab::Recommend && !deck.loading {
@@ -675,12 +663,8 @@ fn start_requests(
                 limit: 18,
             };
             let generation = recs.generation;
-            let (tx, rx) = unbounded();
-            net.recs = Some(rx);
             let b = base();
-            std::thread::spawn(move || {
-                let _ = tx.send((generation, Rest::new(b).recommend(&req).map_err(|e| format!("{e:#}"))));
-            });
+            net.recs = Some(mtg_client::spawn(async move { (generation, mtg_client::Api::new(b).recommend(&req).await.map_err(|e| format!("{e:#}"))) }));
         }
     }
     // engine validation after edits
@@ -691,12 +675,8 @@ fn start_requests(
             net.validate_inflight = true;
             let body = deck.body();
             let rev = deck.rev;
-            let (tx, rx) = unbounded();
-            net.validate = Some(rx);
             let b = base();
-            std::thread::spawn(move || {
-                let _ = tx.send((rev, Rest::new(b).validate_deck(&body).map_err(|e| format!("{e:#}"))));
-            });
+            net.validate = Some(mtg_client::spawn(async move { (rev, mtg_client::Api::new(b).validate_deck(&body).await.map_err(|e| format!("{e:#}"))) }));
         }
     }
     let _ = &mut deck;
@@ -775,7 +755,7 @@ fn poll_net(
                         t.editor_mut().set_text(&deck.name);
                     }
                 }
-                if deck.format == Format::Commander && deck.commanders.is_empty() {
+                if deck.format.has_commander() && deck.commanders.is_empty() {
                     search.commander_only = true;
                 }
                 if std::env::var("ARENA_BUILDER_TAB").as_deref() == Ok("playtest") {
@@ -816,7 +796,9 @@ fn poll_net(
                         let ai = sel.ai.clone().unwrap_or_else(|| "random".into());
                         names.human = saved.name.clone();
                         names.ai = if ai == "random" { "Random".into() } else { list.name_of(&ai) };
-                        *cfg_match = MatchConfig { format: deck.format, human_deck: r, ai_deck: ai, seed: None };
+                        // keep the legality / variants picked on the mode screen
+                        let setup = std::mem::take(&mut cfg_match.setup);
+                        *cfg_match = MatchConfig { format: deck.format, human_deck: r, ai_deck: ai, seed: None, setup };
                         next.set(AppState::Loading);
                     }
                     (AfterSave::Play, Some(p)) => ui.say(format!("Saved, but not playable yet: {p}"), now),
