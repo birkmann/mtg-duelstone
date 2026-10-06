@@ -180,6 +180,7 @@ pub fn spawn_buttons(mut commands: Commands, fonts: Res<ArenaFonts>) {
 }
 
 pub fn update_buttons(
+    time: Res<Time>,
     view: Res<GameView>,
     input: Res<CurrentInput>,
     mut commands: Commands,
@@ -196,9 +197,21 @@ pub fn update_buttons(
     let pm = primary_model(&view, &input);
     let sm = secondary_model(&input);
     let in_mull = crate::prompts::is_mulligan_input(&input);
+    let nudge = pm.nudge && !in_mull;
+    // ~1.2 s breathing glow: loud enough to catch the eye from the board, slow enough not to nag
+    let pulse = 0.5 - 0.5 * (time.elapsed_secs() * 5.2).cos();
     for (e, _children, off, mut glow) in &mut primary {
         if let Some(sh) = glow.0.first_mut() {
-            sh.color = if pm.enabled && !pm.passive { Color::srgba(1.0, 0.45, 0.1, 0.5) } else { Color::NONE };
+            let (color, spread, blur) = if nudge {
+                (Color::srgba(1.0, 0.5, 0.12, 0.45 + 0.5 * pulse), 0.2 + 0.9 * pulse, 2.4 + 2.4 * pulse)
+            } else if pm.enabled && !pm.passive {
+                (Color::srgba(1.0, 0.45, 0.1, 0.5), 0.2, 2.4)
+            } else {
+                (Color::NONE, 0.2, 2.4)
+            };
+            sh.color = color;
+            sh.spread_radius = vh(spread);
+            sh.blur_radius = vh(blur);
         }
         if pm.enabled && off {
             commands.entity(e).remove::<BtnOff>();
@@ -290,7 +303,7 @@ pub fn update_message_bar(
     let msg = input.frame.as_ref().map(|f| f.message.clone()).unwrap_or_default();
     let in_mull = crate::prompts::is_mulligan_input(&input);
     let subject = input.frame.as_ref().and_then(|f| f.card).and_then(|id| view.card(id).or_else(|| cache.0.get(&id))).map(|c| c.display_name().to_string());
-    let cleaned = if in_mull { None } else { clean_message(&msg, subject.as_deref()) };
+    let cleaned = if in_mull { None } else { clean_message(&msg, subject.as_deref()).or_else(|| waiting_on_you(&view, &input)) };
     let paying = if is_mana_payment(&msg) { mana_to_pay(&msg) } else { None };
     let shown = match (&cleaned, &paying) {
         (_, Some(_)) => match &subject {

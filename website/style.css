@@ -213,6 +213,21 @@ b, strong { font-weight: 400; color: var(--fg); }
 .thumb img { width: 100%; aspect-ratio: 16 / 9; object-fit: cover; border-radius: 6px; background: var(--night); }
 .thumb:hover { opacity: 1; }
 .thumb.is-active { opacity: 1; border-color: var(--gold); }
+.viewer-caption { display: flex; gap: 12px; align-items: baseline; margin: 0; min-height: 3.1em; font-size: 15px; line-height: 1.55; color: var(--text); }
+.viewer-count { flex: none; font-size: 12px; letter-spacing: 0.1em; color: var(--muted); font-variant-numeric: tabular-nums; }
+.ways { display: flex; flex-direction: column; gap: 12px; margin-top: 8px; padding-top: 18px; border-top: 1px solid var(--rule); }
+.ways-head { display: flex; justify-content: space-between; align-items: baseline; gap: 16px; }
+.ways-head a { font-size: 14px; color: var(--text); text-decoration: none; }
+.ways-head a:hover { color: var(--link-hover); }
+.ways-grid { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+.ways-grid a {
+  display: flex; flex-direction: column; gap: 4px; height: 100%; padding: 12px 14px; text-decoration: none;
+  border: 1px solid var(--rule); border-radius: 10px; background: color-mix(in srgb, var(--bg) 70%, #000 6%);
+  transition: border-color .15s ease, background-color .15s ease;
+}
+.ways-grid a:hover { border-color: var(--rule-strong); background: color-mix(in srgb, var(--bg) 60%, var(--gold) 6%); }
+.ways-grid b { font-family: var(--display); font-weight: 700; font-size: 15px; letter-spacing: 0.02em; color: var(--fg); }
+.ways-grid span { font-size: 12.5px; line-height: 1.4; color: var(--muted); }
 .capsule {
   display: flex; flex-direction: column; gap: 16px; padding: 16px 16px 20px;
   border-radius: 12px; border: 1px solid var(--rule); background: color-mix(in srgb, var(--bg) 70%, #000 6%);
@@ -474,6 +489,8 @@ b, strong { font-weight: 400; color: var(--fg); }
 @media (max-width: 1000px) {
   .store { grid-template-columns: minmax(0, 1fr); }
   .capsule-art { display: none; }
+  /* Stacked, nothing sits beside the viewer, and the download should follow the screenshots. */
+  .ways { display: none; }
   .about-cols { grid-template-columns: minmax(0, 1fr); gap: 32px; }
   .mode-grid, .gallery-3, .req { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .features { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -494,6 +511,7 @@ b, strong { font-weight: 400; color: var(--fg); }
   .features, .platforms, .gallery, .gallery-3, .cols, .mats, .mode-grid, .mode-grid-2, .mini-modes, .pair, .req { grid-template-columns: minmax(0, 1fr); }
   .store { padding-top: 32px; }
   .thumb { width: 88px; }
+  .viewer-caption { font-size: 14px; }
   .features article { padding-right: 0; }
   .cols { gap: 20px; }
   .gallery { gap: 40px; }

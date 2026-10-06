@@ -10,8 +10,11 @@ pub struct PrimaryModel {
     pub label: String,
     pub subtitle: Option<String>,
     pub enabled: bool,
-    /// Calm (grey) look — nothing for the player to decide, e.g. opponent's turn.
+    /// Calm (grey) look — nothing for the player to decide (no input yet).
     pub passive: bool,
+    /// The game is stopped on us outside our own turn (a stop, a spell to answer, blocks): the pill
+    /// pulses, because players don't expect to owe an answer while the opponent is acting.
+    pub nudge: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -66,7 +69,7 @@ fn count_blockers(view: &GameView) -> usize {
 
 pub fn primary_model(view: &GameView, input: &CurrentInput) -> PrimaryModel {
     let Some(f) = input.frame.as_ref() else {
-        return PrimaryModel { label: "Waiting".into(), subtitle: None, enabled: false, passive: true };
+        return PrimaryModel { label: "Waiting".into(), subtitle: None, enabled: false, passive: true, nudge: false };
     };
     let enabled = f.ok.enabled && !input.awaiting;
     let phase = view.phase();
@@ -85,7 +88,7 @@ pub fn primary_model(view: &GameView, input: &CurrentInput) -> PrimaryModel {
         } else {
             // name the step: a bare "Opponent's Turn" left players wondering why they were asked
             let at = phase.map(|p| format!("Opponent's {}", p.label())).unwrap_or_else(|| "Opponent's Turn".into());
-            ("Pass".into(), Some(at), true)
+            ("Pass".into(), Some(at), false)
         }
     } else if is_mana_payment(msg) {
         (if raw.eq_ignore_ascii_case("auto") { "Auto Pay".into() } else { raw.to_string() }, Some("Pay mana".into()), false)
@@ -106,7 +109,23 @@ pub fn primary_model(view: &GameView, input: &CurrentInput) -> PrimaryModel {
     } else {
         (raw.to_string(), None, false)
     };
-    PrimaryModel { label, subtitle, enabled, passive }
+    PrimaryModel { label, subtitle, enabled, passive, nudge: enabled && !my_turn }
+}
+
+/// Message-bar line when Forge's own message has nothing to say (bare priority) but the game waits
+/// on us during someone else's turn — otherwise the table looks idle.
+pub fn waiting_on_you(view: &GameView, input: &CurrentInput) -> Option<String> {
+    let f = input.frame.as_ref()?;
+    if input.awaiting || !f.ok.enabled || view.my_turn() || !is_priority(&f.message) {
+        return None;
+    }
+    let who = if view.is_multiplayer() {
+        view.game.player_turn.and_then(|id| view.game.player(id)).map(|p| p.name.clone()).filter(|n| !n.is_empty())
+    } else {
+        None
+    };
+    let who = who.unwrap_or_else(|| "Opponent".into());
+    Some(if view.game.stack.is_empty() { format!("{who} is waiting for you  -  respond or Pass") } else { format!("{who} is waiting for you  -  respond or Resolve") })
 }
 
 fn stack_name(s: &mtg_protocol::StackItem) -> String {
@@ -315,7 +334,10 @@ mod tests {
         assert_eq!(primary_model(&view(PhaseType::Main2, true), &i).label, "End Turn");
         let m = primary_model(&view(PhaseType::Upkeep, false), &i);
         assert_eq!((m.label.as_str(), m.subtitle.as_deref()), ("Pass", Some("Opponent's Upkeep")));
-        assert!(m.passive);
+        assert!(!m.passive && m.nudge);
+        assert!(!primary_model(&view(PhaseType::Main1, true), &i).nudge);
+        assert_eq!(waiting_on_you(&view(PhaseType::Upkeep, false), &i).as_deref(), Some("Opponent is waiting for you  -  respond or Pass"));
+        assert_eq!(waiting_on_you(&view(PhaseType::Main1, true), &i), None);
     }
 
     #[test]
@@ -348,6 +370,8 @@ mod tests {
         let mut i = input("Priority: You", "OK", "End Turn");
         i.awaiting = true;
         assert!(!primary_model(&view(PhaseType::Main1, true), &i).enabled);
+        assert!(!primary_model(&view(PhaseType::Upkeep, false), &i).nudge);
+        assert_eq!(waiting_on_you(&view(PhaseType::Upkeep, false), &i), None);
         assert!(!secondary_model(&i).unwrap().enabled);
     }
 

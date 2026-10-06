@@ -92,6 +92,22 @@ try {
       <button type="button" class="thumb" data-shot="cubes" aria-label="Cube designer"><img src="assets/img/cubes.webp" width="160" height="90" alt="" loading="lazy"></button>
       <button type="button" class="thumb" data-shot="designer" aria-label="Design Studio"><img src="assets/img/designer.webp" width="160" height="90" alt="" loading="lazy"></button>
     </div>
+    <p class="viewer-caption" aria-live="polite"><span class="viewer-count" id="viewer-count">1 / 12</span><span id="viewer-cap">A Constructed match: Go for the Throat looks for a target, and every creature it can hit glows blue.</span></p>
+
+    <!-- Fills the column beside the taller fact panel with the one thing a visitor asks next: what can I play? -->
+    <nav class="ways" aria-label="Ways to play">
+      <div class="ways-head"><span class="label">Ways to play</span><a href="#modes">All modes <span aria-hidden="true">→</span></a></div>
+      <ul class="ways-grid">
+        <li><a href="#modes"><b>Constructed</b><span>60 cards · 20 life</span></a></li>
+        <li><a href="#modes"><b>Commander</b><span>100 cards · 40 life</span></a></li>
+        <li><a href="#modes"><b>Brawl</b><span>60 cards · 25 life</span></a></li>
+        <li><a href="#modes"><b>Oathbreaker</b><span>60 cards · 20 life</span></a></li>
+        <li><a href="#modes"><b>Cube draft</b><span>94 cubes, pods of 8</span></a></li>
+        <li><a href="#modes"><b>Set draft &amp; sealed</b><span>Real sets, 40 cards</span></a></li>
+        <li><a href="#modes"><b>Variants</b><span>Planechase, Archenemy…</span></a></li>
+        <li><a href="#friends"><b>With friends</b><span>Up to 4, from a browser</span></a></li>
+      </ul>
+    </nav>
   </div>
 
   <aside class="capsule" aria-label="At a glance">
@@ -633,6 +649,8 @@ try {
   var img = document.getElementById('viewer-img');
   var webp = document.getElementById('viewer-webp');
   var thumbs = [].slice.call(document.querySelectorAll('.thumb'));
+  var cap = document.getElementById('viewer-cap');
+  var count = document.getElementById('viewer-count');
   var current = 'match';
   function select(btn) {
     current = btn.dataset.shot;
@@ -640,6 +658,8 @@ try {
     img.src = 'assets/img/' + current + '.jpg';
     var twin = document.querySelector('.shot img[src="assets/img/' + current + '.jpg"]');
     img.alt = twin ? twin.alt : btn.getAttribute('aria-label');
+    cap.textContent = img.alt;
+    count.textContent = (thumbs.indexOf(btn) + 1) + ' / ' + thumbs.length;
     thumbs.forEach(function (t) { t.classList.toggle('is-active', t === btn); t.setAttribute('aria-pressed', String(t === btn)); });
   }
   thumbs.forEach(function (t) {
