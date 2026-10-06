@@ -695,3 +695,16 @@ pub struct AvatarArt {
     pub avatar: Option<mtg_protocol::Avatar>,
     pub fallback: Handle<Image>,
 }
+
+// =============================================================================================
+// Public engine (owner: app_state sets ServerFacts at boot; readers: menus)
+// =============================================================================================
+
+impl ServerFacts {
+    /// The engine is a public host (the website's "play in your browser"): it only runs games against
+    /// the AI and refuses lobbies, events and deck/cube writes, so menus leave those out instead of
+    /// offering buttons that fail.
+    pub fn is_public(&self) -> bool {
+        self.0.as_ref().is_some_and(|i| i.public)
+    }
+}

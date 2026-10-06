@@ -41,6 +41,10 @@
       ['pointerdown', 'keydown', 'touchstart'].forEach((e) => window.addEventListener(e, resume, { capture: true }));
     }
 
+    // Embedded in the website's store page: this page can't scroll, so the browser would hand the
+    // wheel on to the page around us, which then scrolls while the player turns a deck list.
+    if (window.top !== window.self) window.addEventListener('wheel', (e) => e.preventDefault(), { passive: false });
+
     const splash = document.getElementById('splash');
     const status = document.getElementById('status');
     const bar = document.getElementById('progress');

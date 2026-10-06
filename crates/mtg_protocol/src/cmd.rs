@@ -204,6 +204,8 @@ pub struct MatchInfo {
     pub sockets: i32,
     pub turn: Option<i32>,
     pub game_over: Option<bool>,
+    /// Seat token of the human, only in the `POST /api/match` reply; a public engine requires it on the socket.
+    pub token: Option<String>,
 }
 
 /// `GET /api/health`.
@@ -218,6 +220,8 @@ pub struct ServerInfo {
     /// The engine serves the browser client (invitees can play without installing anything).
     pub web: bool,
     pub max_players: Option<i64>,
+    /// A public engine (the website's demo): vs-AI matches only, no lobbies, events or deck/cube writes.
+    pub public: bool,
 }
 
 /// `POST /api/lobby`.

@@ -27,6 +27,8 @@ public final class MatchManager {
     });
 
     private static final long KEEP_FINISHED_MS = 10 * 60_000L;
+    /** Nobody reconnects to a finished public game (the page lost its token), so it only has to outlive the game-over screen. */
+    private static final long KEEP_FINISHED_PUBLIC_MS = 30_000L;
     private static final long KEEP_IDLE_LOBBY_MS = 30 * 60_000L;
     private static final String CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; // no 0/O, 1/I
 
@@ -36,6 +38,8 @@ public final class MatchManager {
                 final long now = System.currentTimeMillis();
                 for (final MatchSession m : matches.values()) m.reapAbandoned(now);
                 for (final EventSession e : events.values()) e.tick(now);
+                if (PublicMode.on()) prune(); // nobody creates matches on a quiet public host, yet the last ones must go
+
             } catch (final Throwable t) { System.err.println("[matches] reaper: " + t); }
         }, 2, 2, TimeUnit.SECONDS); // also the pace an abandoned seat answers at
     }
@@ -44,14 +48,26 @@ public final class MatchManager {
     private void prune() {
         final long now = System.currentTimeMillis();
         for (final MatchSession m : matches.values()) {
-            final boolean done = m.isOver() && m.socketCount() == 0 && now - m.finishedAt() > KEEP_FINISHED_MS;
+            final long keep = PublicMode.on() ? KEEP_FINISHED_PUBLIC_MS : KEEP_FINISHED_MS;
+            final boolean done = m.isOver() && m.socketCount() == 0 && now - m.finishedAt() > keep;
             final boolean staleLobby = !m.isStarted() && m.socketCount() == 0 && now - m.createdAt > KEEP_IDLE_LOBBY_MS;
             if (done || staleLobby) { matches.remove(m.id); m.close(); }
         }
     }
 
+    /** Matches still being played; each holds a Forge game and its AI threads until it ends. */
+    public long live() { return matches.values().stream().filter(m -> !m.isOver()).count(); }
+
+    /** A public engine is at its {@link PublicMode#maxMatches} cap. */
+    public static final class Full extends RuntimeException {
+        Full(final String msg) { super(msg); }
+    }
+
     public MatchSession create(final String humanDeckRef, final String aiDeckRef, final GameSetup setup, final Long seed, final String humanName, final JsonObject humanAvatar) {
         prune();
+        if (PublicMode.on()) {
+            if (live() >= PublicMode.maxMatches()) throw new Full("All " + PublicMode.maxMatches() + " tables are busy. Try again in a few minutes, or download the game to play right away.");
+        }
         final String id = "m" + counter.incrementAndGet() + "-" + Long.toString(System.currentTimeMillis() % 100000, 36);
         final MatchSession m = MatchSession.classic(id, humanDeckRef, aiDeckRef, setup, seed, humanName, humanAvatar);
         matches.put(id, m);
@@ -116,6 +132,16 @@ public final class MatchManager {
         final JsonArray a = new JsonArray();
         for (final MatchSession m : matches.values()) a.add(m.describe());
         return a;
+    }
+
+    /**
+     * A public visitor leaving their game: the seat concedes like an abandoned one (closing the match
+     * would leave Forge's game thread parked on input forever), and {@link #prune} drops it once over.
+     * False when the token doesn't name a human seat of that match.
+     */
+    public boolean leave(final String id, final String token) {
+        final MatchSession m = get(id);
+        return m != null && token != null && !token.isBlank() && m.abandon(token);
     }
 
     public void remove(final String id) {

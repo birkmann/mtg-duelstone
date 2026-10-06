@@ -3,8 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>MTG Duelstone · free Magic: The Gathering game for Mac and Linux</title>
-<meta name="description" content="A free Magic: The Gathering game for Mac and Linux. Play Constructed, Commander, Brawl, Oathbreaker, cube draft, set draft or sealed against the computer or up to three friends on a 3D table. Full rules, about 33,000 cards, no internet needed.">
+<title>MTG Duelstone · free Magic: The Gathering game for Windows, Mac and Linux</title>
+<meta name="description" content="A free Magic: The Gathering game for Windows, Mac and Linux. Play Constructed, Commander, Brawl, Oathbreaker, cube draft, set draft or sealed against the computer or up to three friends on a 3D table. Full rules, about 33,000 cards, no internet needed.">
 <meta name="theme-color" content="#0f0906">
 <script>
 // Apply a saved theme before first paint. Without one the page is dark, like the game.
@@ -20,7 +20,7 @@ try {
 <link rel="preload" href="assets/fonts/Inter-Regular.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="style.css">
 <meta property="og:type" content="website">
-<meta property="og:title" content="MTG Duelstone · free Magic game for Mac and Linux">
+<meta property="og:title" content="MTG Duelstone · free Magic game for Windows, Mac and Linux">
 <meta property="og:description" content="Magic: The Gathering on a 3D table, against the computer or up to three friends. Constructed, Commander, Brawl, Oathbreaker, draft and sealed. Free, open source, plays offline.">
 <meta property="og:image" content="assets/img/og.png">
 <meta property="og:image:width" content="1200">
@@ -50,6 +50,7 @@ try {
       <span class="wordmark">MTG Duelstone</span>
     </a>
     <div class="nav-links">
+      <a href="#play">Play now</a>
       <a href="#about">About</a>
       <a href="#modes">Game modes</a>
       <a class="nav-extra" href="#friends">Multiplayer</a>
@@ -118,7 +119,7 @@ try {
     <p class="capsule-text">Magic: The Gathering on a 3D table. Play the computer or up to three friends in Constructed, Commander, Brawl, Oathbreaker, cube draft, set draft or sealed. The full rules are built in, and you don't need an internet connection to play.</p>
     <dl class="facts">
       <div><dt>Price</dt><dd>Free, open source</dd></div>
-      <div><dt>Platforms</dt><dd>Mac, Linux</dd></div>
+      <div><dt>Platforms</dt><dd>Windows, Mac, Linux</dd></div>
       <div><dt>Players</dt><dd>1 vs the computer, or 2 to 4</dd></div>
       <div><dt>Cards</dt><dd>About 33,000</dd></div>
       <div><dt>Internet</dt><dd>Not needed to play</dd></div>
@@ -131,13 +132,18 @@ try {
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg>
       <span>Download</span>
     </a>
-    <p class="dl-meta" id="hero-download-meta">For Mac and Linux · <a href="#install">all downloads</a></p>
+    <p class="dl-meta" id="hero-download-meta">For Windows, Mac and Linux · <a href="#install">all downloads</a></p>
+    <a class="pill pill-secondary pill-dl" href="#play">
+      <svg class="icon-play" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5.5v13l10.5-6.5z"/></svg>
+      <span>Play in your browser</span>
+    </a>
     <script>
-    // Offer the build for the visitor's system; one click downloads it. Anything else (Windows,
-    // phones, ChromeOS, ARM Linux) keeps the plain button to the install section.
+    // Offer the build for the visitor's system; one click downloads it. Anything else (phones,
+    // ChromeOS, ARM Linux) keeps the plain button to the install section.
     (function () {
       var base = 'https://github.com/birkmann/mtg-duelstone/releases/latest/download/';
       var builds = {
+        windows: { file: 'mtg-duelstone-windows-x86_64-setup.exe', name: 'Windows', meta: '64-bit PC · Windows 10 or 11', help: '#windows' },
         mac: { file: 'mtg-duelstone-macos-arm64.dmg', name: 'Mac', meta: 'Apple chip · macOS 12 or later', help: '#macos' },
         linux: { file: 'mtg-duelstone-x86_64.AppImage', name: 'Linux', meta: '64-bit PC · AppImage', help: '#linux' }
       };
@@ -145,6 +151,8 @@ try {
       var platform = (navigator.userAgentData && navigator.userAgentData.platform) || navigator.platform || '';
       var os = null;
       if (/android|cros|chrome os/i.test(ua + ' ' + platform)) os = null;
+      // Windows on ARM runs the x86-64 build too.
+      else if (/^win/i.test(platform)) os = 'windows';
       // iPads report a Mac platform too, but have a touch screen.
       else if (/mac/i.test(platform) && !(navigator.maxTouchPoints > 1)) os = 'mac';
       // The AppImage is x86_64 only; userAgentData says just "Linux", navigator.platform the CPU.
@@ -163,6 +171,50 @@ try {
     })();
     </script>
   </aside>
+</section>
+
+<!-- Play in the browser. The site is static (Vercel); the game runs on the public engine named in
+     data-engine (packaging/server), which serves the browser client this section frames. -->
+<section class="dark" id="play">
+  <div class="wrap section">
+    <div class="head">
+      <div class="copy">
+        <span class="label">play now</span>
+        <h2>Play in your browser</h2>
+      </div>
+      <p class="lead">Sit down at the table right here, against the Forge AI. Pick a format and one of the built-in decks. Nothing to install, no account.</p>
+    </div>
+
+    <div class="play-stage" id="play-stage" data-engine="">
+      <div class="play-poster" id="play-poster">
+        <picture>
+          <source srcset="assets/img/attack.webp" type="image/webp">
+          <img src="assets/img/attack.jpg" width="1600" height="900" alt="" loading="lazy">
+        </picture>
+        <div class="play-cta">
+          <button class="pill pill-play play-start" type="button" id="play-start" disabled>
+            <svg class="icon-play" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5.5v13l10.5-6.5z"/></svg>
+            <span>Start the game</span>
+          </button>
+          <p class="play-status" id="play-status" aria-live="polite">Connecting to the game server…</p>
+        </div>
+      </div>
+      <div class="play-game" id="play-game" hidden></div>
+    </div>
+
+    <div class="play-bar" id="play-bar" hidden>
+      <p>You're playing on our server. For your own decks, drafts and games with friends, <a href="#install">download the game</a>.</p>
+      <button class="pill pill-secondary" type="button" id="play-full">Full screen</button>
+      <button class="pill pill-secondary" type="button" id="play-close">Close game</button>
+    </div>
+
+    <ul class="play-notes">
+      <li><b>Every format</b><span>Constructed, Commander, Brawl, Oathbreaker and the casual variants</span></li>
+      <li><b>Built-in decks</b><span>Hundreds of theme decks and precons, for you and the AI</span></li>
+      <li><b>About 14 MB</b><span>Loads once, then plays like the desktop game</span></li>
+      <li><b>A computer</b><span>Mouse and a current Chrome, Firefox, Edge or Safari</span></li>
+    </ul>
+  </div>
 </section>
 
 <section class="wrap section about" id="about">
@@ -478,6 +530,16 @@ try {
   <h2>System requirements</h2>
   <div class="req">
     <div>
+      <h3>Windows</h3>
+      <dl>
+        <div><dt>System</dt><dd>Windows 10 or 11, 64-bit</dd></div>
+        <div><dt>Processor</dt><dd>x86-64</dd></div>
+        <div><dt>Memory</dt><dd>4 GB, 8 GB recommended</dd></div>
+        <div><dt>Graphics</dt><dd>DirectX 12 or Vulkan</dd></div>
+        <div><dt>Storage</dt><dd>500 MB, plus 9 GB for card images</dd></div>
+      </dl>
+    </div>
+    <div>
       <h3>Mac</h3>
       <dl>
         <div><dt>System</dt><dd>macOS 12 or later</dd></div>
@@ -526,8 +588,14 @@ try {
       </g>
     </svg>
     <h2>Download</h2>
-    <p class="lead">Free for Mac and Linux. Java, the rules engine and the card data come with it, so there is nothing else to install.</p>
+    <p class="lead">Free for Windows, Mac and Linux. Java, the rules engine and the card data come with it, so there is nothing else to install.</p>
     <div class="platforms">
+      <div class="platform" id="windows">
+        <h3>Windows</h3>
+        <p>For 64-bit PCs with Windows 10 or 11. Run the installer. It needs no administrator rights and adds MTG Duelstone to the Start menu.</p>
+        <a class="pill pill-play" href="https://github.com/birkmann/mtg-duelstone/releases/latest/download/mtg-duelstone-windows-x86_64-setup.exe">Download for Windows</a>
+        <p class="note">The installer isn't signed, so Windows may say it protected your PC. Click <b>More info</b>, then <b>Run anyway</b>. When the game first starts, Windows asks whether Java may use the network: allow private networks to host multiplayer games. Playing alone works either way. Rather not install? Get the <a href="https://github.com/birkmann/mtg-duelstone/releases/latest/download/mtg-duelstone-windows-x86_64.zip">zip</a>, unzip it anywhere and run <code>mtg-duelstone.exe</code>.</p>
+      </div>
       <div class="platform" id="macos">
         <h3>Mac</h3>
         <p>For Macs with an Apple chip on macOS 12 or later. Open the downloaded file and drag MTG Duelstone into your Applications folder.</p>
@@ -544,7 +612,7 @@ try {
     <div class="install-more">
       <div>
         <h3>Card images</h3>
-        <p>Card art belongs to Wizards of the Coast, so it isn't in the download. Fetch it once, about 9 GB, from a terminal:</p>
+        <p>Card art belongs to Wizards of the Coast, so it isn't in the download. Fetch it once, about 9 GB. On Windows, tick the box at the end of the installer or open <b>MTG Duelstone - Download card images</b> from the Start menu. On Linux, from a terminal:</p>
         <p><code>./mtg-duelstone-x86_64.AppImage --fetch-images</code></p>
         <p>On a Mac: <code>"/Applications/MTG Duelstone.app/Contents/MacOS/mtg-duelstone" --fetch-images</code>. If it stops, run it again and it picks up where it left off.</p>
       </div>
@@ -672,6 +740,109 @@ try {
     if (opener) opener.click();
   });
 })();
+
+// Play in the browser (#play): the public engine named in data-engine serves the browser client,
+// which is framed into the section. The section always shows; its status line says why the game
+// can't start yet (connecting, offline, full, no mouse or WebGL2).
+(function () {
+  var stage = document.getElementById('play-stage');
+  var poster = document.getElementById('play-poster');
+  var startBtn = document.getElementById('play-start');
+  var status = document.getElementById('play-status');
+  var game = document.getElementById('play-game');
+  var bar = document.getElementById('play-bar');
+  var fullBtn = document.getElementById('play-full');
+  var reduce = window.matchMedia('(prefers-reduced-motion: reduce)');
+  var engine = stage.dataset.engine || '';
+  // Local testing: ?engine=http://localhost:8080. Loopback only, so a crafted link can't put
+  // someone else's site inside this page.
+  try {
+    var q = new URLSearchParams(location.search).get('engine');
+    if (q && /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?\/?$/.test(q)) engine = q;
+  } catch (e) {}
+  engine = engine.replace(/\/+$/, '');
+  var frame = null, retry = null;
+
+  function say(text, ready) {
+    status.textContent = text;
+    startBtn.disabled = !ready;
+  }
+  var probe = document.createElement('canvas');
+  if (!(probe.getContext && probe.getContext('webgl2'))) return say('This browser has no WebGL2, which the game needs. Try a current Chrome, Firefox, Edge or Safari.', false);
+  if (!window.matchMedia('(pointer: fine)').matches) return say('The table needs a computer with a mouse. Open this page on your desktop or laptop.', false);
+  if (!engine) return say('The browser table opens soon. Until then, download the game to play.', false);
+
+  // The engine reports its live games against its cap, so a full server is said up front rather
+  // than after a visitor has downloaded the game.
+  function check() {
+    clearTimeout(retry);
+    fetch(engine + '/api/health', { cache: 'no-store' })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (h) {
+        if (!h || !h.ok || !h.web) throw new Error('unhealthy');
+        if (h.maxMatches && h.liveMatches >= h.maxMatches) {
+          say('Every table is taken right now. Trying again in a moment…', false);
+          retry = setTimeout(check, 20000);
+        } else {
+          say('Free against the Forge AI · loads about 14 MB', true);
+        }
+      })
+      .catch(function () {
+        say('The game server is offline right now. Trying again in a moment… or download the game.', false);
+        retry = setTimeout(check, 30000);
+      });
+  }
+
+  // The game lays itself out for 1600×900, its desktop window; any smaller and its menus spill
+  // over. So the frame keeps that size and is scaled to fit, and full screen gives it the screen.
+  var W = 1600;
+  function isFull() { return (document.fullscreenElement || document.webkitFullscreenElement) === stage; }
+  function fit() {
+    if (!frame) return;
+    frame.style.transform = isFull() ? '' : 'scale(' + game.clientWidth / W + ')';
+    fullBtn.textContent = isFull() ? 'Exit full screen' : 'Full screen';
+  }
+  if (window.ResizeObserver) new ResizeObserver(fit).observe(game);
+  document.addEventListener('fullscreenchange', fit);
+  document.addEventListener('webkitfullscreenchange', fit);
+
+  function start() {
+    if (frame || startBtn.disabled) return;
+    clearTimeout(retry);
+    frame = document.createElement('iframe');
+    frame.title = 'MTG Duelstone';
+    frame.allow = 'fullscreen; autoplay; clipboard-write';
+    frame.setAttribute('allowfullscreen', '');
+    frame.src = engine + '/';
+    frame.addEventListener('load', function () { if (frame) frame.focus(); });
+    game.appendChild(frame);
+    poster.hidden = true;
+    game.hidden = bar.hidden = false;
+    fit();
+    stage.scrollIntoView({ behavior: reduce.matches ? 'auto' : 'smooth', block: 'center' });
+  }
+  // Removing the frame closes the game's connection; the engine concedes the abandoned game.
+  function stop() {
+    if (isFull()) (document.exitFullscreen || document.webkitExitFullscreen).call(document);
+    game.removeChild(frame);
+    frame = null;
+    game.hidden = bar.hidden = true;
+    poster.hidden = false;
+    startBtn.focus();
+    check();
+  }
+  function toggleFull() {
+    if (isFull()) (document.exitFullscreen || document.webkitExitFullscreen).call(document);
+    else (stage.requestFullscreen || stage.webkitRequestFullscreen).call(stage);
+    if (frame) frame.focus();
+  }
+
+  startBtn.addEventListener('click', start);
+  fullBtn.addEventListener('click', toggleFull);
+  document.getElementById('play-close').addEventListener('click', stop);
+  check();
+})();
+
 // Copy the build-from-source command.
 document.querySelectorAll('.copy-btn').forEach(function (b) {
   b.addEventListener('click', function () {

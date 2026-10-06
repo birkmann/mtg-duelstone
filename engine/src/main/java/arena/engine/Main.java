@@ -7,7 +7,8 @@ import java.io.File;
 
 /**
  * Entry point: {@code java -jar forge-ws-server.jar [--port 8080] [--static web/dist] [--assets /path/to/forge/forge-gui]
- * [--offline /path/to/offline] [--public-url http://my-host:8080]}. Without {@code --static}, a built browser client
+ * [--offline /path/to/offline] [--public-url http://my-host:8080] [--public [--max-matches N]]}. {@code --public} (or
+ * {@code MTG_DUELSTONE_PUBLIC=1}) is for a host strangers reach, see {@link arena.engine.server.PublicMode}. Without {@code --static}, a built browser client
  * ({@code web/dist}, see {@code tools/build-web.sh}) next to the working directory or its parents is served
  * automatically, so the invite links the engine hands out work without extra flags.
  */
@@ -27,6 +28,9 @@ public final class Main {
         String offline = null;
         String publicUrl = System.getenv("MTG_DUELSTONE_PUBLIC_URL");
         if (publicUrl == null) publicUrl = System.getenv("ARENA_PUBLIC_URL");
+        boolean open = "1".equals(System.getenv("MTG_DUELSTONE_PUBLIC"));
+        int maxMatches = 6;
+        try { maxMatches = Integer.parseInt(System.getenv().getOrDefault("MTG_DUELSTONE_MAX_MATCHES", "6")); } catch (final NumberFormatException ignored) {}
         for (int i = 0; i < args.length; i++) {
             switch (args[i]) {
                 case "--port" -> port = Integer.parseInt(args[++i]);
@@ -35,9 +39,15 @@ public final class Main {
                 case "--decks" -> arena.engine.server.DeckSource.setDecksRoot(new File(args[++i]));
                 case "--assets" -> System.setProperty("forge.assets", args[++i]);
                 case "--offline" -> offline = args[++i];
-                case "-h", "--help" -> { System.out.println("usage: forge-ws-server [--port N] [--static DIR] [--assets FORGE_GUI_DIR] [--decks DIR] [--offline PACK_DIR] [--public-url http://HOST:PORT]"); return; }
+                case "--public" -> open = true;
+                case "--max-matches" -> maxMatches = Integer.parseInt(args[++i]);
+                case "-h", "--help" -> { System.out.println("usage: forge-ws-server [--port N] [--static DIR] [--assets FORGE_GUI_DIR] [--decks DIR] [--offline PACK_DIR] [--public-url http://HOST:PORT] [--public [--max-matches N]]"); return; }
                 default -> System.err.println("ignoring unknown arg " + args[i]);
             }
+        }
+        if (open) {
+            arena.engine.server.PublicMode.enable(maxMatches);
+            System.out.println("[server] public mode: vs-AI matches only, at most " + arena.engine.server.PublicMode.maxMatches() + " at once; no lobbies, events or deck/cube/collection writes");
         }
         Bootstrap.init(() -> new WsGuiGame(f -> {}));
         if (staticDir == null) staticDir = findWebDist();

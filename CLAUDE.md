@@ -18,6 +18,8 @@
 - Keep the tree compiling: `cargo check -p arena` before leaving a file — and `cargo check -p arena --target wasm32-unknown-unknown`
   for anything that runs on the browser too. In code shared with wasm: no `std::thread`, `SystemTime::now`, `Instant::now`
   or files — use `mtg_client::spawn(async { api.x().await })`, `mtg_client::now_millis()`, `crate::platform`.
+  Releases also ship Windows (`packaging/windows/`): native platform code needs a `cfg(windows)` side (`java.exe`, no
+  console windows, `AppData\Local` for big data).
 - Modes (v3): `GameSetup` (engine) maps format + legality + variants onto Forge's `RegisteredPlayer.forVariants`;
   limited events are `EventSession` (engine, own socket `/ws/event/{id}`) → `menus/event.rs`; cubes are `CubeStore`
   (bundled res/draft + `~/.forge/duelstone-cubes/*.json`) → `menus/cubes.rs`. Forge's draft statics (land set, AI rankings)
@@ -26,6 +28,8 @@
   `ARENA_AUTOPLAY_PAUSE=<turn>` + `ARENA_SHOT_WHEN=paused` (+ `ARENA_HOVER_COMMAND`) under `--autoplay`.
 - Multiplayer: never assume one opponent. Seats are slots (`GameView::seat_order`: 0 = you), anchors per seat
   (`BoardAnchors::seats` / `avatar_of`). Engine-side, every human seat is its own `WsGuiGame`.
+- Public engine (`--public`, the website's browser play): vs-AI only, seat token required, refuses lobbies/events/writes.
+  Menus hide what it refuses via `ServerFacts::is_public()`; anything new that writes to `~/.forge` belongs in `PublicMode.refuses`.
 - Avatars are data, not images: `mtg_protocol::Avatar {card, x, y, zoom}` = a circle on that card's art crop. The engine
   relays each seat's (`hello.seats`, by player name) and picks one from the deck for seats without; UI shows them via `AvatarArt`.
 
@@ -41,6 +45,7 @@ cargo run -p mtg_client --bin autopilot -- --engine http://127.0.0.1:8080 --play
 cargo run -p mtg_client --bin autopilot -- --engine http://127.0.0.1:8080 --legality pauper --variant planechase  # modes soak
 tools/build-web.sh [--dev]                            # browser client → web/dist (served by the engine)
 ./run.sh --serve                                      # engine only; play at http://<host>:8080/
+packaging/server/build.sh                             # public engine (--public) for the website's "Play in your browser"; see packaging/server/README.md
 cargo test --workspace
 ./run.sh                                              # build engine if stale + run the game
 tools/fetch-offline.sh                                # once, online: fill offline/ (images, rulings, vendor, m2)

@@ -20,7 +20,7 @@ use serde_json::Value;
 use super::widgets::{Field, text_field};
 use super::{MenuAction, MenuState};
 use crate::images::CardImages;
-use crate::shared::{AppState, ArenaFonts, EngineConfig, MatchConfig, MatchMode, Settings};
+use crate::shared::{AppState, ArenaFonts, EngineConfig, MatchConfig, MatchMode, ServerFacts, Settings};
 use crate::style::*;
 
 pub struct DeckSelectPlugin;
@@ -207,7 +207,8 @@ struct TileArt {
     shown: Option<String>,
 }
 
-fn spawn_screen(mut commands: Commands, fonts: Res<ArenaFonts>, mode: Res<MatchMode>, cfg: Res<MatchConfig>) {
+fn spawn_screen(mut commands: Commands, fonts: Res<ArenaFonts>, mode: Res<MatchMode>, cfg: Res<MatchConfig>, facts: Res<ServerFacts>) {
+    let public = facts.is_public();
     let mode_label = super::modes::setup_label(cfg.format, &cfg.setup);
     let can_change = !matches!(*mode, MatchMode::Join { .. });
     let (play_label, side_heading) = match *mode {
@@ -282,12 +283,15 @@ fn spawn_screen(mut commands: Commands, fonts: Res<ArenaFonts>, mode: Res<MatchM
                     bar.spawn((StatusLine, Node { flex_grow: 1.0, ..default() }, ui_text(&fonts.body, "", 17.0, TEXT_DIM)));
                     let b = spawn_button(bar, &fonts, ButtonKind::Secondary, "CUSTOMIZE", Vec2::new(190.0, 56.0));
                     bar.commands().entity(b).insert(MenuAction::Customize);
-                    let b = spawn_button(bar, &fonts, ButtonKind::Secondary, "NEW DECK", Vec2::new(180.0, 56.0));
-                    bar.commands().entity(b).insert(MenuAction::NewDeck);
-                    let b = spawn_button(bar, &fonts, ButtonKind::Secondary, "EDIT DECK", Vec2::new(180.0, 56.0));
-                    bar.commands().entity(b).insert(MenuAction::EditDeck);
-                    let b = spawn_button(bar, &fonts, ButtonKind::Secondary, "IMPORT DECK", Vec2::new(210.0, 56.0));
-                    bar.commands().entity(b).insert(MenuAction::OpenImport);
+                    // a public engine saves no decks for visitors: they play the built-in ones
+                    if !public {
+                        let b = spawn_button(bar, &fonts, ButtonKind::Secondary, "NEW DECK", Vec2::new(180.0, 56.0));
+                        bar.commands().entity(b).insert(MenuAction::NewDeck);
+                        let b = spawn_button(bar, &fonts, ButtonKind::Secondary, "EDIT DECK", Vec2::new(180.0, 56.0));
+                        bar.commands().entity(b).insert(MenuAction::EditDeck);
+                        let b = spawn_button(bar, &fonts, ButtonKind::Secondary, "IMPORT DECK", Vec2::new(210.0, 56.0));
+                        bar.commands().entity(b).insert(MenuAction::OpenImport);
+                    }
                     let b = spawn_button(bar, &fonts, ButtonKind::Primary, play_label, Vec2::new(280.0, 66.0));
                     bar.commands().entity(b).insert((MenuAction::StartMatch, PlayButton));
                 });

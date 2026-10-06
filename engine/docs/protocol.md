@@ -7,7 +7,7 @@ Multiplayer (up to 4 seats, humans and/or Forge AI): a **lobby** match is opened
 seat has a secret **token** and its sockets connect with `ws://host/ws/match/{id}?token={token}`. Each human seat is
 its own Forge GUI, so `state`/`input`/`prompt`/`log`/`events` frames are per seat (hidden info redacted for *that*
 player) and only reach that seat's sockets. A socket without a token is accepted only by classic (`POST /api/match`)
-matches, where it is the human. See [Multiplayer](#multiplayer).
+matches, where it is the human, and not at all by a [public engine](#public-engine). See [Multiplayer](#multiplayer).
 
 Design rule: **the client never computes legality**. Cards are clickable when the engine says so
 (`input.selectable`, or the engine accepts/rejects a click and answers with `flash`), and blocking
@@ -17,7 +17,7 @@ decisions arrive as `prompt` frames listing the legal options; the client answer
 
 | Method | Path | Body / params | Returns |
 |---|---|---|---|
-| GET | `/api/health` | | `{ok, cards, protocol: 2, publicUrl, web, maxPlayers}` — `publicUrl` = base other machines reach this engine at (invite links: `--public-url`, `$MTG_DUELSTONE_PUBLIC_URL`, else the first LAN IPv4); `web` = the browser client is served at `/` |
+| GET | `/api/health` | | `{ok, cards, protocol: 2, publicUrl, web, maxPlayers}` — `publicUrl` = base other machines reach this engine at (invite links: `--public-url`, `$MTG_DUELSTONE_PUBLIC_URL`, else the first LAN IPv4); `web` = the browser client is served at `/`; `public` = a [public engine](#public-engine), which also reports `liveMatches` and `maxMatches` |
 | GET | `/api/decks` | `?format=constructed\|commander` (default `commander`), `?kind=user` | `[ {ref, name, commanders[], mainCount, colorIdentity, format, problem, cover?} ]` — `cover` = card name whose art stands for the deck (commander, else its signature card; clients may override it); `ref` = `starter:<name>` (repo `decks/<format>/*.dck`) / `precon:<name>` (commander) / `theme:<name>` (Forge's bundled 60-card constructed decks) / `user:<name>` / `file:<path>`; `problem` is null for legal decks (Forge `DeckFormat` check). The special ref `random` (in `POST /api/match`) picks a legal deck of the match format (starters favoured). |
 | GET | `/api/deck`, `/api/deck/export` | `?ref=…&format=?` | full deck / `.dck` text |
 | POST | `/api/deck`, `/api/deck/validate`, `/api/deck/import` | body gains `format?` (default commander); constructed decks save to `~/.forge/decks/constructed` and need no `commanders` | as before |
@@ -25,9 +25,9 @@ decisions arrive as `prompt` frames listing the legal options; the client answer
 | GET | `/api/img` | `?name=&set?&back?&version=normal\|large\|art_crop\|png` (default `normal`; `small`/`border_crop` also accepted) | JPEG from the offline pack (`offline/img`, filled by `tools/fetch-offline.sh`); never goes online. One printing per card, so `set` is ignored; `art_crop` is the art, every other version is the `large` scan. 404 if the pack has no image |
 | GET | `/api/rulings` | `?name=` | `{"scryfallUri","rulings":[{"date","comment"}]}` from `offline/data/rulings.json`; an empty list when the card has none |
 | GET | `/api/matches` | | `[ matchInfo ]` |
-| POST | `/api/match` | `{humanDeck, aiDeck, format?, seed?, humanName?, humanAvatar?}` — `humanAvatar` = your [avatar](#avatars); `format` is `"constructed"` (60-card main deck, 20 life, `GameType.Constructed`) or `"commander"` (default; 100 cards, 40 life) | `matchInfo` (`{id, humanDeck, aiDeck, humanDeckName, aiDeckName, format, started, over, sockets, turn, gameOver}`) |
+| POST | `/api/match` | `{humanDeck, aiDeck, format?, seed?, humanName?, humanAvatar?}` — `humanAvatar` = your [avatar](#avatars); `format` is `"constructed"` (60-card main deck, 20 life, `GameType.Constructed`) or `"commander"` (default; 100 cards, 40 life) | `matchInfo` (`{id, humanDeck, aiDeck, humanDeckName, aiDeckName, format, started, over, sockets, turn, gameOver}`) plus `token`, the human seat's token (only in this reply); 503 when a public engine is full |
 | GET | `/api/match/{id}` | | `matchInfo` |
-| DELETE | `/api/match/{id}` | | |
+| DELETE | `/api/match/{id}` | `?token=` (public engine only: required; the seat concedes and the match is dropped once over) | |
 | GET | `/api/engine/cards?names=a|b|c` | | `{name: bool}` — can Forge play this card? |
 | GET | `/api/cards/search` | `?q=&ci=WUBG&type=&text=&commander=1&cmc=&tag=&sort=name\|popular&offset=0&limit=60` (limit ≤ 200). `cmc` = exact mana value, `7` means 7+. `tag` = one [card tag](#card-tags) key (unknown → 400). `sort` defaults to `name` (prefix matches first) when `q` is non-empty and to `popular` when it is empty | `[ card ]` (see `card` below) |
 | GET | `/api/cards/get` | `?name=` | `card` |
@@ -212,6 +212,19 @@ and `players`) followed by its seat's normal snapshot; open seats are left out o
 5. A seated human whose sockets stay closed for 2 minutes mid-game concedes automatically and their seat answers
    every remaining question with defaults, so the table never waits on someone who closed the tab. Reconnecting
    with the same token within that window resumes the seat (`hello` + snapshot).
+
+## Public engine
+
+`--public` (or `MTG_DUELSTONE_PUBLIC=1`; cap with `--max-matches N` / `MTG_DUELSTONE_MAX_MATCHES`, default 6) is for
+an engine strangers reach, like the website's "Play in your browser" (`packaging/server`). It changes:
+
+- Only classic vs-AI matches. `GET /api/matches`, `/api/lobby*`, `/api/event*` and every write to decks, cubes and the
+  collection answer 403 `{error}`; reads (decks, cards, recommendations, images) work as usual.
+- `POST /api/match` answers 503 `{error}` while `maxMatches` games are unfinished. The match socket needs the `token`
+  from its reply.
+- A human whose sockets have all been gone for 2 minutes (or who never connected) concedes, like an abandoned
+  multiplayer seat, and a finished match without sockets is dropped after 30 s. `DELETE /api/match/{id}?token=`
+  starts that concession without the wait.
 
 ## Threading notes (server)
 Game thread = Forge's; it blocks inside `prompt`s and inside Inputs. Clicks are applied on the headless "EDT"

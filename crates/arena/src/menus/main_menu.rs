@@ -11,7 +11,7 @@ use super::MenuAction;
 use super::stage::IntroClock;
 use bevy::image::TRANSPARENT_IMAGE_HANDLE;
 
-use crate::shared::{AppState, ArenaFonts, AvatarArt, Settings};
+use crate::shared::{AppState, ArenaFonts, AvatarArt, ServerFacts, Settings};
 use crate::style::*;
 
 pub struct MainMenuPlugin;
@@ -58,7 +58,8 @@ fn ui_t(clock: &IntroClock) -> f32 {
     if clock.full { clock.t } else { 2.2 + clock.t * 1.8 }
 }
 
-fn spawn_main_menu(mut commands: Commands, fonts: Res<ArenaFonts>, settings: Res<Settings>) {
+fn spawn_main_menu(mut commands: Commands, fonts: Res<ArenaFonts>, settings: Res<Settings>, facts: Res<ServerFacts>) {
+    let public = facts.is_public();
     let shadow = TextShadow { offset: Vec2::new(0.0, 4.0), color: Color::srgba(0.0, 0.0, 0.0, 0.85) };
     commands
         .spawn((
@@ -131,6 +132,8 @@ fn spawn_main_menu(mut commands: Commands, fonts: Res<ArenaFonts>, settings: Res
                     .into_iter()
                     // a browser tab can't quit itself
                     .filter(|(_, a)| !(crate::platform::WEB && *a == MenuAction::Quit))
+                    // a public engine only plays the AI and keeps no decks or cubes for visitors
+                    .filter(|(_, a)| !(public && matches!(a, MenuAction::Multiplayer | MenuAction::Cubes | MenuAction::Decks)))
                     .enumerate()
                 {
                     let kind = if act == MenuAction::Quit { ButtonKind::Ghost } else { ButtonKind::Secondary };

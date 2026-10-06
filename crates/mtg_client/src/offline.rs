@@ -14,8 +14,8 @@ use crate::launcher::bundle_dirs;
 const MARKER: &str = "data";
 
 /// `$MTG_DUELSTONE_OFFLINE`, then `offline/` next to a packaged build, then the platform data
-/// dir (`~/.local/share/mtg-duelstone/offline`, where a release user's `fetch-offline` writes),
-/// then `offline/` in the cwd or any parent (a source checkout).
+/// dir (`~/.local/share/mtg-duelstone/offline`, `AppData\Local\…` on Windows, where a release user's
+/// `fetch-offline` writes), then `offline/` in the cwd or any parent (a source checkout).
 pub fn dir() -> Option<PathBuf> {
     if let Some(d) = std::env::var_os("MTG_DUELSTONE_OFFLINE").map(PathBuf::from) {
         return Some(d);
@@ -30,10 +30,11 @@ pub fn dir() -> Option<PathBuf> {
 }
 
 /// `~/.local/share/mtg-duelstone/offline` (platform data dir): the default target of `fetch-offline`
-/// outside a source checkout.
+/// outside a source checkout. The local data dir: on Windows the default one roams, and 9 GB of
+/// images must not follow a user between machines.
 pub fn user_dir() -> PathBuf {
     directories::ProjectDirs::from("", "", "mtg-duelstone")
-        .map(|d| d.data_dir().to_path_buf())
+        .map(|d| d.data_local_dir().to_path_buf())
         .unwrap_or_else(std::env::temp_dir)
         .join("offline")
 }

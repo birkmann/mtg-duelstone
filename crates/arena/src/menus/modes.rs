@@ -73,7 +73,8 @@ fn section(parent: &mut ChildSpawnerCommands, fonts: &ArenaFonts, title: &str, f
         });
 }
 
-fn spawn_screen(mut commands: Commands, fonts: Res<ArenaFonts>, mode: Res<MatchMode>) {
+fn spawn_screen(mut commands: Commands, fonts: Res<ArenaFonts>, mode: Res<MatchMode>, facts: Res<ServerFacts>) {
+    let public = facts.is_public();
     let subtitle = match *mode {
         MatchMode::Host { players } => format!("Hosting a table for {players}"),
         _ => "Against the Forge AI".to_string(),
@@ -133,16 +134,19 @@ fn spawn_screen(mut commands: Commands, fonts: Res<ArenaFonts>, mode: Res<MatchM
                         r.commands().entity(t).insert((VariantToggle(v), MenuAction::ToggleVariant(v)));
                     }
                 });
-                section(col, &fonts, "LIMITED", |r| {
-                    for (k, desc) in [
-                        (EventKind::CubeDraft, "Draft a cube — Legacy, Vintage, Pauper or your own — against AI drafters and friends."),
-                        (EventKind::SetDraft, "Booster draft a real Magic set."),
-                        (EventKind::Sealed, "Open six packs of a cube or set and build from them."),
-                    ] {
-                        let t = tile(r, &fonts, k.label(), desc, 375.0);
-                        r.commands().entity(t).insert(MenuAction::OpenEvent(k));
-                    }
-                });
+                // events keep a pod and its decks on the engine, which a public host doesn't offer
+                if !public {
+                    section(col, &fonts, "LIMITED", |r| {
+                        for (k, desc) in [
+                            (EventKind::CubeDraft, "Draft a cube — Legacy, Vintage, Pauper or your own — against AI drafters and friends."),
+                            (EventKind::SetDraft, "Booster draft a real Magic set."),
+                            (EventKind::Sealed, "Open six packs of a cube or set and build from them."),
+                        ] {
+                            let t = tile(r, &fonts, k.label(), desc, 375.0);
+                            r.commands().entity(t).insert(MenuAction::OpenEvent(k));
+                        }
+                    });
+                }
             });
             root.spawn(Node { width: Val::Px(1180.0), max_width: Val::Percent(100.0), align_items: AlignItems::Center, column_gap: Val::Px(16.0), ..default() }).with_children(|bar| {
                 bar.spawn((SummaryText, Node { flex_grow: 1.0, ..default() }, ui_text(&fonts.body, "", 18.0, TEXT)));

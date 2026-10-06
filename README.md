@@ -161,7 +161,7 @@ A player who is out keeps watching until the game ends. Someone whose connection
 concedes and their seat plays itself out with defaults, so the table never waits on a closed tab; reconnecting
 before that resumes the seat.
 
-For browser invitees, the engine has to serve the web client. The Mac and Linux downloads include it; from
+For browser invitees, the engine has to serve the web client. The Windows, Mac and Linux downloads include it; from
 source, build it once:
 
 ```bash
@@ -182,12 +182,15 @@ Short on friends? Fill seats with headless bots that play over the real protocol
 
 | | |
 |---|---|
+| **Windows** (10 or 11, 64-bit) | [mtg-duelstone-windows-x86_64-setup.exe](https://github.com/birkmann/mtg-duelstone/releases/latest/download/mtg-duelstone-windows-x86_64-setup.exe): run it; it installs for your user without an administrator prompt. It is not signed, so SmartScreen may say it protected your PC: **More info** → **Run anyway**. Allow Java on private networks when the firewall asks, to host multiplayer games. No installer: [the zip](https://github.com/birkmann/mtg-duelstone/releases/latest/download/mtg-duelstone-windows-x86_64.zip), unzipped anywhere. |
 | **Mac** (Apple chip, macOS 12+) | [mtg-duelstone-macos-arm64.dmg](https://github.com/birkmann/mtg-duelstone/releases/latest/download/mtg-duelstone-macos-arm64.dmg): open it and drag MTG Duelstone into Applications. The app is not notarized, so on first launch allow it under System Settings → Privacy & Security → **Open Anyway**. |
 | **Linux** (x86_64) | [mtg-duelstone-x86_64.AppImage](https://github.com/birkmann/mtg-duelstone/releases/latest/download/mtg-duelstone-x86_64.AppImage): `chmod +x` it and run it. Needs Vulkan graphics drivers. |
 
-Both bundle the engine, Forge's card data, a Java runtime and the browser client for multiplayer invitees, so
+All three bundle the engine, Forge's card data, a Java runtime and the browser client for multiplayer invitees, so
 there is nothing else to install. Card images are not included (Wizards' art is not redistributed). Download them
-once, about 9 GB into `~/.local/share/mtg-duelstone/offline` (re-run to resume or update):
+once, about 9 GB into `~/.local/share/mtg-duelstone/offline` (`%LOCALAPPDATA%\mtg-duelstone\data\offline` on
+Windows; re-run to resume or update). On Windows, tick the box at the end of the installer or open *MTG Duelstone -
+Download card images* from the Start menu (in the zip: `fetch-offline.exe`); elsewhere:
 
 ```bash
 ./mtg-duelstone-x86_64.AppImage --fetch-images

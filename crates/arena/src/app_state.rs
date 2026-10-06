@@ -75,10 +75,11 @@ fn stop_engine_on_exit(mut exits: MessageReader<AppExit>, handle: Option<ResMut<
     }
 }
 
-/// Id of the vs-AI match currently being played (deleted on the engine when we leave). Tables are
-/// shared with other players, so leaving one never deletes it; the engine prunes it.
+/// Id + seat token of the vs-AI match currently being played (deleted on the engine when we leave;
+/// a public engine wants the token as proof). Tables are shared with other players, so leaving one
+/// never deletes it; the engine prunes it.
 #[derive(Resource, Debug, Clone)]
-pub struct ActiveMatch(pub String);
+pub struct ActiveMatch(pub String, pub Option<String>);
 
 /// Walk up from `start` looking for `rel`.
 #[cfg(not(target_arch = "wasm32"))]
@@ -361,10 +362,10 @@ fn poll_loading(
             let api = Api::new(cfg.base_url.clone());
             match res {
                 Ok(Created::Match(info)) => {
-                    let url = api.ws_url(&info.id, None);
-                    info!("match {} created; connecting {url}", info.id);
+                    let url = api.ws_url(&info.id, info.token.as_deref());
+                    info!("match {} created; connecting", info.id);
                     commands.insert_resource(NetLink(EngineLink::connect(&url, cli.record.as_deref())));
-                    commands.insert_resource(ActiveMatch(info.id));
+                    commands.insert_resource(ActiveMatch(info.id, info.token));
                     status.message = "Waiting for the first state…".into();
                 }
                 Ok(Created::Seat(t)) => {
@@ -437,9 +438,9 @@ fn end_match(
     *lobby = LobbyView::default();
     if let Some(m) = active {
         let api = Api::new(cfg.base_url.clone());
-        let id = m.0.clone();
+        let (id, token) = (m.0.clone(), m.1.clone());
         drop(mtg_client::spawn(async move {
-            let _ = api.delete_match(&id).await;
+            let _ = api.delete_match(&id, token.as_deref()).await;
         }));
         commands.remove_resource::<ActiveMatch>();
     }

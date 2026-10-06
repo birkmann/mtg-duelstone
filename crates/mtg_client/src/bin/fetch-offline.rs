@@ -213,7 +213,32 @@ struct ShowcaseOut {
     artists: BTreeMap<String, u32>,
 }
 
-fn main() -> Result<()> {
+fn main() -> std::process::ExitCode {
+    let r = run();
+    // what returning the Result would print, but before the console may close
+    if let Err(e) = &r {
+        eprintln!("Error: {e:?}");
+    }
+    hold_console();
+    if r.is_ok() { std::process::ExitCode::SUCCESS } else { std::process::ExitCode::FAILURE }
+}
+
+/// Windows: started by double-click, from a Start menu shortcut or from the windowed game, this is
+/// the only process on its console, which closes with it. Keep it open so the result can be read.
+#[cfg(windows)]
+fn hold_console() {
+    let mut pids = [0u32; 2];
+    if unsafe { windows_sys::Win32::System::Console::GetConsoleProcessList(pids.as_mut_ptr(), 2) } == 1 {
+        print!("Press Enter to close this window.");
+        let _ = std::io::stdout().flush();
+        let _ = std::io::stdin().read_line(&mut String::new());
+    }
+}
+
+#[cfg(not(windows))]
+fn hold_console() {}
+
+fn run() -> Result<()> {
     let args = parse_args()?;
     let img = args.out.join("img");
     let data = args.out.join("data");

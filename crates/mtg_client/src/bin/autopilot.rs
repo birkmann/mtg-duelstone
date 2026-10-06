@@ -179,9 +179,11 @@ fn play_game(args: &Args, rest: &Rest, n: u32, human: &str, ai: &str, hist: &mut
         }
     };
     let rec_path = args.record.as_ref().map(|d| d.join(format!("game-{n}-{}.jsonl", args.format.as_str())));
-    let link = EngineLink::connect(&rest.ws_url(&m.id), rec_path.as_deref());
+    // a public engine binds the seat to the token (older engines send none and ignore it)
+    let id = m.token.as_ref().map_or_else(|| m.id.clone(), |t| format!("{}?token={t}", m.id));
+    let link = EngineLink::connect(&rest.ws_url(&id), rec_path.as_deref());
     let res = drive_seat(args, &format!("game {n}"), args.seed.wrapping_add(n as u64), &link, hist, STALL_SECS);
-    let _ = rest.delete_match(&m.id);
+    let _ = rest.delete_match(&id);
     fin(res, t0)
 }
 

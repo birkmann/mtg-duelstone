@@ -11,7 +11,7 @@
 #   DEST/offline/data/           rulings + showcase data (committed)
 #   DEST/offline/img/            card images, only with --with-images: Wizards' art stays out of
 #                                public releases; such users run the bundled fetch-offline once
-# Shared by build-appimage.sh and build-app.sh.
+# Shared by build-appimage.sh, build-app.sh and build-windows.sh (in Git Bash).
 #   ./packaging/stage-bundle.sh DEST [--with-images]
 # Needs JDK 17 (jlink, jdeps, jar; $JAVA_HOME or on PATH), the engine jar and a Forge checkout.
 set -euo pipefail
@@ -20,6 +20,8 @@ dest=${1:?usage: stage-bundle.sh DEST [--with-images]}
 with_images=${2:-}
 jar=${ENGINE_JAR:-engine/target/forge-ws-server.jar}
 forge=${FORGE_GUI:-forge/forge-gui}
+# Git Bash: JAVA_HOME is a Windows path (C:\...)
+if [[ -n "${JAVA_HOME:-}" ]] && command -v cygpath >/dev/null; then JAVA_HOME=$(cygpath -u "$JAVA_HOME"); fi
 bin_dir=${JAVA_HOME:+$JAVA_HOME/bin/}
 
 [[ -f "$jar" ]] || { echo "missing $jar: build it with (cd engine && mvn -q -B package)" >&2; exit 1; }
@@ -65,7 +67,7 @@ mkdir -p "$dest/forge/res/cardsfolder"
 
 # jdeps finds what the engine's classes reference; the extras are loaded reflectively: extra
 # charsets and the zip file system. No TLS: the engine never goes online.
-modules=$("${bin_dir}jdeps" --print-module-deps --ignore-missing-deps --multi-release 17 "$jar" | tail -n1)
+modules=$("${bin_dir}jdeps" --print-module-deps --ignore-missing-deps --multi-release 17 "$jar" | tail -n1 | tr -d '\r')
 modules="$modules,jdk.charsets,jdk.zipfs"
 echo "jlink modules: $modules"
 "${bin_dir}jlink" --add-modules "$modules" --output "$dest/jre" \

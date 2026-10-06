@@ -26,3 +26,12 @@ jobs:
       - run: cargo test --workspace
       # the browser client shares the app's code: keep it compiling
       - run: cargo check -p arena --target wasm32-unknown-unknown
+
+  windows:
+    # Releases ship a Windows build: keep the platform code (cfg(windows)) compiling.
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo check -p arena -p mtg_client --bins

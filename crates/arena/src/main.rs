@@ -1,3 +1,6 @@
+// Windows release builds are a windowed program: no console window next to the game.
+#![cfg_attr(all(windows, not(debug_assertions)), windows_subsystem = "windows")]
+
 #[cfg(not(target_arch = "wasm32"))]
 use std::path::PathBuf;
 

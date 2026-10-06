@@ -374,7 +374,19 @@ public final class MatchSession {
             for (final Seat s : seats) if (s.kind == Seat.Kind.HUMAN && token.equals(s.token)) return s;
             return null;
         }
-        return lobby ? null : seats.get(0);
+        // a public engine hands every creator a token; without one, any visitor could take over any game
+        return lobby || PublicMode.on() ? null : seats.get(0);
+    }
+
+    /** The human holding {@code token} left for good: the reaper concedes for them. */
+    boolean abandon(final String token) {
+        for (final Seat s : seats) {
+            if (s.kind == Seat.Kind.HUMAN && token.equals(s.token)) {
+                s.abandoned = true;
+                return true;
+            }
+        }
+        return false;
     }
 
     private JsonObject hello(final Seat s) {
@@ -443,9 +455,12 @@ public final class MatchSession {
      */
     void reapAbandoned(final long now) {
         if (!started || over) return;
-        final boolean table = humanSeats() >= 2; // vs. AI only: the classic flow keeps the game for a later reconnect
+        // vs. AI only, the classic flow keeps the game for a later reconnect; a public engine can't keep every closed tab's game
+        final boolean table = humanSeats() >= 2 || PublicMode.on();
         for (final Seat s : seats) {
             if (s.kind != Seat.Kind.HUMAN) continue;
+            // a public game whose creator never connected (or whose socket died before attach) starts its clock now
+            if (PublicMode.on() && !s.connected() && s.goneSince == 0) s.goneSince = now;
             final boolean gone = table && !s.connected() && s.goneSince != 0 && now - s.goneSince >= ABANDON_MS;
             if (gone && !s.abandoned) {
                 s.abandoned = true;

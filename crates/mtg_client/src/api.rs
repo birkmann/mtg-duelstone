@@ -98,8 +98,10 @@ impl Api {
     pub async fn create_match(&self, req: &CreateMatch) -> Result<MatchInfo> {
         self.post("/api/match", req, 30).await?.ok("create match")?.json("matchInfo")
     }
-    pub async fn delete_match(&self, id: &str) -> Result<()> {
-        request("DELETE", &self.url(&format!("/api/match/{id}")), None, Duration::from_secs(5)).await?.ok("delete match").map(|_| ())
+    /// `token` = the seat token from [`Api::create_match`]; a public engine refuses the delete without it.
+    pub async fn delete_match(&self, id: &str, token: Option<&str>) -> Result<()> {
+        let q = token.map(|t| query(&[("token", t)])).unwrap_or_default();
+        request("DELETE", &self.url(&format!("/api/match/{id}{q}")), None, Duration::from_secs(5)).await?.ok("delete match").map(|_| ())
     }
     /// Raw JPEG bytes from the engine's offline pack (`/api/img`); `Err` (404) when the pack has no image.
     pub async fn image_bytes(&self, req: &ImageRequest) -> Result<Vec<u8>> {

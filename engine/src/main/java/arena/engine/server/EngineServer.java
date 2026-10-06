@@ -147,6 +147,8 @@ public final class EngineServer {
                 if (!route(m, path, req, resp)) json(resp, 404, err("unknown endpoint " + m + " " + path));
             } catch (final IllegalArgumentException e) {
                 json(resp, 400, err(e.getMessage()));
+            } catch (final MatchManager.Full e) {
+                json(resp, 503, err(e.getMessage()));
             } catch (final Exception e) {
                 e.printStackTrace();
                 json(resp, 500, err(String.valueOf(e)));
@@ -154,6 +156,7 @@ public final class EngineServer {
         }
 
         private boolean route(final String m, final String path, final HttpServletRequest req, final HttpServletResponse resp) throws Exception {
+            if (PublicMode.refuses(m, path)) { json(resp, 403, err(PublicMode.DESKTOP_ONLY)); return true; }
             final arena.engine.deck.CardCatalog catalog = arena.engine.deck.CardCatalog.get();
             switch (m + " " + path) {
                 // ---- engine / images -------------------------------------------------------------
@@ -163,6 +166,11 @@ public final class EngineServer {
                     o.addProperty("cards", StaticData.instance().getCommonCards().getAllCards().size());
                     o.addProperty("publicUrl", publicUrl); o.addProperty("web", servesWeb);
                     o.addProperty("maxPlayers", MatchSession.MAX_SEATS);
+                    o.addProperty("public", PublicMode.on());
+                    if (PublicMode.on()) { // the website shows "all tables busy" before a visitor downloads the client
+                        o.addProperty("liveMatches", matches.live());
+                        o.addProperty("maxMatches", PublicMode.maxMatches());
+                    }
                     json(resp, 200, o);
                 }
                 case "GET /img" -> {
@@ -197,7 +205,11 @@ public final class EngineServer {
                     final String human = Json.str(b, "humanDeck"), ai = Json.str(b, "aiDeck");
                     if (human == null || ai == null) throw new IllegalArgumentException("humanDeck and aiDeck refs required");
                     final Integer seedI = b.has("seed") && !b.get("seed").isJsonNull() ? b.get("seed").getAsInt() : null;
-                    json(resp, 201, matches.create(human, ai, GameSetup.fromJson(b), seedI == null ? null : seedI.longValue(), Json.str(b, "humanName"), Avatars.clean(b.get("humanAvatar"))).describe());
+                    final MatchSession ms = matches.create(human, ai, GameSetup.fromJson(b), seedI == null ? null : seedI.longValue(), Json.str(b, "humanName"), Avatars.clean(b.get("humanAvatar")));
+                    final JsonObject o = ms.describe();
+                    // only the creator learns it; a public engine binds the human seat to it (see seatFor)
+                    o.addProperty("token", ms.tokenOf(0));
+                    json(resp, 201, o);
                 }
                 case "POST /lobby" -> { // {format, players: 2..4, name, deck, avatar?} → host ticket (seat 0 token + invite)
                     final JsonObject b = body(req);
@@ -289,7 +301,10 @@ public final class EngineServer {
                             catch (final IllegalStateException e) { json(resp, 409, err(e.getMessage())); }
                         } else return false;
                     } else if ("DELETE".equals(m) && path.startsWith("/match/")) {
-                        matches.remove(path.substring("/match/".length())); json(resp, 200, new JsonObject());
+                        final String id = path.substring("/match/".length());
+                        if (!PublicMode.on()) matches.remove(id);
+                        else if (!matches.leave(id, req.getParameter("token"))) { json(resp, 403, err("unknown match or seat token")); return true; }
+                        json(resp, 200, new JsonObject());
                     } else return false;
                 }
             }

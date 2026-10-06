@@ -36,10 +36,10 @@ impl Drop for EngineProcess {
     }
 }
 
-/// `~/.local/share/mtg-duelstone/engine.log` (platform data dir).
+/// `~/.local/share/mtg-duelstone/engine.log` (platform data dir; `AppData\Local` on Windows).
 pub fn log_path() -> PathBuf {
     directories::ProjectDirs::from("", "", "mtg-duelstone")
-        .map(|d| d.data_dir().to_path_buf())
+        .map(|d| d.data_local_dir().to_path_buf())
         .unwrap_or_else(std::env::temp_dir)
         .join("engine.log")
 }
@@ -48,7 +48,12 @@ pub fn log_path() -> PathBuf {
 /// next to the executable, in a macOS bundle's `Contents/Resources`, or in `../share/mtg-duelstone`
 /// (AppImage and `/usr` installs). Packaging scripts lay files out to match; see `packaging/`.
 pub fn bundle_dirs() -> Vec<PathBuf> {
+    // Resolve links (an AppImage's AppRun, a `/usr/bin` symlink) to reach the real install. Not on
+    // Windows, where that yields `\\?\` paths: `..` is not resolved in them.
+    #[cfg(not(windows))]
     let exe = std::env::current_exe().and_then(|e| e.canonicalize());
+    #[cfg(windows)]
+    let exe = std::env::current_exe();
     let Some(exe_dir) = exe.ok().and_then(|e| e.parent().map(Path::to_path_buf)) else {
         return Vec::new();
     };
@@ -65,12 +70,13 @@ pub fn find_java(cfg: &LaunchConfig) -> PathBuf {
     if let Some(j) = &cfg.java {
         return j.clone();
     }
+    let bin = format!("bin/java{}", std::env::consts::EXE_SUFFIX);
     // A packaged build ships its own runtime; prefer it over whatever Java the user has.
-    if let Some(j) = find_bundled("jre/bin/java") {
+    if let Some(j) = find_bundled(&format!("jre/{bin}")) {
         return j;
     }
     if let Some(h) = std::env::var_os("JAVA_HOME") {
-        let p = Path::new(&h).join("bin/java");
+        let p = Path::new(&h).join(&bin);
         if p.is_file() {
             return p;
         }
@@ -81,7 +87,7 @@ pub fn find_java(cfg: &LaunchConfig) -> PathBuf {
             let mut cands: Vec<PathBuf> = rd
                 .flatten()
                 .filter(|e| e.file_name().to_string_lossy().starts_with("jdk-17"))
-                .map(|e| e.path().join("bin/java"))
+                .map(|e| e.path().join(&bin))
                 .filter(|p| p.is_file())
                 .collect();
             cands.sort();
@@ -141,7 +147,7 @@ pub fn ensure_engine(cfg: &LaunchConfig, progress: &mut dyn FnMut(&str)) -> anyh
     // Serve the browser client so the invite links this engine hands out open the game for people
     // without the app: a packaged build's `web/`, else the jar's checkout (`<repo>/web/dist`, from
     // tools/build-web.sh).
-    let checkout_dist = || jar.canonicalize().ok().and_then(|j| j.ancestors().nth(3).map(|r| r.join("web/dist")));
+    let checkout_dist = || jar.canonicalize().ok().and_then(|j| j.ancestors().nth(3).map(|r| r.join("web").join("dist")));
     if let Some(dist) = find_bundled("web/index.html").and_then(|i| i.parent().map(Path::to_path_buf)).or_else(checkout_dist).filter(|d| d.join("index.html").is_file()) {
         cmd.arg("--static").arg(dist);
     }
@@ -156,7 +162,15 @@ pub fn ensure_engine(cfg: &LaunchConfig, progress: &mut dyn FnMut(&str)) -> anyh
             Ok(())
         });
     }
+    // java.exe is a console program: started from the windowed game it would open a console window.
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        cmd.creation_flags(windows_sys::Win32::System::Threading::CREATE_NO_WINDOW);
+    }
     let child = spawn_from_long_lived_thread(cmd).with_context(|| format!("spawn {} -jar {}", java.display(), jar.display()))?;
+    #[cfg(windows)]
+    kill_with_us(&child);
     let mut proc = EngineProcess { child };
 
     let t0 = Instant::now();
@@ -205,6 +219,32 @@ fn spawn_from_long_lived_thread(cmd: Command) -> std::io::Result<std::process::C
     let (reply_tx, reply_rx) = mpsc::channel();
     tx.lock().expect("spawner lock").send((cmd, reply_tx)).map_err(std::io::Error::other)?;
     reply_rx.recv().map_err(std::io::Error::other)?
+}
+
+/// Windows has no parent-death signal: the engine joins a job object that kills its processes when
+/// the job's last handle closes, which happens when this process ends, however it ends. The
+/// handle is deliberately never closed.
+#[cfg(windows)]
+fn kill_with_us(child: &std::process::Child) {
+    use std::os::windows::io::AsRawHandle;
+    use std::sync::OnceLock;
+    use windows_sys::Win32::System::JobObjects::*;
+    // the HANDLE as an address: raw pointers are not Sync
+    static JOB: OnceLock<usize> = OnceLock::new();
+    let job = *JOB.get_or_init(|| unsafe {
+        let job = CreateJobObjectW(std::ptr::null(), std::ptr::null());
+        if job.is_null() {
+            return 0;
+        }
+        let mut info: JOBOBJECT_EXTENDED_LIMIT_INFORMATION = std::mem::zeroed();
+        info.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
+        let size = std::mem::size_of::<JOBOBJECT_EXTENDED_LIMIT_INFORMATION>() as u32;
+        SetInformationJobObject(job, JobObjectExtendedLimitInformation, (&raw const info).cast(), size);
+        job as usize
+    });
+    if job != 0 {
+        unsafe { AssignProcessToJobObject(job as _, child.as_raw_handle() as _) };
+    }
 }
 
 /// Like [`find_jar`] but for directories (the Forge assets dir).
