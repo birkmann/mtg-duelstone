@@ -1,7 +1,9 @@
 # offline/
 
-Everything the game and its build would otherwise download. Once this folder is filled, nothing
-talks to Scryfall or needs internet access: not the game, not the engine, not the build.
+The complete offline pack for the game and its build. Desktop builds prefer this pack and download
+missing card images automatically into the user data folder (`offline/cache`), keeping them for offline
+reuse. Filling the full pack is optional; it lets you view previously unseen cards without internet.
+An engine started directly stays offline unless given `--image-cache WRITABLE_DIR`.
 
 Fill it once, while online:
 
@@ -22,7 +24,7 @@ tools/fetch-offline.sh --images-only   # just refresh card images / rulings / sh
 | `toolchain/` | no | JDK 17 + Maven tarballs | `tools/install-toolchain.sh` |
 
 Card images are © Wizards of the Coast. They are never committed or shipped in public releases;
-each checkout fetches its own copy.
+each installation fetches its own copy.
 
 The engine finds this folder with `--offline DIR` (the game passes it) or by walking up from its
 working directory. The game also looks in `$MTG_DUELSTONE_OFFLINE`, next to a packaged build, and

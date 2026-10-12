@@ -60,6 +60,8 @@ python3 tools/build-website-decks.py                  # the engine's deck lists 
 ```
 
 ## Offline
-Nothing touches the network at runtime: `/api/img` and `/api/rulings` are served from `offline/` (see
-`offline/README.md`), and the splash showcase reads it directly. Only `fetch-offline` (bin) downloads. Don't add
-runtime network calls; put new data into the fetcher. After adding a crate, re-run `tools/fetch-offline.sh`.
+The engine prefers `offline/` for `/api/img` and `/api/rulings` (see `offline/README.md`), and the splash
+showcase reads it directly. Desktop launches pass `--image-cache` in the user data directory so missing
+card images download automatically from Scryfall and remain available offline. Direct engine launches
+without this flag stay offline. `fetch-offline` optionally downloads the complete pack. Keep other data
+in the fetcher. After adding a crate, re-run `tools/fetch-offline.sh`.

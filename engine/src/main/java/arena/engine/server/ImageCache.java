@@ -11,14 +11,13 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.HashMap;
+import java.util.Locale;
 import java.util.Map;
 
 /**
- * Card images and rulings, served from the offline pack ({@code offline/}) and nothing else.
- * The game must run without internet and without depending on Scryfall, so nothing is fetched at
- * runtime: {@code tools/fetch-offline.sh} fills the pack once (one printing per card, {@code large}
- * + {@code art_crop}). A card missing from the pack answers 404 instantly, and the client falls back
- * to drawing its rules text.
+ * Card images and rulings, preferring the offline pack. Desktop launches supply a writable image
+ * cache so a fresh install can fetch missing art without requiring the complete 9 GB pack first.
+ * Without a cache directory the engine remains strictly offline.
  */
 public final class ImageCache {
     /** {@code img/index.json} entry, written by the {@code fetch-offline} bin. */
@@ -26,14 +25,25 @@ public final class ImageCache {
 
     private final Path pack;
     private final Map<String, Entry> index = new HashMap<>();
+    private final DownloadedImages downloads;
     private volatile Map<String, String> rulings; // lowercase full name → JSON, loaded on first use
 
     public ImageCache(final Path pack) throws IOException {
+        this(pack, (DownloadedImages) null);
+    }
+
+    public ImageCache(final Path pack, final Path imageCache) throws IOException {
+        this(pack, imageCache == null ? null : new DownloadedImages(imageCache));
+    }
+
+    ImageCache(final Path pack, final DownloadedImages downloads) throws IOException {
         this.pack = pack;
+        this.downloads = downloads;
         final Path idx = pack == null ? null : pack.resolve("img/index.json");
         if (idx == null || !Files.isRegularFile(idx)) {
             System.err.println("[server] WARNING: no offline image pack at " + (idx == null ? "(none found)" : idx)
-                    + " — cards will show as text. Run tools/fetch-offline.sh once while online.");
+                    + (downloads == null ? " — cards will show as text. Run tools/fetch-offline.sh once while online."
+                    : " — missing card art will download automatically."));
             return;
         }
         try (Reader r = Files.newBufferedReader(idx, StandardCharsets.UTF_8)) {
@@ -71,21 +81,24 @@ public final class ImageCache {
     }
 
     /**
-     * The image file, or null if the pack has none. {@code set} is ignored: the pack holds one
+     * The image file from the pack or download cache, or null if neither has art. {@code set} is ignored: the pack holds one
      * printing per card. Every version but {@code art_crop} is served from {@code large}.
      */
-    public File get(final String name, final String set, final boolean back, final String version) {
+    public File get(final String name, final String set, final boolean back, final String version) throws IOException {
         final Entry e = lookup(name);
-        if (e == null) return null;
-        final boolean useBack = e.back() && (back || e.face() == 1);
-        final String dir = "art_crop".equals(version) ? "art_crop" : "large";
-        final File f = pack.resolve("img").resolve(dir).resolve(e.id().substring(0, 2)).resolve(e.id() + (useBack ? "-back" : "") + ".jpg").toFile();
-        return f.isFile() ? f : null;
+        if (e != null) {
+            final boolean useBack = e.back() && (back || e.face() == 1);
+            final String dir = "art_crop".equals(version) ? "art_crop" : "large";
+            final File f = pack.resolve("img").resolve(dir).resolve(e.id().substring(0, 2)).resolve(e.id() + (useBack ? "-back" : "") + ".jpg").toFile();
+            if (f.isFile() && f.length() > 0) return f;
+        }
+        final Path fetched = downloads == null ? null : downloads.get(name, back, version);
+        return fetched == null ? null : fetched.toFile();
     }
 
     /** Keep in sync with {@code engine_lookup} in the fetch-offline bin (its coverage report). */
     private Entry lookup(final String name) {
-        final String k = name.toLowerCase();
+        final String k = name.toLowerCase(Locale.ROOT);
         Entry e = index.get(k);
         // Forge names tokens "Goblin Token"; Scryfall's token printings are just "Goblin".
         if (e == null && k.endsWith(" token")) e = index.get(k.substring(0, k.length() - " token".length()));

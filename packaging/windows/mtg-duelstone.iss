@@ -59,5 +59,5 @@ Name: "{autoprograms}\MTG Duelstone - Download card images"; Filename: "{app}\fe
 Name: "{autodesktop}\MTG Duelstone"; Filename: "{app}\mtg-duelstone.exe"; Tasks: desktopicon
 
 [Run]
-Filename: "{app}\fetch-offline.exe"; Description: "Download the card images now (about 9 GB)"; Flags: postinstall nowait skipifsilent unchecked
+Filename: "{app}\fetch-offline.exe"; Description: "Download all card images for offline play (optional, about 9 GB)"; Flags: postinstall nowait skipifsilent unchecked
 Filename: "{app}\mtg-duelstone.exe"; Description: "{cm:LaunchProgram,MTG Duelstone}"; Flags: postinstall nowait skipifsilent

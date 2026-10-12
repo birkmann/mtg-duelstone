@@ -10,7 +10,7 @@
 //! - `launcher::ensure_engine` — start the Java engine if `/api/health` doesn't answer (native).
 //! - [`deckstats`] — pure deck analysis for the builder (curve, colours, roles, odds, goldfish).
 //! - `scryfall::Showcase` — curated card artworks + artist facts for the splash screens (native).
-//! - `offline::dir` — the offline pack (card images, rulings, showcase); nothing goes online at runtime (native).
+//! - `offline::dir` — the optional offline pack (card images, rulings, showcase); missing art uses a user cache (native).
 
 pub mod api;
 pub mod autoplay;

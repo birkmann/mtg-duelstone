@@ -41,10 +41,14 @@ public final class EngineServer {
     public EngineServer(final int port, final File staticDir, final java.nio.file.Path offlinePack) throws IOException { this(port, staticDir, offlinePack, null); }
 
     public EngineServer(final int port, final File staticDir, final java.nio.file.Path offlinePack, final String publicUrl) throws IOException {
+        this(port, staticDir, offlinePack, publicUrl, null);
+    }
+
+    public EngineServer(final int port, final File staticDir, final java.nio.file.Path offlinePack, final String publicUrl, final java.nio.file.Path imageCache) throws IOException {
         this.publicUrl = publicUrl != null && !publicUrl.isBlank() ? publicUrl.replaceAll("/+$", "") : detectPublicUrl(port);
         this.servesWeb = staticDir != null && new File(staticDir, "index.html").isFile();
         System.out.println("[server] invite links use " + this.publicUrl + (servesWeb ? "" : "  (no web client: pass --static web/dist so invitees can play in a browser)"));
-        images = new ImageCache(offlinePack);
+        images = new ImageCache(offlinePack, imageCache);
         System.out.println("[server] offline pack: " + offlinePack + " (" + images.size() + " card names with images)");
         server = new Server(port);
         final ServletContextHandler ctx = new ServletContextHandler(ServletContextHandler.SESSIONS);

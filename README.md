@@ -52,8 +52,9 @@ downloaded.
 - **Multiplayer, up to 4 players.** Host a table and send the invite link; friends join from a browser with nothing
   to install. Forge AI fills any empty seat, and three- and four-player games lay the opponents out in columns
   across the far side of the table.
-- **Plays offline.** The engine, the AI, card images, rulings and suggestions are all local; nothing goes online
-  while you play. Multiplayer needs only your local network.
+- **Plays offline.** The engine, AI, rulings and suggestions run locally. Card images download automatically
+  as needed and stay cached for offline play; the optional full pack covers cards you have not viewed yet.
+  Multiplayer needs only your local network.
 - **Runs in the browser.** The same Bevy client compiles to WebAssembly (WebGL2), and the engine serves it to
   invitees.
 - **A 3D card table.** Perspective camera over a themed playmat (Sanctum, Jungle, Storm), fanned hand on its
@@ -187,8 +188,10 @@ Short on friends? Fill seats with headless bots that play over the real protocol
 | **Linux** (x86_64) | [mtg-duelstone-x86_64.AppImage](https://github.com/birkmann/mtg-duelstone/releases/latest/download/mtg-duelstone-x86_64.AppImage): `chmod +x` it and run it. Needs Vulkan graphics drivers. |
 
 All three bundle the engine, Forge's card data, a Java runtime and the browser client for multiplayer invitees, so
-there is nothing else to install. Card images are not included (Wizards' art is not redistributed). Download them
-once, about 9 GB into `~/.local/share/mtg-duelstone/offline` (`%LOCALAPPDATA%\mtg-duelstone\data\offline` on
+there is nothing else to install. Card images load automatically from Scryfall as you view cards and are saved
+in your user data folder for offline reuse. You do not need the full image pack to start playing.
+
+For a complete offline collection, optionally download about 9 GB into `~/.local/share/mtg-duelstone/offline` (`%LOCALAPPDATA%\mtg-duelstone\data\offline` on
 Windows; re-run to resume or update). On Windows, tick the box at the end of the installer or open *MTG Duelstone -
 Download card images* from the Start menu (in the zip: `fetch-offline.exe`); elsewhere:
 
@@ -328,4 +331,5 @@ Magic: The Gathering, its card names, art and images are © Wizards of the Coast
 project, not affiliated with or endorsed by Wizards of the Coast, and is intended to fall under the
 [Fan Content Policy](https://company.wizards.com/en/legal/fancontentpolicy). **No card images are included or
 redistributed**: `tools/fetch-offline.sh` downloads them once from [Scryfall](https://scryfall.com) into the
-gitignored `offline/` folder of your own checkout, and the game reads them from there.
+gitignored `offline/` folder of your own checkout. Desktop builds also download missing images as needed
+into a persistent cache in your user data folder.

@@ -144,6 +144,9 @@ pub fn ensure_engine(cfg: &LaunchConfig, progress: &mut dyn FnMut(&str)) -> anyh
     if let Some(pack) = crate::offline::dir() {
         cmd.arg("--offline").arg(pack);
     }
+    // AppImages and installed app bundles can be read-only. Missing art belongs in the user's
+    // data directory, independently of the bundled rulings or an optional complete offline pack.
+    cmd.arg("--image-cache").arg(crate::offline::user_dir().join("cache"));
     // Serve the browser client so the invite links this engine hands out open the game for people
     // without the app: a packaged build's `web/`, else the jar's checkout (`<repo>/web/dist`, from
     // tools/build-web.sh).

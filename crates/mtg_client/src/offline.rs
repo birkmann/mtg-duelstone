@@ -1,8 +1,8 @@
 //! Locates the offline pack (`offline/`): every card image, the rulings and the showcase data.
 //!
-//! Why a pack instead of a cache: the game must run with no internet and without Scryfall, so
-//! nothing is fetched lazily at runtime. `tools/fetch-offline.sh` (the `fetch-offline` bin) fills
-//! the pack once while online; the engine serves `/api/img` + `/api/rulings` from it and the
+//! `tools/fetch-offline.sh` (the `fetch-offline` bin) fills the optional complete pack once online;
+//! desktop launches also give the engine a writable cache for missing card images.
+//! With a complete pack, the engine serves `/api/img` + `/api/rulings` from it and the
 //! splash showcase reads it directly. Images are gitignored (Wizards' art is not redistributed);
 //! the small JSON under `offline/data/` is committed.
 

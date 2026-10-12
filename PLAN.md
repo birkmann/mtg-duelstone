@@ -68,7 +68,7 @@ Effects seen in the shots: targeting/ability arrows (glowing bezier ribbons), se
 - We need server changes (format selection, art-crop images, event cues).
 - The protocol stays backward compatible, so mtg-cmd's React UI could still use it.
 
-**Licensing:** `engine/` links Forge, so it is GPL-3. The Bevy client only talks over a socket. Simplest is GPL-3 for the whole repo. Card images are downloaded once from Scryfall by `tools/fetch-offline.sh` into the gitignored `offline/` folder (per the WotC Fan Content Policy) and never committed; at runtime nothing goes online.
+**Licensing:** `engine/` links Forge, so it is GPL-3. The Bevy client only talks over a socket. Simplest is GPL-3 for the whole repo. Card images are downloaded once from Scryfall by `tools/fetch-offline.sh` into the gitignored `offline/` folder (per the WotC Fan Content Policy) and never committed. Desktop builds download missing card art on demand into a persistent user cache; a complete offline pack avoids those requests.
 
 ### Repo layout
 

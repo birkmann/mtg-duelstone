@@ -101,8 +101,17 @@ jobs:
           ./mtg-duelstone-x86_64.AppImage --appimage-extract >/dev/null
           res=squashfs-root/usr/share/mtg-duelstone
           "$res/jre/bin/java" -Djava.awt.headless=true -jar "$res/engine/forge-ws-server.jar" \
-            --port 8099 --assets "$res/forge" > engine.log 2>&1 &
-          for _ in $(seq 60); do curl -sf http://127.0.0.1:8099/api/health && exit 0; sleep 2; done
+            --port 8099 --assets "$res/forge" --offline "$res/offline" \
+            --image-cache "$RUNNER_TEMP/card-image-cache" > engine.log 2>&1 &
+          pid=$!
+          trap 'kill "$pid" 2>/dev/null || true' EXIT
+          for _ in $(seq 60); do
+            if curl -sf http://127.0.0.1:8099/api/health; then
+              python3 tools/smoke-card-images.py || { cat engine.log; exit 1; }
+              exit 0
+            fi
+            sleep 2
+          done
           cat engine.log; exit 1
       - uses: actions/upload-artifact@v4
         with:
@@ -139,8 +148,17 @@ jobs:
         run: |
           res="target/macos/MTG Duelstone.app/Contents/Resources"
           "$res/jre/bin/java" -Djava.awt.headless=true -jar "$res/engine/forge-ws-server.jar" \
-            --port 8099 --assets "$res/forge" > engine.log 2>&1 &
-          for _ in $(seq 60); do curl -sf http://127.0.0.1:8099/api/health && exit 0; sleep 2; done
+            --port 8099 --assets "$res/forge" --offline "$res/offline" \
+            --image-cache "$RUNNER_TEMP/card-image-cache" > engine.log 2>&1 &
+          pid=$!
+          trap 'kill "$pid" 2>/dev/null || true' EXIT
+          for _ in $(seq 60); do
+            if curl -sf http://127.0.0.1:8099/api/health; then
+              python3 tools/smoke-card-images.py || { cat engine.log; exit 1; }
+              exit 0
+            fi
+            sleep 2
+          done
           cat engine.log; exit 1
       - uses: actions/upload-artifact@v4
         with:
@@ -184,10 +202,14 @@ jobs:
         run: |
           res="target/windows/MTG Duelstone"
           "$res/jre/bin/java.exe" -Djava.awt.headless=true -jar "$res/engine/forge-ws-server.jar" \
-            --port 8099 --assets "$res/forge" > engine.log 2>&1 &
+            --port 8099 --assets "$res/forge" --offline "$res/offline" \
+            --image-cache "$RUNNER_TEMP/card-image-cache" > engine.log 2>&1 &
           pid=$!
           for _ in $(seq 60); do
-            if curl -sf http://127.0.0.1:8099/api/health; then kill $pid; exit 0; fi
+            if curl -sf http://127.0.0.1:8099/api/health; then
+              python tools/smoke-card-images.py || { cat engine.log; kill $pid; exit 1; }
+              kill $pid; exit 0
+            fi
             sleep 2
           done
           cat engine.log; kill $pid; exit 1
