@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>MTG Duelstone · free Magic: The Gathering game for Windows, Mac and Linux</title>
-<meta name="description" content="A free Magic: The Gathering game for Windows, Mac and Linux. Play Constructed, Commander, Brawl, Oathbreaker, cube draft, set draft or sealed against the computer or up to three friends on a 3D table. Full rules, about 33,000 cards, no internet needed.">
+<meta name="description" content="A free Magic: The Gathering game for Windows, Mac and Linux. Play Constructed, Commander, Brawl, Oathbreaker, cube draft, set draft or sealed against the computer or up to three friends on a 3D table. Full rules, about 33,000 cards, automatic card-image downloads and offline play.">
 <meta name="theme-color" content="#0f0906">
 <script>
 // Apply a saved theme before first paint. Without one the page is dark, like the game.
@@ -119,14 +119,14 @@ try {
       <source srcset="assets/img/menu.webp" type="image/webp">
       <img class="capsule-art" src="assets/img/menu.jpg" width="1600" height="900" alt="" loading="lazy">
     </picture>
-    <p class="capsule-text">Magic: The Gathering on a 3D table. Play the computer or up to three friends in Constructed, Commander, Brawl, Oathbreaker, cube draft, set draft or sealed. The full rules are built in, and you don't need an internet connection to play.</p>
+    <p class="capsule-text">Magic: The Gathering on a 3D table. Play the computer or up to three friends in Constructed, Commander, Brawl, Oathbreaker, cube draft, set draft or sealed. The full rules are built in. Card images download as you play and stay cached for offline use.</p>
     <dl class="facts">
       <div><dt>Price</dt><dd>Free, open source</dd></div>
       <div><dt>Platforms</dt><dd>Windows, Mac, Linux</dd></div>
       <div><dt>Players</dt><dd>1 vs the computer, or 2 to 4</dd></div>
       <div><dt>Cards</dt><dd>About 33,000</dd></div>
-      <div><dt>Internet</dt><dd>Not needed to play</dd></div>
-      <div><dt>Version</dt><dd>0.2.0</dd></div>
+      <div><dt>Internet</dt><dd>Needed to load new card images</dd></div>
+      <div><dt>Version</dt><dd>0.3.1</dd></div>
     </dl>
     <ul class="tags" aria-label="Tags">
       <li>Card game</li><li>Strategy</li><li>Turn-based</li><li>Deck building</li><li>Draft</li><li>Local multiplayer</li><li>Offline</li>
@@ -150,7 +150,7 @@ try {
       var builds = {
         windows: { file: 'mtg-duelstone-windows-x86_64-setup.exe', name: 'Windows', meta: '64-bit PC · Windows 10 or 11', help: '#windows' },
         mac: { file: 'mtg-duelstone-macos-arm64.dmg', name: 'Mac', meta: 'Apple chip · macOS 12 or later', help: '#macos' },
-        linux: { file: 'mtg-duelstone-x86_64.AppImage', name: 'Linux', meta: '64-bit PC · AppImage', help: '#linux' }
+        linux: { file: 'mtg-duelstone-x86_64.AppImage', name: 'Linux', meta: '64-bit PC · glibc 2.44+ · AppImage', help: '#linux' }
       };
       var ua = navigator.userAgent;
       var platform = (navigator.userAgentData && navigator.userAgentData.platform) || navigator.platform || '';
@@ -634,7 +634,7 @@ try {
     <div>
       <h3>Linux</h3>
       <dl>
-        <div><dt>System</dt><dd>64-bit, Ubuntu 22.04 or similar</dd></div>
+        <div><dt>System</dt><dd>64-bit Linux with glibc 2.44 or newer</dd></div>
         <div><dt>Processor</dt><dd>x86-64</dd></div>
         <div><dt>Memory</dt><dd>4 GB, 8 GB recommended</dd></div>
         <div><dt>Graphics</dt><dd>A Vulkan driver</dd></div>
@@ -651,7 +651,7 @@ try {
       </dl>
     </div>
   </div>
-  <p class="note">Card images download automatically as you view cards and stay on your computer for offline play. The optional full image pack also covers cards you have not viewed yet. Multiplayer only needs your local network.</p>
+  <p class="note">An internet connection is needed to download images for cards you have not viewed yet. Images download automatically and stay on your computer for offline play. The optional full image pack also covers unseen cards. Multiplayer only needs your local network.</p>
 </section>
 
 <section class="install" id="install">
@@ -670,7 +670,7 @@ try {
       </g>
     </svg>
     <h2>Download</h2>
-    <p class="lead">Free for Windows, Mac and Linux. Java, the rules engine and the card data come with it, so there is nothing else to install.</p>
+    <p class="lead">Version 0.3.1 for Windows, Mac and Linux includes automatic card-image downloads. Java, the rules engine and the card data come with it, so there is nothing else to install. Connect to the internet when you first play to load card artwork.</p>
     <div class="platforms">
       <div class="platform" id="windows">
         <h3>Windows</h3>
@@ -686,7 +686,7 @@ try {
       </div>
       <div class="platform" id="linux">
         <h3>Linux</h3>
-        <p>For 64-bit PCs with graphics that support Vulkan (most graphics cards from the last ten years, with current drivers). Download the file, allow it to run and open it.</p>
+        <p>For 64-bit PCs running Linux with glibc 2.44 or newer and graphics that support Vulkan. Download the file, allow it to run and open it.</p>
         <a class="pill pill-play" href="https://github.com/birkmann/mtg-duelstone/releases/latest/download/mtg-duelstone-x86_64.AppImage">Download for Linux</a>
         <p class="note">To allow it to run, right-click the file, open Properties and turn on <b>Allow executing file as program</b>, or run <code>chmod +x mtg-duelstone-x86_64.AppImage</code>. If it still doesn't open, install <code>libfuse2</code>.</p>
       </div>
