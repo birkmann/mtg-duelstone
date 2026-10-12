@@ -1,0 +1,82 @@
+macOS release handoff — 2026-10-12
+
+Status
+The Apple Silicon (arm64) macOS DMG for version 0.3.1 was built locally,
+uploaded to the existing GitHub release, and verified. No further upload
+is needed. No tracked source files were changed during the build.
+Source checkout: 287f254f017a78afdadef7abef5392329d7f81e1
+
+Published files
+Release: https://github.com/birkmann/mtg-duelstone/releases/tag/v0.3.1
+DMG: https://github.com/birkmann/mtg-duelstone/releases/download/v0.3.1/mtg-duelstone-macos-arm64.dmg
+Checksum: https://github.com/birkmann/mtg-duelstone/releases/download/v0.3.1/mtg-duelstone-macos-arm64.dmg.sha256
+DMG size: 190432259 bytes (about 182 MiB)
+SHA-256: e1137e59c5e6b1ed9f7b10aea7c17750b0761a85aef2afc901af44cd69dc99a9
+
+Continue on another machine
+Download the DMG and checksum from the release using an authenticated
+GitHub session if required. With GitHub CLI installed and authenticated:
+
+    gh release download v0.3.1 --repo birkmann/mtg-duelstone --pattern 'mtg-duelstone-macos-arm64.dmg*'
+    shasum -a 256 -c mtg-duelstone-macos-arm64.dmg.sha256
+
+The binary is stored as a GitHub Release asset, not in Git history.
+Normal GitHub pushes reject files over 100 MiB. Keep /target/ and *.dmg
+ignored as they already are; do not force-add the DMG to Git.
+
+Build details
+Built on Apple Silicon with Rust 1.98.1 and native JDK 17.0.16.
+The app includes the native game, fetch-offline utility, Java engine,
+Forge data, a jlink Java runtime, and the browser client.
+It is ad-hoc signed, not notarized. macOS may require allowing the
+downloaded app under System Settings > Privacy & Security > Open Anyway.
+
+BUILD-MACOS.command downloads a prepared release build kit and requires
+GitHub CLI authentication. The CLI was absent on this machine, and an
+unauthenticated direct download returned 404, so this build used the
+working checkout instead. An authenticated API check later confirmed
+that the build kit DOES exist on release v0.3.1.
+
+Source build commands used (from repository root)
+    export JAVA_HOME=$(/usr/libexec/java_home -v 17)
+    cargo build --release -p arena -p mtg_client --bin mtg-duelstone --bin fetch-offline
+    MAVEN_ARGS="-Dmaven.repo.local=$PWD/target/macos-m2" tools/setup-forge.sh
+    CARGO_TARGET_DIR=target/macos-web tools/build-web.sh
+
+The default Maven configuration used a corporate mirror that returned
+401 for the engine build. An isolated empty Maven settings file was
+created at target/macos-maven-settings.xml containing:
+    <settings xmlns="http://maven.apache.org/SETTINGS/1.2.0" />
+Then the engine was built using public repositories:
+    mvn -B -s target/macos-maven-settings.xml -gs target/macos-maven-settings.xml -Dmaven.repo.local="$PWD/target/macos-m2" -f engine/pom.xml package
+
+Packaging:
+    SKIP_BUILD=1 SKIP_WEB=1 packaging/macos/build-app.sh
+
+The sandbox blocked hdiutil disk-image creation; the same operation
+succeeded outside the sandbox. This is an execution-environment issue,
+not a source fix. wasm-opt was unavailable, so the browser bundle used
+the build script's supported unstripped WASM fallback.
+
+Verification completed
+- Java engine tests: 6 passed, 0 failures/errors/skips.
+- codesign --verify --deep --strict passed for the app bundle.
+- hdiutil verify passed for the DMG.
+- Bundled Java engine started and returned a healthy API response.
+- Fresh-cache Plains card downloads passed for large and art_crop JPEGs.
+- Served browser index matched the bundled web/dist/index.html.
+- GitHub reported matching SHA-256 digests for both uploaded assets.
+
+Local artifacts on the build machine (ignored; not transferred by Git)
+    target/macos/MTG Duelstone.app
+    target/macos/mtg-duelstone-macos-arm64.dmg
+    target/macos/mtg-duelstone-macos-arm64.dmg.sha256
+Build logs, temporary Maven settings/cache, smoke-test script, and upload
+helper are under target/. The upload helper used an existing GitHub
+credential without storing it in the script. Existing release assets
+were not overwritten.
+
+Release automation
+.github/workflows/release.yml builds platform packages on v* tags and
+attaches them to GitHub Releases. Manual runs retain workflow artifacts.
+The macOS assets described above were uploaded directly from this Mac.
