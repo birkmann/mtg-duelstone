@@ -1,0 +1,34 @@
+Build and upload MTG Duelstone 0.3.1 on your Mac
+
+Prerequisites:
+- Xcode Command Line Tools: xcode-select --install
+- Rustup: follow https://rustup.rs/
+- Native JDK 17 (Homebrew users: brew install openjdk@17)
+- Python 3
+- GitHub CLI (Homebrew users: brew install gh)
+
+In Terminal, from the repository root:
+
+    gh auth login
+    ./BUILD-MACOS.command --upload
+
+Sign in with your birkmann account, or another account with write access to
+birkmann/mtg-duelstone. Skip gh auth login if already signed in.
+
+The command downloads and verifies the prepared v0.3.1 build kit into
+target/macos-build-kit-v0.3.1. It builds that release's source, not changes in
+your working checkout. The kit includes the tested Java engine, browser client
+and Forge data, so only the native game needs compiling on your Mac.
+
+The build installs Rust 1.98.1, creates an ad-hoc-signed DMG with a native Java
+runtime, tests card-image downloads from a fresh cache, then uploads the DMG
+and checksum to release v0.3.1. It does not use GitHub Actions.
+
+Omit --upload to build and test without publishing. Existing release assets
+are not overwritten. On Apple Silicon, use native Terminal and JDK 17, not
+Rosetta. The first compilation can take a while.
+
+Output folder:
+target/macos-build-kit-v0.3.1/mtg-duelstone-0.3.1/target/macos/
+
+If a step fails, copy its error output back into the chat.
