@@ -15,6 +15,10 @@ downloaded.
 ![Engine](https://img.shields.io/badge/rules-Forge-6b4f2a)
 ![License](https://img.shields.io/badge/license-GPL--3.0-blue)
 
+[Website](https://mtg-duelstone-website.vercel.app) ·
+[Latest release](https://github.com/birkmann/mtg-duelstone/releases/latest) ·
+[Build status](https://github.com/birkmann/mtg-duelstone/actions/workflows/ci.yml)
+
 ![A Constructed match: Dimir Control vs Gruul Dinosaurs, choosing a target for Go for the Throat](docs/screenshots/match.jpg)
 
 </div>
@@ -185,7 +189,12 @@ Short on friends? Fill seats with headless bots that play over the real protocol
 |---|---|
 | **Windows** (10 or 11, 64-bit) | [mtg-duelstone-windows-x86_64-setup.exe](https://github.com/birkmann/mtg-duelstone/releases/latest/download/mtg-duelstone-windows-x86_64-setup.exe): run it; it installs for your user without an administrator prompt. It is not signed, so SmartScreen may say it protected your PC: **More info** → **Run anyway**. Allow Java on private networks when the firewall asks, to host multiplayer games. No installer: [the zip](https://github.com/birkmann/mtg-duelstone/releases/latest/download/mtg-duelstone-windows-x86_64.zip), unzipped anywhere. |
 | **Mac** (Apple chip, macOS 12+) | [mtg-duelstone-macos-arm64.dmg](https://github.com/birkmann/mtg-duelstone/releases/latest/download/mtg-duelstone-macos-arm64.dmg): open it and drag MTG Duelstone into Applications. The app is not notarized, so on first launch allow it under System Settings → Privacy & Security → **Open Anyway**. |
-| **Linux** (x86_64) | [mtg-duelstone-x86_64.AppImage](https://github.com/birkmann/mtg-duelstone/releases/latest/download/mtg-duelstone-x86_64.AppImage): `chmod +x` it and run it. Needs Vulkan graphics drivers. |
+| **Linux** (x86_64, glibc 2.44+) | [mtg-duelstone-x86_64.AppImage](https://github.com/birkmann/mtg-duelstone/releases/latest/download/mtg-duelstone-x86_64.AppImage): `chmod +x` it and run it. Needs Vulkan graphics drivers. If FUSE is unavailable, run it with `--appimage-extract-and-run`. |
+
+The current release is **0.3.1**. Each download has a matching `.sha256` file on the
+[release page](https://github.com/birkmann/mtg-duelstone/releases/tag/v0.3.1). The Linux package was built
+locally and requires glibc 2.44 or newer; build from source on older distributions. Windows packages have
+been smoke-tested under Wine; testing on native Windows hardware is still needed.
 
 All three bundle the engine, Forge's card data, a Java runtime and the browser client for multiplayer invitees, so
 there is nothing else to install. Card images load automatically from Scryfall as you view cards and are saved
