@@ -1,5 +1,5 @@
-//! Large hover preview on the right screen edge and the
-//! right-click inspector. Shows the Large scryfall image; rules text is drawn as a fallback until
+//! Bounded, click-through card preview on the right screen edge. The right-click inspector
+//! uses the same safe column with an explicit Close button. Shows the Large scryfall image; rules text is drawn as a fallback until
 //! the image arrives; double-faced / split cards show the other face too.
 
 use bevy::picking::Pickable;
@@ -14,6 +14,7 @@ use crate::shared::*;
 #[derive(Component)]
 pub struct PreviewRoot {
     pub key: Option<(CardId, bool)>,
+    pub viewport: Vec2,
 }
 #[derive(Component)]
 pub struct FallbackText {
@@ -25,19 +26,26 @@ pub fn spawn_preview(mut commands: Commands) {
         Node {
             position_type: PositionType::Absolute,
             right: vw(1.2),
-            top: Val::Percent(50.0),
+            top: vh(12.0),
             flex_direction: FlexDirection::Column,
             align_items: AlignItems::Center,
             row_gap: vh(1.0),
             ..default()
         },
-        UiTransform::from_translation(Val2::percent(0.0, -50.0)),
+        UiTransform::IDENTITY,
         GlobalZIndex(20),
-        PreviewRoot { key: None },
+        PreviewRoot { key: None, viewport: Vec2::ZERO },
+        Name::new("UI/CardPreview"),
         HudEntity,
         Pickable::IGNORE,
         Visibility::Hidden,
     ));
+}
+
+fn preview_height(aspect: f32, inspecting: bool, alternate: bool, landscape: bool) -> f32 {
+    let width_limit = 22.0 * aspect / if landscape { 1.0 } else { 63.0 / 88.0 };
+    let height_limit = if alternate { 52.0 / 1.42 } else if inspecting { 52.0 } else { 44.0 };
+    width_limit.min(height_limit)
 }
 
 fn oracle_text(c: &Card) -> String {
@@ -69,6 +77,8 @@ pub fn update_preview(
     view: Res<GameView>,
     cache: Res<CardCache>,
     prompt: Res<PendingPrompt>,
+    input: Res<CurrentInput>,
+    windows: Query<&Window, With<bevy::window::PrimaryWindow>>,
     fonts: Res<ArenaFonts>,
     mut roots: Query<(Entity, &mut PreviewRoot, &mut Node, &mut Visibility, &mut UiTransform)>,
 ) {
@@ -77,33 +87,35 @@ pub fn update_preview(
     let id = inspect.0.or(hover.0);
     let card = id.and_then(|id| view.card(id).or_else(|| cache.0.get(&id))).filter(|c| !c.hidden && c.state.is_some());
     let want_key = card.map(|c| (c.id, inspecting));
-    let hide = card.is_none() || prompt.0.is_some();
+    let choosing = input.frame.as_ref().is_some_and(|f| f.select_max > 0 || !f.tray_cards.is_empty());
+    let hide = card.is_none() || prompt.0.is_some() || crate::prompts::is_mulligan_input(&input) || choosing;
+    let viewport = windows.single().map(|w| w.size()).unwrap_or(Vec2::new(1600.0, 900.0));
     let want_vis = if hide { Visibility::Hidden } else { Visibility::Inherited };
     if *vis != want_vis {
         *vis = want_vis;
     }
-    if root.key == want_key {
+    if root.key == want_key && root.viewport == viewport {
         return;
     }
     root.key = want_key;
+    root.viewport = viewport;
     commands.entity(e).despawn_children();
     let Some(card) = card else { return };
-    // layout: inspector is centred and bigger, hover sits on the right edge
-    if inspecting {
-        node.right = Val::Auto;
-        node.left = Val::Percent(50.0);
-        *tf = UiTransform::from_translation(Val2::percent(-50.0, -50.0));
-    } else {
-        node.left = Val::Auto;
-        node.right = vw(1.2);
-        *tf = UiTransform::from_translation(Val2::percent(0.0, -50.0));
-    }
-    let main_h = if inspecting { 84.0 } else { 66.0 };
+    // Keep the board centre, hand and bottom-right actions clear. The panel is click-through
+    // except for its explicit Close button; inspecting never disables normal card actions.
+    node.left = Val::Auto;
+    node.right = vw(1.2);
+    *tf = UiTransform::IDENTITY;
     let alt = card.alt_state.as_ref().filter(|a| !a.name.is_empty() && Some(&a.name) != card.state.as_ref().map(|s| &s.name)).cloned();
+    let landscape = crate::layout::is_landscape(card);
+    let main_h = preview_height(viewport.x / viewport.y.max(1.0), inspecting, alt.is_some(), landscape);
     let fonts = fonts.clone();
     let card = card.clone();
     let landscape = crate::layout::is_landscape(&card);
     commands.entity(e).with_children(|r| {
+        if inspecting {
+            spawn_button(r, &fonts, "Close  ·  Esc", Act::CloseInspect, BtnStyle::DARK, vh(main_h * 63.0 / 88.0), vh(3.6), 1.5, true);
+        }
         let pic = if landscape {
             // A plane's scan is portrait with the card on its side: give it a landscape box and turn
             // the (overflowing, centred) portrait picture a quarter clockwise inside it.
@@ -157,6 +169,27 @@ pub fn update_fallback(
         let d = if loaded { Display::None } else { Display::Flex };
         if n.display != d {
             n.display = d;
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn preview_fits_side_column_and_stays_above_actions() {
+        for aspect in [0.5625, 1.0, 1.6, 16.0 / 9.0, 2.4] {
+            for inspecting in [false, true] {
+                for alternate in [false, true] {
+                    for landscape in [false, true] {
+                        let h = preview_height(aspect, inspecting, alternate, landscape);
+                        let width = h * if landscape { 1.0 } else { 63.0 / 88.0 };
+                        assert!(width <= 22.0 * aspect + 0.01);
+                        let height = h * if alternate { 1.42 } else { 1.0 };
+                        assert!(12.0 + height + 6.0 <= 72.0);
+                    }
+                }
+            }
         }
     }
 }

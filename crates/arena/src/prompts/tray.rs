@@ -27,6 +27,7 @@ struct TrayCell(Vec<i64>);
 #[derive(Component)]
 struct MulliganRoot {
     key: Vec<i64>,
+    viewport: Vec2,
 }
 #[derive(Component)]
 struct MulliganBtn(bool);
@@ -198,61 +199,76 @@ fn tray_clicks(mut acts: MessageReader<Acted>, mut out: MessageWriter<SendCmd>, 
 
 // ---- mulligan -----------------------------------------------------------------------------
 
+/// Fit every row into a bounded card area, leaving the header and actions outside it.
+fn opening_card_height(count: usize, aspect: f32) -> f32 {
+    if count == 0 { return 0.0; }
+    (1..=count).map(|columns| {
+        let rows = count.div_ceil(columns);
+        let width = (90.0 * aspect - 4.0 - 1.2 * (columns - 1) as f32).max(1.0);
+        let height = (50.0 - 1.2 * (rows - 1) as f32).max(1.0);
+        (width / columns as f32 * 88.0 / 63.0).min(height / rows as f32).min(34.0)
+    }).fold(0.0, f32::max)
+}
+
 fn sync_mulligan(
     mut commands: Commands,
     input: Res<CurrentInput>,
     view: Res<GameView>,
     fonts: Res<ArenaFonts>,
     existing: Query<(Entity, &MulliganRoot)>,
+    windows: Query<&Window, With<bevy::window::PrimaryWindow>>,
 ) {
     let hand: Vec<Card> = if is_mulligan(&input) { view.me().map(|p| p.zones.hand.clone()).unwrap_or_default() } else { vec![] };
     let want: Vec<i64> = hand.iter().map(|c| c.id).collect();
-    let have = existing.iter().next().map(|(_, r)| r.key.clone());
+    let viewport = windows.single().map(|w| w.size()).unwrap_or(Vec2::new(1600.0, 900.0));
+    let have = existing.iter().next().map(|(_, r)| (r.key.clone(), r.viewport));
     if want.is_empty() {
         for (e, _) in &existing {
             commands.entity(e).despawn();
         }
         return;
     }
-    if have.as_ref() == Some(&want) {
+    if have.as_ref() == Some(&(want.clone(), viewport)) {
         return;
     }
     for (e, _) in &existing {
         commands.entity(e).despawn();
     }
     let fonts = fonts.clone();
-    let h = if hand.len() > 6 { 27.0 } else { 34.0 };
+    let h = opening_card_height(hand.len(), viewport.x / viewport.y.max(1.0));
     let msg = input.frame.as_ref().map(|f| f.message.trim().to_string()).unwrap_or_default();
     commands
         .spawn((
             fullscreen(JustifyContent::Center, AlignItems::Center),
             BackgroundColor(Color::srgba(0.0, 0.0, 0.02, 0.9)),
             GlobalZIndex(40),
-            MulliganRoot { key: want },
+            MulliganRoot { key: want, viewport },
             HudEntity,
             Pickable { should_block_lower: true, is_hoverable: true },
         ))
         .with_children(|r| {
-            r.spawn(ghost(Node { flex_direction: FlexDirection::Column, align_items: AlignItems::Center, row_gap: vh(2.2), ..default() }))
+            r.spawn(ghost(Node { width: vw(94.0), height: vh(92.0), min_height: Val::Px(0.0), padding: UiRect::all(vh(2.0)), flex_direction: FlexDirection::Column, align_items: AlignItems::Center, row_gap: vh(1.6), ..default() }))
                 .with_children(|c| {
-                    c.spawn(label(&fonts, "YOUR OPENING HAND", FontKind::Title, 4.6, GOLD));
+                    c.spawn(label(&fonts, "YOUR OPENING HAND", FontKind::Title, 4.6, GOLD)).insert(TextFont { font_size: bevy::text::FontSize::VMin(4.6), ..tfont(&fonts, FontKind::Title, 4.6) });
                     c.spawn(deco(Node { width: vh(44.0), height: vh(0.25), ..default() }, GOLD_DIM));
                     if !msg.is_empty() {
                         let text = msg.lines().map(str::trim).filter(|l| !l.is_empty()).collect::<Vec<_>>().join("  -  ");
-                        c.spawn(label(&fonts, text, FontKind::Body, 2.1, INK_DIM));
+                        c.spawn((label(&fonts, text, FontKind::Body, 2.0, INK_DIM), ScrollArea, TextLayout { justify: Justify::Center, ..default() }, Node { max_width: Val::Percent(100.0), max_height: vh(10.0), overflow: Overflow::scroll_y(), flex_shrink: 0.0, ..default() }));
                     }
-                    c.spawn(ghost(Node { flex_direction: FlexDirection::Row, column_gap: vh(1.2), justify_content: JustifyContent::Center, flex_wrap: FlexWrap::Wrap, max_width: vw(94.0), ..default() }))
+                    c.spawn(scroll_node(Node { width: Val::Percent(100.0), min_height: Val::Px(0.0), flex_grow: 1.0, flex_direction: FlexDirection::Row, column_gap: vh(1.2), row_gap: vh(1.2), justify_content: JustifyContent::Center, align_content: AlignContent::Center, flex_wrap: FlexWrap::Wrap, ..default() })).insert(ScrollArea)
                         .with_children(|row| {
                             for card in &hand {
                                 spawn_card_pic(row, &fonts, card, ImageVersion::Normal, h);
                             }
                         });
-                    c.spawn(ghost(Node { flex_direction: FlexDirection::Row, column_gap: vh(3.0), margin: UiRect::top(vh(1.5)), ..default() }))
+                    c.spawn(ghost(Node { width: Val::Percent(100.0), justify_content: JustifyContent::Center, flex_direction: FlexDirection::Row, column_gap: vw(2.0), flex_shrink: 0.0, margin: UiRect::top(vh(1.0)), ..default() }))
                         .with_children(|b| {
-                            let mut m = spawn_button(b, &fonts, "Mulligan", Act::Secondary, BtnStyle::DARK, vh(26.0), vh(7.0), 3.0, true);
-                            m.insert(MulliganBtn(false));
-                            let mut k = spawn_button(b, &fonts, "Keep Hand", Act::Primary, BtnStyle::ORANGE, vh(26.0), vh(7.0), 3.0, true);
-                            k.insert(MulliganBtn(true));
+                            let mut m = spawn_button(b, &fonts, "Mulligan", Act::Secondary, BtnStyle::DARK, vw(38.0), vh(7.0), 2.5, true);
+                            m.insert((MulliganBtn(false), Name::new("UI/Opening/Mulligan")));
+                            m.entry::<Node>().and_modify(|mut n| n.max_width = vh(26.0));
+                            let mut k = spawn_button(b, &fonts, "Keep Hand", Act::Primary, BtnStyle::ORANGE, vw(38.0), vh(7.0), 2.5, true);
+                            k.insert((MulliganBtn(true), Name::new("UI/Opening/Keep")));
+                            k.entry::<Node>().and_modify(|mut n| n.max_width = vh(26.0));
                         });
                 });
         });
@@ -277,6 +293,21 @@ fn mulligan_visuals(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn opening_hand_fits_card_area_at_supported_aspects() {
+        for aspect in [0.5625, 1.0, 4.0 / 3.0, 1.6, 16.0 / 9.0, 2.4] {
+            for count in [1usize, 6, 7, 8, 10, 14] {
+                let h = opening_card_height(count, aspect);
+                let width = 90.0 * aspect - 4.0;
+                let columns = ((width + 1.2) / (h * 63.0 / 88.0 + 1.2) + 0.0001).floor() as usize;
+                assert!(columns > 0);
+                let rows = count.div_ceil(columns);
+                assert!(rows as f32 * h + (rows - 1) as f32 * 1.2 <= 50.01,
+                    "{count} cards at aspect {aspect} exceed the card area");
+            }
+        }
+    }
 
     fn card(id: i64, name: &str) -> Card {
         Card { id, name: name.into(), zone: Some("Library".into()), ..default() }

@@ -16,6 +16,8 @@ use crate::shared::*;
 #[derive(Component)]
 pub struct PrimaryBtn;
 #[derive(Component)]
+pub struct ActionCluster;
+#[derive(Component)]
 pub struct PrimaryLabel;
 #[derive(Component)]
 pub struct PrimarySub;
@@ -50,6 +52,7 @@ pub fn spawn_buttons(mut commands: Commands, fonts: Res<ArenaFonts>) {
                 ..default()
             },
             GlobalZIndex(9),
+            ActionCluster,
             HudEntity,
             Pickable::IGNORE,
         ))
@@ -192,11 +195,17 @@ pub fn update_buttons(
     mut pill: Query<(Entity, &Children, &mut Node, Has<BtnOff>), (With<SecondaryPill>, Without<FastForwardBtn>)>,
     mut ff: Query<(Entity, &mut Node, Has<BtnOff>), (With<FastForwardBtn>, Without<SecondaryPill>)>,
     mut vis: Query<&mut Visibility>,
+    clusters: Query<Entity, With<ActionCluster>>,
 ) {
     let _ = &mut vis;
     let pm = primary_model(&view, &input);
     let sm = secondary_model(&input);
     let in_mull = crate::prompts::is_mulligan_input(&input);
+    for e in &clusters {
+        if let Ok(mut visibility) = vis.get_mut(e) {
+            *visibility = if in_mull { Visibility::Hidden } else { Visibility::Inherited };
+        }
+    }
     let nudge = pm.nudge && !in_mull;
     // ~1.2 s breathing glow: loud enough to catch the eye from the board, slow enough not to nag
     let pulse = 0.5 - 0.5 * (time.elapsed_secs() * 5.2).cos();

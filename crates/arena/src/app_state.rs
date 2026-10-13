@@ -230,8 +230,7 @@ fn poll_boot(
         Err(e) => {
             error!("engine boot failed: {e}");
             status.error = Some(e);
-            // Still let the menus show the error / retry.
-            next.set(AppState::MainMenu);
+            // Keep the failure and Retry control visible on the startup screen.
         }
     }
 }
@@ -378,7 +377,8 @@ fn poll_loading(
                 Err(e) => {
                     error!("create match failed: {e}");
                     status.error = Some(e);
-                    next.set(AppState::MainMenu);
+                    // Keep the error visible; the loading screen offers Back to Menu.
+                    // Immediately leaving used to discard the explanation before it could be read.
                 }
             }
         }
@@ -461,11 +461,8 @@ fn end_match_if_link(
     }
 }
 
-fn retry_boot(mut msgs: MessageReader<RetryBoot>, state: Res<State<AppState>>, mut next: ResMut<NextState<AppState>>) {
+fn retry_boot(mut msgs: MessageReader<RetryBoot>, mut next: ResMut<NextState<AppState>>) {
     if msgs.read().count() > 0 {
-        if *state.get() == AppState::Boot {
-            return;
-        }
         next.set(AppState::Boot);
     }
 }

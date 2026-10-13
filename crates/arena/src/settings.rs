@@ -98,7 +98,8 @@ fn apply_settings(
 
     volume.volume = Volume::Linear(settings.master_volume.clamp(0.0, 1.0));
     if let Ok(mut w) = windows.single_mut() {
-        let want = if settings.fullscreen {
+        // Explicit screenshot/test dimensions must not inherit the user's fullscreen preference.
+        let want = if settings.fullscreen && std::env::var("ARENA_WIN").is_err() {
             WindowMode::BorderlessFullscreen(MonitorSelection::Current)
         } else {
             WindowMode::Windowed

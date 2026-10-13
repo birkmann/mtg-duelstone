@@ -18,7 +18,7 @@ impl Plugin for DebugPlugin {
                 bevy::diagnostic::LogDiagnosticsPlugin::default(),
             ));
         }
-        app.add_systems(Update, (timed_exit, f12_screenshot, dump_cards))
+        app.add_systems(Update, (timed_exit, f12_screenshot, dump_cards, audit_ui))
             .add_systems(Update, autoplay.run_if(in_state(AppState::InMatch)));
     }
 }
@@ -174,5 +174,26 @@ fn dump_cards(
             tf.translation,
             tf.scale.x
         );
+    }
+}
+
+/// Machine-readable layout checks for named critical UI, including when desktop capture is unavailable.
+fn audit_ui(
+    cli: Res<CliArgs>, time: Res<Time>, mut done: Local<bool>,
+    windows: Query<&Window, With<bevy::window::PrimaryWindow>>,
+    nodes: Query<(&Name, &ComputedNode, &UiGlobalTransform, &InheritedVisibility)>,
+) {
+    if *done || std::env::var("ARENA_UI_AUDIT").is_err() { return; }
+    let Some(after) = cli.exit_after else { return };
+    if time.elapsed_secs() < after - 1.0 { return; }
+    let Ok(window) = windows.single() else { return };
+    *done = true;
+    let viewport = Vec2::new(window.physical_width() as f32, window.physical_height() as f32);
+    for (name, node, transform, visibility) in &nodes {
+        if !name.as_str().starts_with("UI/") || !visibility.get() || node.size() == Vec2::ZERO { continue; }
+        let min = transform.translation - node.size() / 2.0;
+        let max = transform.translation + node.size() / 2.0;
+        let fits = min.x >= -1.0 && min.y >= -1.0 && max.x <= viewport.x + 1.0 && max.y <= viewport.y + 1.0;
+        println!("UI_BOUNDS {} fits={} min={min:?} max={max:?} viewport={viewport:?}", name.as_str(), fits);
     }
 }

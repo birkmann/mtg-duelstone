@@ -192,9 +192,10 @@ fn on_click(
             }
         }
         PointerButton::Primary => {
-            if pending.0.is_some() || drag.moved > 10.0 || inspect.0.is_some() {
+            if pending.0.is_some() || drag.moved > 10.0 {
                 return;
             }
+            inspect.0 = None;
             if clickable(&input, &view, loc, ce.0) {
                 info!("click_card {}", ce.0);
                 out.write(SendCmd(ClientFrame::click_card(ce.0)));
@@ -489,7 +490,7 @@ fn hotkeys(
 
 fn inspect_acts(mut acts: MessageReader<Acted>, mut inspect: ResMut<InspectCard>) {
     for Acted(a) in acts.read() {
-        if matches!(a, Act::CloseInspect) {
+        if matches!(a, Act::CloseInspect | Act::Primary | Act::Secondary | Act::PassTurn | Act::AttackAll | Act::Undo) {
             inspect.0 = None;
         }
     }

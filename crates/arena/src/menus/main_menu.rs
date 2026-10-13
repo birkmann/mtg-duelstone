@@ -26,7 +26,8 @@ pub struct MainMenuPlugin;
 
 impl Plugin for MainMenuPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(OnEnter(AppState::MainMenu), spawn_main_menu).add_systems(Update, animate_intro.run_if(in_state(AppState::MainMenu)));
+        app.add_systems(OnEnter(AppState::MainMenu), spawn_main_menu).add_systems(Update, animate_intro.run_if(in_state(AppState::MainMenu)))
+            .add_systems(Update, fit_main_menu);
     }
 }
 
@@ -283,5 +284,19 @@ fn animate_intro(
                 }
             }
         }
+    }
+}
+
+/// Preserve the menu's proportions on compact windows, including during resizing.
+/// Gameplay uses its own viewport-based sizing and restores the default scale.
+fn fit_main_menu(state: Res<State<AppState>>, windows: Query<&Window>, mut scale: ResMut<UiScale>) {
+    let Ok(window) = windows.single() else { return };
+    let desired = if *state.get() == AppState::MainMenu {
+        (window.width() / 1200.0).min(window.height() / 850.0).min(1.0)
+    } else {
+        1.0
+    };
+    if scale.0 != desired {
+        scale.0 = desired;
     }
 }

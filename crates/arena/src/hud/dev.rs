@@ -2,6 +2,7 @@
 //! (stack, ability, attack, block, target, pay, attackdecl, blockdecl, sel, paused, won, lost), then exits. Lets us
 //! eyeball arrows / stack / combat visuals on REAL engine data under `--autoplay`.
 //! `ARENA_HOVER_HAND=<n>` pretends the pointer rests on my n-th hand card (hover lift check),
+//! `ARENA_INSPECT_HAND` pins the hand-card inspector for layout checks.
 //! `ARENA_HOVER_COMMAND` on my first command-zone card. `paused` pairs with `ARENA_AUTOPLAY_PAUSE`.
 
 use bevy::prelude::*;
@@ -31,7 +32,7 @@ impl Plugin for DevPlugin {
         if std::env::var("ARENA_OPEN_MENU").is_ok() {
             app.add_systems(Update, open_menu.run_if(in_state(AppState::InMatch).or_else(in_state(AppState::GameOver))));
         }
-        if std::env::var("ARENA_HOVER_HAND").is_ok() || std::env::var("ARENA_HOVER_COMMAND").is_ok() {
+        if std::env::var("ARENA_HOVER_HAND").is_ok() || std::env::var("ARENA_HOVER_COMMAND").is_ok() || std::env::var("ARENA_INSPECT_HAND").is_ok() {
             app.add_systems(Update, fake_hover.run_if(in_state(AppState::InMatch).or_else(in_state(AppState::GameOver))));
         }
     }
@@ -42,6 +43,7 @@ fn fake_hover(
     registry: Res<CardRegistry>,
     mut commands: Commands,
     mut preview: ResMut<HoverPreview>,
+    mut inspect: ResMut<crate::interact::InspectCard>,
     time: Res<Time>,
 ) {
     if time.elapsed_secs() < 8.0 {
@@ -59,6 +61,7 @@ fn fake_hover(
     if let Some(&e) = registry.0.get(&c.id) {
         commands.entity(e).insert(Hovered);
         preview.0 = Some(c.id);
+        if std::env::var("ARENA_INSPECT_HAND").is_ok() { inspect.0 = Some(c.id); }
     }
 }
 

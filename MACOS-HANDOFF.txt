@@ -128,3 +128,24 @@ Recovery copies on this Mac:
   uncommitted diff.
 Ignored build outputs, screenshots, caches and the fixed DMG were retained.
 The backup branch and target/ recovery files are local only.
+
+Responsive UI follow-up — 2026-10-13
+The opening-hand dialog now sizes cards to the viewport and reserves space
+for Keep/Mulligan. Its duplicate underlying action buttons are hidden.
+Card inspection uses a bounded side panel with Close/Esc, clears on game
+actions, and no longer disables card clicks. Previews hide during choices.
+Startup now has a prominent status panel, elapsed time and visible Retry
+on failure; match loading retains errors with Back to Menu. The main menu
+scales down for compact windows and responds to resizing.
+
+Validation: 65 Rust tests passed, 1 ignored; native and browser release
+builds succeeded. Live screenshots checked opening hands and inspection at
+1600x1000 and 800x600; startup-error layout checked at 800x600. Layout
+regressions also cover portrait and wide aspect ratios. Screenshots/logs
+are local under target/ui-*. ARENA_UI_AUDIT=1 prints named control bounds;
+ARENA_WIN overrides saved fullscreen for repeatable window-size checks.
+Strict/deep app signature verification and DMG integrity checks passed.
+Latest local DMG SHA-256:
+07e7de028a061583dc2a09e84a7e8160ddd7e2d9fc12d9db1445cd936b1ec8c1
+The GitHub release download still contains the original October 12 build.
+This updated DMG is local only; the source and this handoff are saved in Git.
