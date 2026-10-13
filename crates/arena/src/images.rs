@@ -65,7 +65,26 @@ impl Plugin for ImagesPlugin {
     }
 }
 
-type Decoded = (ImageRequest, Result<Image, String>);
+struct FetchError {
+    message: String,
+    retryable: bool,
+}
+
+impl FetchError {
+    fn request(error: anyhow::Error) -> Self {
+        let retryable = error.downcast_ref::<mtg_client::http::HttpStatusError>()
+            .is_none_or(|e| e.status == 408 || e.status == 429 || e.status >= 500);
+        Self { message: format!("{error:#}"), retryable }
+    }
+}
+
+type Decoded = (ImageRequest, Result<Image, FetchError>);
+
+#[derive(Default)]
+struct Retry {
+    attempts: u32,
+    due: Option<u64>,
+}
 
 #[derive(Resource)]
 pub struct CardImages {
@@ -81,6 +100,7 @@ pub struct CardImages {
     done_rx: Receiver<Decoded>,
     in_flight: usize,
     failed: HashSet<ImageRequest>,
+    retries: HashMap<ImageRequest, Retry>,
 }
 
 impl CardImages {
@@ -97,6 +117,7 @@ impl CardImages {
             done_rx,
             in_flight: 0,
             failed: HashSet::new(),
+            retries: HashMap::new(),
         }
     }
 
@@ -142,7 +163,47 @@ impl CardImages {
 
     /// Number of images requested but not yet arrived.
     pub fn pending(&self) -> usize {
-        self.queue.len() + self.in_flight
+        self.queue.len() + self.in_flight + self.retries.values().filter(|r| r.due.is_some()).count()
+    }
+
+    // Keep the original handle: existing hand/board entities must see the recovered image.
+    fn receive(&mut self, req: ImageRequest, res: Result<Image, FetchError>, images: &mut Assets<Image>, now: u64) {
+        self.in_flight = self.in_flight.saturating_sub(1);
+        match res {
+            Ok(img) => {
+                self.retries.remove(&req);
+                if let Some(h) = self.handles.get(&req) {
+                    let _ = images.insert(h.id(), img);
+                }
+            }
+            Err(e) => {
+                if e.retryable {
+                    let retry = self.retries.entry(req.clone()).or_default();
+                    // Wait out the engine's 60-second rate-limit cooldown, then back off further.
+                    // Bound retries so a persistent outage cannot generate requests forever.
+                    if retry.attempts < 4 {
+                        let delay = (60_000u64 << retry.attempts).min(300_000);
+                        retry.attempts += 1;
+                        retry.due = Some(now.saturating_add(delay));
+                        warn!("card image {} ({:?}) delayed; retry in {}s: {}", req.name, req.version, delay / 1000, e.message);
+                        return;
+                    }
+                }
+                self.retries.remove(&req);
+                if self.failed.insert(req.clone()) {
+                    warn!("card image {} ({:?}) failed: {}", req.name, req.version, e.message);
+                }
+            }
+        }
+    }
+
+    fn queue_retries(&mut self, now: u64) {
+        for (req, retry) in &mut self.retries {
+            if retry.due.is_some_and(|due| due <= now) {
+                retry.due = None;
+                self.queue.push(req.clone());
+            }
+        }
     }
 
     fn start_fetch(&mut self, base: &str, req: ImageRequest) {
@@ -152,7 +213,8 @@ impl CardImages {
         // The task reports through the shared channel; its own one-shot receiver is not needed.
         drop(mtg_client::spawn(async move {
             let thumb = req.version == ImageVersion::Thumb;
-            let res = api.image_bytes(&req).await.map_err(|e| format!("{e:#}")).and_then(|b| decode(&b, thumb));
+            let res = api.image_bytes(&req).await.map_err(FetchError::request)
+                .and_then(|b| decode(&b, thumb).map_err(|message| FetchError { message, retryable: false }));
             let _ = tx.send((req, res));
         }));
     }
@@ -173,6 +235,7 @@ fn pump_requests(mut ci: ResMut<CardImages>, cfg: Res<EngineConfig>, state: Res<
     if *state.get() == AppState::Boot {
         return;
     }
+    ci.queue_retries(mtg_client::now_millis());
     if ci.queue.is_empty() {
         return;
     }
@@ -191,19 +254,7 @@ fn receive_images(mut ci: ResMut<CardImages>, mut images: ResMut<Assets<Image>>)
     while got < 6 {
         let Ok((req, res)) = rx.try_recv() else { break };
         got += 1;
-        ci.in_flight = ci.in_flight.saturating_sub(1);
-        match res {
-            Ok(img) => {
-                if let Some(h) = ci.handles.get(&req) {
-                    let _ = images.insert(h.id(), img);
-                }
-            }
-            Err(e) => {
-                if ci.failed.insert(req.clone()) {
-                    warn!("card image {} ({:?}) failed: {e}", req.name, req.version);
-                }
-            }
-        }
+        ci.receive(req, res, &mut images, mtg_client::now_millis());
     }
 }
 
@@ -411,6 +462,75 @@ pub fn procedural_card_blank() -> Image {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn request() -> ImageRequest {
+        ImageRequest { name: "Plains".into(), set: None, back: false, version: ImageVersion::Normal }
+    }
+
+    fn http_error(status: u16) -> FetchError {
+        FetchError::request(mtg_client::http::HttpResponse {
+            status, body: br#"{"error":"image unavailable"}"#.to_vec(),
+        }.ok("card image").err().unwrap())
+    }
+
+    #[test]
+    fn temporary_failure_recovers_into_the_original_card_handle() {
+        let mut assets = Assets::<Image>::default();
+        let mut cache = CardImages::new(assets.get_handle_provider());
+        let req = request();
+        let handle = cache.request_raw(req.clone());
+        cache.queue.clear();
+        cache.in_flight = 1;
+        cache.receive(req.clone(), Err(http_error(500)), &mut assets, 1000);
+        assert!(!cache.has_failed(&req));
+        assert_eq!(cache.pending(), 1);
+        assert_eq!(cache.request_raw(req.clone()), handle);
+        cache.queue_retries(60_999);
+        assert!(cache.queue.is_empty());
+        cache.queue_retries(61_000);
+        cache.queue_retries(61_001);
+        assert_eq!(cache.queue, vec![req.clone()]); // no duplicate retry
+        cache.queue.clear();
+        cache.in_flight = 1;
+        cache.receive(req.clone(), Ok(procedural_card_blank()), &mut assets, 61_002);
+        assert!(assets.contains(handle.id()));
+        assert_eq!(cache.pending(), 0);
+        assert!(!cache.has_failed(&req));
+    }
+
+    #[test]
+    fn retries_are_bounded_and_permanent_errors_are_not_retried() {
+        let mut assets = Assets::<Image>::default();
+        let mut cache = CardImages::new(assets.get_handle_provider());
+        let req = request();
+        cache.request_raw(req.clone());
+        cache.queue.clear();
+        let mut now = 0;
+        for delay in [60_000, 120_000, 240_000, 300_000] {
+            cache.in_flight = 1;
+            cache.receive(req.clone(), Err(http_error(429)), &mut assets, now);
+            assert_eq!(cache.retries[&req].due, Some(now + delay));
+            now += delay;
+            cache.queue_retries(now);
+            assert_eq!(cache.queue.len(), 1);
+            cache.queue.clear();
+        }
+        cache.in_flight = 1;
+        cache.receive(req.clone(), Err(http_error(503)), &mut assets, now);
+        assert!(cache.has_failed(&req));
+        assert_eq!(cache.pending(), 0);
+        for status in [400, 401, 403, 404] {
+            assert!(!http_error(status).retryable);
+        }
+        for status in [408, 429, 500, 502, 503, 504] {
+            assert!(http_error(status).retryable);
+        }
+        assert!(FetchError::request(anyhow::anyhow!("connection timed out")).retryable);
+        let mut cache = CardImages::new(assets.get_handle_provider());
+        cache.receive(req.clone(), Err(http_error(404)), &mut assets, 0);
+        assert!(cache.has_failed(&req));
+        assert_eq!(cache.pending(), 0);
+    }
 
     #[test]
     fn mips_cover_the_chain() {

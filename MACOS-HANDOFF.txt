@@ -80,3 +80,51 @@ Release automation
 .github/workflows/release.yml builds platform packages on v* tags and
 attaches them to GitHub Releases. Manual runs retain workflow artifacts.
 The macOS assets described above were uploaded directly from this Mac.
+
+In-game image fix — 2026-10-12 (follow-up)
+The published DMG above initially passed download smoke tests, but an actual
+match showed blank cards. The user's engine.log recorded Scryfall HTTP 429,
+followed by the engine's temporary cooldown errors. The client permanently
+cached these failures and never retried them during that session.
+
+Source fix: preserve HTTP status codes, retry temporary image/network failures
+using the same texture handle after 60/120/240/300 seconds, and stop after four
+retries. Permanent errors (including 404) and decode failures are not retried.
+The engine now spaces named-card metadata lookups by 600 ms instead of 120 ms.
+Regression coverage checks recovery into the existing handle, no duplicate
+retry queue entries, increasing delays, retry limits, and HTTP classification.
+The smoke script also checks the normal variant used by in-game cards.
+These changes require rebuilding both the native and browser clients and the
+Java engine. The release links/checksum above describe the original upload;
+a rebuilt local image does not automatically update that GitHub asset.
+
+Follow-up validation completed:
+- Four Rust image-cache tests passed; six Java tests passed.
+- Native and browser release builds succeeded; local DMG rebuilt and signed.
+- A fresh-cache Commander match rendered hand, commander and battlefield art.
+- Diagnostics: images pending=0; no visible cards with loaded=false.
+- Screenshot: target/macos-in-game-fixed.png (local, ignored).
+- Normal, large and art_crop JPEG smoke checks passed.
+- DMG integrity and strict/deep app signature verification passed.
+Rebuilt local DMG SHA-256:
+1df08e693076f0acbba549ebbc3aef35e7889dfbe680b3751802fed82ea26d2f
+The fixed source changes are committed. The rebuilt DMG has not replaced
+the original GitHub release asset. Publish a fixed release build before
+using the GitHub download link to distribute this fix.
+
+Repository reconciliation — 2026-10-13
+GitHub main had rewritten commit IDs for the existing history plus one new
+README update (339199d). The local main tree matched the remote parent
+599d63b exactly. The image-retry fix was still local, not fixed remotely.
+It was committed and applied on top of remote main, preserving the README
+update without duplicating or force-pushing the old history.
+
+Recovery copies on this Mac:
+- Branch backup/local-before-sync-20261013 preserves the original history
+  plus all five previously uncommitted files.
+- target/reconciliation-20261013/local-before-sync.bundle is a verified,
+  complete Git bundle of that backup branch.
+- target/reconciliation-20261013/local-changes.patch preserves the original
+  uncommitted diff.
+Ignored build outputs, screenshots, caches and the fixed DMG were retained.
+The backup branch and target/ recovery files are local only.

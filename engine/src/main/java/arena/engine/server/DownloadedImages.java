@@ -125,14 +125,15 @@ final class DownloadedImages {
         }
     }
 
-    /** All servlet workers share the same API budget; CDN image downloads do not consume it. */
+    /** Keep named-card lookups below two per second, leaving headroom for other API users.
+     * All servlet workers share this budget; CDN image downloads do not consume it. */
     private synchronized void paceApi() throws IOException {
         final long wait = nextApiRequest - System.nanoTime();
         if (wait > 0) {
             try { java.util.concurrent.TimeUnit.NANOSECONDS.sleep(wait); }
             catch (InterruptedException e) { Thread.currentThread().interrupt(); throw new IOException(e); }
         }
-        nextApiRequest = System.nanoTime() + Duration.ofMillis(120).toNanos();
+        nextApiRequest = System.nanoTime() + Duration.ofMillis(600).toNanos();
     }
 
     private static Transport httpTransport() {

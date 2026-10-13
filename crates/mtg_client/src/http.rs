@@ -8,6 +8,14 @@ use std::time::Duration;
 
 use anyhow::{Result, anyhow};
 
+/// Preserve the status so callers can distinguish temporary failures from missing resources.
+#[derive(Debug, thiserror::Error)]
+#[error("{message}")]
+pub struct HttpStatusError {
+    pub status: u16,
+    pub message: String,
+}
+
 pub struct HttpResponse {
     pub status: u16,
     pub body: Vec<u8>,
@@ -24,7 +32,10 @@ impl HttpResponse {
             .ok()
             .and_then(|v| v.get("error").and_then(|e| e.as_str().map(str::to_owned)))
             .unwrap_or(body);
-        Err(anyhow!("{what}: HTTP {}: {}", self.status, msg.chars().take(300).collect::<String>()))
+        Err(HttpStatusError {
+            status: self.status,
+            message: format!("{what}: HTTP {}: {}", self.status, msg.chars().take(300).collect::<String>()),
+        }.into())
     }
     pub fn json<T: serde::de::DeserializeOwned>(&self, what: &str) -> Result<T> {
         serde_json::from_slice(&self.body).map_err(|e| anyhow!("{what}: bad JSON: {e}"))
